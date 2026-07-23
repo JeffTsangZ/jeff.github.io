@@ -25,6 +25,7 @@
       justify-content: center;
     }
 
+    /* Control Panel */
     .control-panel {
       width: 320px;
       background: #161824;
@@ -52,16 +53,24 @@
     .input-group label {
       font-size: 0.85rem;
       color: #aaa;
+      display: flex;
+      justify-content: space-between;
     }
 
-    input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"], input[type="range"] {
       width: 100%;
-      padding: 10px;
+      padding: 8px;
       font-size: 0.85rem;
       color: #fff;
       background: #0f101a;
       border: 1px solid #2a2d42;
       border-radius: 6px;
+    }
+
+    input[type="range"] {
+      accent-color: #00ffcc;
+      cursor: pointer;
+      padding: 0;
     }
 
     .btn {
@@ -191,16 +200,32 @@
 
   <div class="app-container">
     <div class="control-panel">
-      <h2>YouTube Player Engine</h2>
+      <h2>YouTube Game Settings</h2>
 
       <div class="input-group">
-        <label>YouTube Link or Video ID:</label>
+        <label for="ytUrlInput">YouTube Link or Video ID:</label>
         <input type="text" id="ytUrlInput" value="https://www.youtube.com/watch?v=vUvLQioor3U">
       </div>
 
       <div class="input-group">
-        <label>Estimated Song BPM:</label>
+        <label for="bpmInput">Estimated Song BPM:</label>
         <input type="number" id="bpmInput" value="130" min="60" max="220">
+      </div>
+
+      <!-- Drop Speed Setting -->
+      <div class="input-group">
+        <label for="speedInput">
+          Drop Speed: <span id="speedValue" style="color: #00ffcc; font-weight: bold;">3.0x</span>
+        </label>
+        <input 
+          type="range" 
+          id="speedInput" 
+          min="100" 
+          max="700" 
+          step="25" 
+          value="350"
+          oninput="updateDropSpeed(this.value)"
+        >
       </div>
 
       <button class="btn" onclick="loadYouTubeSong()">Load YouTube & Play</button>
@@ -211,6 +236,7 @@
       </div>
     </div>
 
+    <!-- Gameplay Area -->
     <div class="game-container">
       <div class="hud">
         <div>SCORE: <span id="score">0</span></div>
@@ -241,14 +267,21 @@
   <script>
     const KEYS = ['d', 'f', 'j', 'k'];
     const TARGET_Y = 480;
-    const NOTE_SPEED = 350;
 
+    let noteSpeed = 350; // pixels per second (default 3.0x)
     let player = null;
     let ytReady = false;
     let isPlaying = false;
     let score = 0;
     let combo = 0;
     let notes = [];
+
+    // Update Speed Variable and UI Label
+    function updateDropSpeed(val) {
+      noteSpeed = parseFloat(val);
+      const multiplier = (noteSpeed / 116.6).toFixed(1);
+      document.getElementById('speedValue').textContent = `${multiplier}x`;
+    }
 
     // Initialize Official YouTube API
     function onYouTubeIframeAPIReady() {
@@ -286,7 +319,7 @@
 
     function loadYouTubeSong() {
       if (!ytReady || !player) {
-        alert("YouTube Player is initializing. Make sure this page is running on HTTP/HTTPS server (e.g. GitHub Pages or Live Server).");
+        alert("YouTube Player is initializing. Make sure this page is running on an HTTP/HTTPS server (e.g., GitHub Pages).");
         return;
       }
 
@@ -294,7 +327,7 @@
       const bpm = parseInt(document.getElementById('bpmInput').value) || 130;
       const videoId = extractVideoId(input);
 
-      // Load YouTube video and start video playback
+      // Load YouTube video
       player.loadVideoById(videoId);
 
       notes = generateBeatmap(bpm, 240).map(n => ({
@@ -317,7 +350,7 @@
       if (!isPlaying || !player || typeof player.getCurrentTime !== 'function') return;
 
       const currentTime = player.getCurrentTime();
-      const timeToHit = TARGET_Y / NOTE_SPEED;
+      const timeToHit = TARGET_Y / noteSpeed; // Uses dynamic note speed
 
       notes.forEach(note => {
         if (!note.spawned && currentTime >= (note.time - timeToHit)) {
@@ -326,7 +359,7 @@
 
         if (note.spawned && !note.hit) {
           const elapsedTime = currentTime - (note.time - timeToHit);
-          note.y = elapsedTime * NOTE_SPEED;
+          note.y = elapsedTime * noteSpeed;
           note.element.style.top = `${note.y}px`;
 
           if (note.y > TARGET_Y + 50) {
@@ -406,6 +439,3 @@
   </script>
 </body>
 </html>
-
-
-
