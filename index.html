@@ -1,1 +1,408 @@
-hello world
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Web Rhythm Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d0e15;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .app-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .control-panel {
+      width: 320px;
+      background: #161824;
+      border: 2px solid #2a2d42;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .control-panel h2 {
+      font-size: 1.1rem;
+      color: #00ffcc;
+      border-bottom: 1px solid #2a2d42;
+      padding-bottom: 8px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .input-group label {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 0.85rem;
+      color: #fff;
+      background: #0f101a;
+      border: 1px solid #2a2d42;
+      border-radius: 6px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      background: #00ffcc;
+      color: #0d0e15;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: #00e6b8; }
+
+    #playerContainer {
+      width: 100%;
+      height: 180px;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* Game Track */
+    .game-container {
+      position: relative;
+      width: 360px;
+      height: 600px;
+      background: #181828;
+      border-radius: 12px;
+      border: 3px solid #3d3d6b;
+      box-shadow: 0 0 30px rgba(0, 255, 204, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10;
+      font-weight: bold;
+    }
+
+    .hud div span { color: #00ffcc; }
+
+    .track {
+      position: relative;
+      flex: 1;
+      display: flex;
+      background: linear-gradient(180deg, #10101c 0%, #1a1a2e 100%);
+    }
+
+    .lane {
+      flex: 1;
+      border-right: 1px dashed rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+    .lane:last-child { border-right: none; }
+
+    .target-line {
+      position: absolute;
+      bottom: 60px;
+      width: 100%;
+      height: 12px;
+      background: rgba(0, 255, 204, 0.3);
+      border-top: 2px solid #00ffcc;
+      border-bottom: 2px solid #00ffcc;
+    }
+
+    .note {
+      position: absolute;
+      width: 80%;
+      left: 10%;
+      height: 18px;
+      border-radius: 4px;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .lane-1 .note { background: #ff4757; color: #ff4757; }
+    .lane-2 .note { background: #2ed573; color: #2ed573; }
+    .lane-3 .note { background: #ffa502; color: #ffa502; }
+    .lane-4 .note { background: #1e90ff; color: #1e90ff; }
+
+    .key-hints {
+      display: flex;
+      height: 60px;
+      background: #0d0d18;
+    }
+
+    .key-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #aaa;
+    }
+
+    .key-btn.active {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+
+    .judgment {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2rem;
+      font-weight: 900;
+      opacity: 0;
+      transition: opacity 0.1s;
+      pointer-events: none;
+    }
+    .judgment.show { opacity: 1; }
+    .perfect { color: #00ffcc; }
+    .great { color: #ffa502; }
+    .miss { color: #ff4757; }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <div class="control-panel">
+      <h2>YouTube Player Engine</h2>
+
+      <div class="input-group">
+        <label>YouTube Link or Video ID:</label>
+        <input type="text" id="ytUrlInput" value="https://www.youtube.com/watch?v=vUvLQioor3U">
+      </div>
+
+      <div class="input-group">
+        <label>Estimated Song BPM:</label>
+        <input type="number" id="bpmInput" value="130" min="60" max="220">
+      </div>
+
+      <button class="btn" onclick="loadYouTubeSong()">Load YouTube & Play</button>
+
+      <h2>Video Stream</h2>
+      <div id="playerContainer">
+        <div id="player"></div>
+      </div>
+    </div>
+
+    <div class="game-container">
+      <div class="hud">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>COMBO: <span id="combo">0</span></div>
+      </div>
+
+      <div class="track">
+        <div class="target-line"></div>
+        <div class="lane lane-1" id="lane-0"></div>
+        <div class="lane lane-2" id="lane-1"></div>
+        <div class="lane lane-3" id="lane-2"></div>
+        <div class="lane lane-4" id="lane-3"></div>
+        <div id="judgment" class="judgment">PERFECT</div>
+      </div>
+
+      <div class="key-hints">
+        <div class="key-btn" id="btn-0">D</div>
+        <div class="key-btn" id="btn-1">F</div>
+        <div class="key-btn" id="btn-2">J</div>
+        <div class="key-btn" id="btn-3">K</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Official YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    const KEYS = ['d', 'f', 'j', 'k'];
+    const TARGET_Y = 480;
+    const NOTE_SPEED = 350;
+
+    let player = null;
+    let ytReady = false;
+    let isPlaying = false;
+    let score = 0;
+    let combo = 0;
+    let notes = [];
+
+    // Initialize Official YouTube API
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        height: '180',
+        width: '100%',
+        videoId: 'vUvLQioor3U',
+        playerVars: {
+          'playsinline': 1,
+          'enablejsapi': 1
+        },
+        events: {
+          'onReady': () => { ytReady = true; }
+        }
+      });
+    }
+
+    function extractVideoId(url) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : url;
+    }
+
+    function generateBeatmap(bpm, duration) {
+      const generatedNotes = [];
+      const beatInterval = 60 / bpm;
+      let lane = 0;
+
+      for (let time = 2.0; time < duration; time += beatInterval) {
+        generatedNotes.push({ lane, time: parseFloat(time.toFixed(3)) });
+        lane = (lane + Math.floor(Math.random() * 3) + 1) % 4;
+      }
+      return generatedNotes;
+    }
+
+    function loadYouTubeSong() {
+      if (!ytReady || !player) {
+        alert("YouTube Player is initializing. Make sure this page is running on HTTP/HTTPS server (e.g. GitHub Pages or Live Server).");
+        return;
+      }
+
+      const input = document.getElementById('ytUrlInput').value.trim();
+      const bpm = parseInt(document.getElementById('bpmInput').value) || 130;
+      const videoId = extractVideoId(input);
+
+      // Load YouTube video and start video playback
+      player.loadVideoById(videoId);
+
+      notes = generateBeatmap(bpm, 240).map(n => ({
+        ...n,
+        spawned: false,
+        hit: false,
+        element: null
+      }));
+
+      score = 0;
+      combo = 0;
+      updateHUD();
+      document.querySelectorAll('.note').forEach(el => el.remove());
+
+      isPlaying = true;
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop() {
+      if (!isPlaying || !player || typeof player.getCurrentTime !== 'function') return;
+
+      const currentTime = player.getCurrentTime();
+      const timeToHit = TARGET_Y / NOTE_SPEED;
+
+      notes.forEach(note => {
+        if (!note.spawned && currentTime >= (note.time - timeToHit)) {
+          spawnNote(note);
+        }
+
+        if (note.spawned && !note.hit) {
+          const elapsedTime = currentTime - (note.time - timeToHit);
+          note.y = elapsedTime * NOTE_SPEED;
+          note.element.style.top = `${note.y}px`;
+
+          if (note.y > TARGET_Y + 50) {
+            note.hit = true;
+            note.element.remove();
+            triggerJudgment('MISS');
+            combo = 0;
+            updateHUD();
+          }
+        }
+      });
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function spawnNote(note) {
+      note.spawned = true;
+      const el = document.createElement('div');
+      el.className = 'note';
+      document.getElementById(`lane-${note.lane}`).appendChild(el);
+      note.element = el;
+    }
+
+    function checkHit(laneIndex) {
+      if (!isPlaying || !player) return;
+      const activeNotes = notes.filter(n => n.lane === laneIndex && n.spawned && !n.hit);
+      if (activeNotes.length === 0) return;
+
+      const closestNote = activeNotes[0];
+      const diff = Math.abs(closestNote.y - TARGET_Y);
+
+      if (diff < 30) {
+        closestNote.hit = true;
+        closestNote.element.remove();
+        score += 100; combo++;
+        triggerJudgment('PERFECT');
+      } else if (diff < 65) {
+        closestNote.hit = true;
+        closestNote.element.remove();
+        score += 50; combo++;
+        triggerJudgment('GREAT');
+      } else if (diff < 90) {
+        closestNote.hit = true;
+        closestNote.element.remove();
+        combo = 0;
+        triggerJudgment('MISS');
+      }
+      updateHUD();
+    }
+
+    function triggerJudgment(type) {
+      const el = document.getElementById('judgment');
+      el.textContent = type;
+      el.className = `judgment ${type.toLowerCase()} show`;
+      setTimeout(() => el.classList.remove('show'), 200);
+    }
+
+    function updateHUD() {
+      document.getElementById('score').textContent = score;
+      document.getElementById('combo').textContent = combo;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const keyIndex = KEYS.indexOf(e.key.toLowerCase());
+      if (keyIndex !== -1 && !e.repeat) {
+        document.getElementById(`btn-${keyIndex}`).classList.add('active');
+        checkHit(keyIndex);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const keyIndex = KEYS.indexOf(e.key.toLowerCase());
+      if (keyIndex !== -1) {
+        document.getElementById(`btn-${keyIndex}`).classList.remove('active');
+      }
+    });
+  </script>
+</body>
+</html>
