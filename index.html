@@ -187,7 +187,7 @@
       font-size: 2rem;
       font-weight: 900;
       opacity: 0;
-      transition: opacity 0.1s;
+      transition: opacity 0.15s;
       pointer-events: none;
     }
     .judgment.show { opacity: 1; }
@@ -277,6 +277,7 @@
     let combo = 0;
     let notes = [];
     let audioCtx = null;
+    let judgmentTimeout = null;
 
     // Web Audio API Sound Generator
     function initAudio() {
@@ -408,7 +409,8 @@
           note.y = elapsedTime * noteSpeed;
           note.element.style.top = `${note.y}px`;
 
-          if (note.y > TARGET_Y + 50) {
+          // Expanded Miss threshold to match the wider timing window
+          if (note.y > TARGET_Y + 70) {
             note.hit = true;
             note.element.remove();
             triggerJudgment('MISS');
@@ -438,25 +440,26 @@
       const closestNote = activeNotes[0];
       const diff = Math.abs(closestNote.y - TARGET_Y);
 
-      if (diff < 25) {
+      // --- EXPANDED TIMING WINDOWS ---
+      if (diff < 45) { // Perfect: expanded from 25 to 45px
         closestNote.hit = true;
         closestNote.element.remove();
         score += 100; combo++;
         triggerJudgment('PERFECT');
         playHitSound('PERFECT');
-      } else if (diff < 50) {
+      } else if (diff < 85) { // Great: expanded from 50 to 85px
         closestNote.hit = true;
         closestNote.element.remove();
         score += 65; combo++;
         triggerJudgment('GREAT');
         playHitSound('GREAT');
-      } else if (diff < 80) {
+      } else if (diff < 125) { // Good: expanded from 80 to 125px
         closestNote.hit = true;
         closestNote.element.remove();
         score += 30; combo++;
         triggerJudgment('GOOD');
         playHitSound('GOOD');
-      } else if (diff < 105) {
+      } else if (diff < 150) { // Miss threshold
         closestNote.hit = true;
         closestNote.element.remove();
         combo = 0;
@@ -470,7 +473,10 @@
       const el = document.getElementById('judgment');
       el.textContent = type;
       el.className = `judgment ${type.toLowerCase()} show`;
-      setTimeout(() => el.classList.remove('show'), 200);
+
+      // Keep feedback on screen longer (400ms)
+      if (judgmentTimeout) clearTimeout(judgmentTimeout);
+      judgmentTimeout = setTimeout(() => el.classList.remove('show'), 400);
     }
 
     function updateHUD() {
