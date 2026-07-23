@@ -193,6 +193,7 @@
     .judgment.show { opacity: 1; }
     .perfect { color: #00ffcc; }
     .great { color: #ffa502; }
+    .good { color: #1e90ff; }
     .miss { color: #ff4757; }
   </style>
 </head>
@@ -268,22 +269,67 @@
     const KEYS = ['d', 'f', 'j', 'k'];
     const TARGET_Y = 480;
 
-    let noteSpeed = 350; // pixels per second (default 3.0x)
+    let noteSpeed = 350;
     let player = null;
     let ytReady = false;
     let isPlaying = false;
     let score = 0;
     let combo = 0;
     let notes = [];
+    let audioCtx = null;
 
-    // Update Speed Variable and UI Label
+    // Web Audio API Sound Generator
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playHitSound(type) {
+      if (!audioCtx) return;
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const now = audioCtx.currentTime;
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'PERFECT') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1046.50, now); // High C6 Chime
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      } else if (type === 'GREAT') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(783.99, now); // Mid G5 Tone
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      } else if (type === 'GOOD') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(659.25, now); // Low E5 Tone
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      } else if (type === 'MISS') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(130.81, now); // Low C3 Buzz
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      }
+
+      osc.start(now);
+      osc.stop(now + 0.15);
+    }
+
     function updateDropSpeed(val) {
       noteSpeed = parseFloat(val);
       const multiplier = (noteSpeed / 116.6).toFixed(1);
       document.getElementById('speedValue').textContent = `${multiplier}x`;
     }
 
-    // Initialize Official YouTube API
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         height: '180',
@@ -318,6 +364,7 @@
     }
 
     function loadYouTubeSong() {
+      initAudio();
       if (!ytReady || !player) {
         alert("YouTube Player is initializing. Make sure this page is running on an HTTP/HTTPS server (e.g., GitHub Pages).");
         return;
@@ -327,7 +374,6 @@
       const bpm = parseInt(document.getElementById('bpmInput').value) || 130;
       const videoId = extractVideoId(input);
 
-      // Load YouTube video
       player.loadVideoById(videoId);
 
       notes = generateBeatmap(bpm, 240).map(n => ({
@@ -350,7 +396,7 @@
       if (!isPlaying || !player || typeof player.getCurrentTime !== 'function') return;
 
       const currentTime = player.getCurrentTime();
-      const timeToHit = TARGET_Y / noteSpeed; // Uses dynamic note speed
+      const timeToHit = TARGET_Y / noteSpeed;
 
       notes.forEach(note => {
         if (!note.spawned && currentTime >= (note.time - timeToHit)) {
@@ -366,6 +412,7 @@
             note.hit = true;
             note.element.remove();
             triggerJudgment('MISS');
+            playHitSound('MISS');
             combo = 0;
             updateHUD();
           }
@@ -391,21 +438,30 @@
       const closestNote = activeNotes[0];
       const diff = Math.abs(closestNote.y - TARGET_Y);
 
-      if (diff < 30) {
+      if (diff < 25) {
         closestNote.hit = true;
         closestNote.element.remove();
         score += 100; combo++;
         triggerJudgment('PERFECT');
-      } else if (diff < 65) {
+        playHitSound('PERFECT');
+      } else if (diff < 50) {
         closestNote.hit = true;
         closestNote.element.remove();
-        score += 50; combo++;
+        score += 65; combo++;
         triggerJudgment('GREAT');
-      } else if (diff < 90) {
+        playHitSound('GREAT');
+      } else if (diff < 80) {
+        closestNote.hit = true;
+        closestNote.element.remove();
+        score += 30; combo++;
+        triggerJudgment('GOOD');
+        playHitSound('GOOD');
+      } else if (diff < 105) {
         closestNote.hit = true;
         closestNote.element.remove();
         combo = 0;
         triggerJudgment('MISS');
+        playHitSound('MISS');
       }
       updateHUD();
     }
@@ -423,6 +479,7 @@
     }
 
     window.addEventListener('keydown', (e) => {
+      initAudio();
       const keyIndex = KEYS.indexOf(e.key.toLowerCase());
       if (keyIndex !== -1 && !e.repeat) {
         document.getElementById(`btn-${keyIndex}`).classList.add('active');
