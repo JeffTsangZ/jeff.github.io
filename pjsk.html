@@ -199,7 +199,7 @@
             
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
-                <p>Tap single notes or HOLD long notes along the tracks when they hit the line.</p>
+                <p>Tap single notes or HOLD long notes along the perspective tracks as they reach the judgment line.</p>
                 
                 <div class="title-btn-group">
                     <button id="startBtn" class="btn-play">PLAY GAME</button>
@@ -220,9 +220,8 @@
             '#ff00aa', '#ff007f', '#ff0055', '#ff2a2a'
         ];
         
-        // Consistent Movement & Hit Settings
-        const NOTE_SPEED_PX = 380; // Constant speed in pixels per second
-        const HIT_WINDOW_PX = 65;   // Collision tolerance above/below judgment line
+        const NOTE_SPEED_PX = 380;
+        const HIT_WINDOW_PX = 65;
         
         let canvas, ctx;
         let score = 0;
@@ -234,14 +233,12 @@
         let notes = [];
         let hitEffects = [];
 
-        // Active touches mapped by touch identifier to track held lanes
-        let activeTouches = new Map(); // touchId -> laneIndex
+        let activeTouches = new Map();
         let laneHoldStatus = new Array(LANES).fill(false);
 
         let spawnTimer = 0;
         const SPAWN_INTERVAL = 0.4; 
         
-        // Tracks occupied lanes and clearance time to prevent overlapping
         let laneOccupiedUntil = new Array(LANES).fill(0);
 
         function initAudio() {
@@ -299,7 +296,6 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
                 
-                // Choose a lane that isn't currently occupied by a hold note
                 let availableLanes = [];
                 for (let i = 0; i < LANES; i++) {
                     if (now > laneOccupiedUntil[i]) {
@@ -310,21 +306,20 @@
                 if (availableLanes.length === 0) return;
 
                 const lane1 = availableLanes[Math.floor(Math.random() * availableLanes.length)];
-                const isHold = Math.random() < 0.3; // 30% chance for a hold note
+                const isHold = Math.random() < 0.3;
 
                 if (isHold) {
                     const holdLengthPx = 180 + Math.random() * 120;
                     notes.push({
                         type: 'hold',
                         lane: lane1,
-                        y: 0,                   // Tail position
-                        headY: -holdLengthPx,   // Head starts higher up
+                        y: 0,
+                        headY: -holdLengthPx,
                         length: holdLengthPx,
                         holding: false,
                         headHit: false,
                         missed: false
                     });
-                    // Lock lane until the full note finishes passing
                     laneOccupiedUntil[lane1] = now + ((holdLengthPx + 200) / NOTE_SPEED_PX) * 1000;
                 } else {
                     notes.push({
@@ -345,7 +340,6 @@
 
             const judgeY = canvas.height * 0.85;
 
-            // Update Active Lane Hold States from Multi-Touch Map
             laneHoldStatus.fill(false);
             for (let lane of activeTouches.values()) {
                 if (lane >= 0 && lane < LANES) {
@@ -359,7 +353,6 @@
                 if (n.type === 'tap') {
                     n.y += NOTE_SPEED_PX * dt;
 
-                    // Missed if passed hit window below judge line
                     if (n.y > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
@@ -370,13 +363,10 @@
                     n.y += NOTE_SPEED_PX * dt;
                     n.headY += NOTE_SPEED_PX * dt;
 
-                    // Check hold state updates
                     if (n.holding) {
-                        // Tick points while holding
                         score += Math.round(200 * dt);
                         updateHUD();
 
-                        // Released too early check
                         if (!laneHoldStatus[n.lane] && n.y < judgeY - HIT_WINDOW_PX) {
                             n.holding = false;
                             n.missed = true;
@@ -386,7 +376,6 @@
                         }
                     }
 
-                    // Missed head completely
                     if (!n.headHit && n.headY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
@@ -394,18 +383,16 @@
                         addHitEffect(n.lane, judgeY, "MISS", "#ff3333");
                     }
 
-                    // Successfully completed hold release
                     if (n.headHit && n.y >= judgeY - HIT_WINDOW_PX) {
                         score += 800;
                         combo++;
                         updateHUD();
                         addHitEffect(n.lane, judgeY, "PERFECT", "#00f2fe");
-                        n.missed = true; // Mark done
+                        n.missed = true;
                     }
                 }
             }
 
-            // Cleanup missed or completed notes
             notes = notes.filter(n => !n.missed);
             for (let e of hitEffects) e.life -= dt;
             hitEffects = hitEffects.filter(e => e.life > 0);
@@ -477,8 +464,7 @@
             const topY = canvas.height * 0.15;
             const bottomY = canvas.height * 0.95;
 
-            // Normalized Y ratio along the playable length
-            const progress = Math.max(0, Math.min(1, (currentY - topY) / (bottomY - topY)));
+            const progress = (currentY - topY) / (bottomY - topY);
 
             const topTrackWidth = canvas.width * 0.35;
             const bottomTrackWidth = canvas.width * 0.95;
@@ -494,6 +480,21 @@
                 y: currentY,
                 width: laneWidth
             };
+        }
+
+        // Helper to render angled quadrilaterals aligned with track directions
+        function drawTrapezoid(topY, bottomY, lane, color, inset = 2) {
+            const top = getTrackCoords(lane, topY);
+            const bot = getTrackCoords(lane, bottomY);
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(top.x + inset, top.y);
+            ctx.lineTo(top.x + top.width - inset, top.y);
+            ctx.lineTo(bot.x + bot.width - inset, bot.y);
+            ctx.lineTo(bot.x + inset, bot.y);
+            ctx.closePath();
+            ctx.fill();
         }
 
         function render() {
@@ -538,51 +539,30 @@
             // Draw Active Lane Highlights
             for (let i = 0; i < LANES; i++) {
                 if (laneHoldStatus[i]) {
-                    const cTop = getTrackCoords(i, topY);
-                    const cBot = getTrackCoords(i, canvas.height);
-
-                    ctx.fillStyle = LANE_COLORS[i] + '33';
-                    ctx.beginPath();
-                    ctx.moveTo(cTop.x, topY);
-                    ctx.lineTo(cTop.x + cTop.width, topY);
-                    ctx.lineTo(cBot.x + cBot.width, canvas.height);
-                    ctx.lineTo(cBot.x, canvas.height);
-                    ctx.closePath();
-                    ctx.fill();
+                    drawTrapezoid(topY, canvas.height, i, LANE_COLORS[i] + '33', 0);
                 }
             }
 
-            // Draw Falling Notes
+            // Draw Falling Notes (Perspectively Aligned to Track Angles)
             for (let n of notes) {
                 if (n.missed) continue;
 
                 if (n.type === 'tap') {
-                    const c = getTrackCoords(n.lane, n.y);
-                    const noteHeight = 14;
-
-                    ctx.fillStyle = LANE_COLORS[n.lane];
+                    const noteHeight = 16;
                     ctx.shadowColor = LANE_COLORS[n.lane];
                     ctx.shadowBlur = 8;
-                    ctx.fillRect(c.x + 2, c.y - noteHeight / 2, c.width - 4, noteHeight);
+                    
+                    // Render note as a trapezoid matching track perspective slope
+                    drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, LANE_COLORS[n.lane], 2);
+                    
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    const cHead = getTrackCoords(n.lane, n.headY);
-                    const cTail = getTrackCoords(n.lane, n.y);
+                    // Draw Main Hold Body Strip
+                    drawTrapezoid(n.headY, n.y, n.lane, LANE_COLORS[n.lane] + '77', 4);
 
-                    // Draw Hold Strip Body
-                    ctx.fillStyle = LANE_COLORS[n.lane] + '77';
-                    ctx.beginPath();
-                    ctx.moveTo(cHead.x + 4, cHead.y);
-                    ctx.lineTo(cHead.x + cHead.width - 4, cHead.y);
-                    ctx.lineTo(cTail.x + cTail.width - 4, cTail.y);
-                    ctx.lineTo(cTail.x + 4, cTail.y);
-                    ctx.closePath();
-                    ctx.fill();
-
-                    // Draw Hold Head & Tail Bars
-                    ctx.fillStyle = LANE_COLORS[n.lane];
-                    ctx.fillRect(cHead.x + 2, cHead.y - 6, cHead.width - 4, 12);
-                    ctx.fillRect(cTail.x + 2, cTail.y - 6, cTail.width - 4, 12);
+                    // Draw Hold Head & Tail Cap Bars
+                    drawTrapezoid(n.headY - 6, n.headY + 6, n.lane, LANE_COLORS[n.lane], 2);
+                    drawTrapezoid(n.y - 6, n.y + 6, n.lane, LANE_COLORS[n.lane], 2);
                 }
             }
 
@@ -624,7 +604,6 @@
                 const touch = touches[i];
                 const x = touch.clientX - rect.left;
                 
-                // Track lane mapping anywhere along track width
                 const topTrackWidth = canvas.width * 0.95;
                 const trackLeft = (canvas.width - topTrackWidth) / 2;
                 const laneWidth = topTrackWidth / LANES;
@@ -668,7 +647,6 @@
 
             document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
             
-            // Full multi-touch listeners for hold support
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
             canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
