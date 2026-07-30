@@ -1,13 +1,362 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>maimai Chart Viewer</title>
+    <title>maimai Chart Viewer - only my railgun</title>
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --panel-bg: #1a1d2d;
+            --panel-border: #2a2f4c;
+            --text-main: #f0f3f9;
+            --text-sub: #8c93b0;
+            --accent-color: #00f2fe;
+            --easy-color: #22c55e;
+            --basic-color: #eab308;
+            --advanced-color: #f97316;
+            --expert-color: #ef4444;
+            --master-color: #a855f7;
+            --re-master-color: #ec4899;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e1b4b, #311042);
+            padding: 1.5rem 2rem;
+            border-bottom: 2px solid var(--panel-border);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .genre-badge {
+            display: inline-block;
+            background: #e11d48;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .song-title {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.4rem;
+            background: linear-gradient(90deg, #fff, #a5f3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .song-artist {
+            font-size: 1.1rem;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        .main-container {
+            max-width: 1200px;
+            margin: 1.5rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 1.5rem;
+            flex: 1;
+        }
+
+        @media (max-width: 850px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-sub);
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 0.4rem;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.8rem;
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .meta-label {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+
+        .meta-value {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 0.1rem;
+        }
+
+        .difficulty-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .diff-btn {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-main);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .diff-btn:hover {
+            background-color: rgba(255, 255, 255, 0.08);
+            transform: translateX(2px);
+        }
+
+        .diff-btn.active {
+            border-color: currentColor;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .diff-btn.basic { color: var(--basic-color); }
+        .diff-btn.advanced { color: var(--advanced-color); }
+        .diff-btn.expert { color: var(--expert-color); }
+        .diff-btn.master { color: var(--master-color); }
+        .diff-btn.remaster { color: var(--re-master-color); }
+
+        .diff-designer {
+            font-size: 0.75rem;
+            font-weight: normal;
+            opacity: 0.8;
+            display: block;
+            margin-top: 0.1rem;
+        }
+
+        .diff-level {
+            font-size: 1.1rem;
+            font-weight: 800;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .viewer-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .controls-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+        }
+
+        .active-diff-display {
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .active-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .raw-data-area {
+            width: 100%;
+            height: 520px;
+            background-color: #090a0f;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.9rem;
+            color: #38edf8;
+            line-height: 1.5;
+            resize: vertical;
+            white-space: pre;
+            overflow-x: auto;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+        .raw-data-area:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        footer {
+            margin-top: auto;
+            background-color: var(--panel-bg);
+            border-top: 1px solid var(--panel-border);
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+        }
+    </style>
 </head>
 <body>
 
-<textarea id="chartData" style="width: 100%; height: 500px;">
+    <header>
+        <div class="header-content">
+            <span class="genre-badge" id="chart-genre">POPSアニメ</span>
+            <h1 class="song-title" id="chart-title">only my railgun</h1>
+            <div class="song-artist" id="chart-artist">fripSide</div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <aside class="sidebar">
+            <section class="card">
+                <h2 class="card-title">Chart Information</h2>
+                <div class="meta-grid">
+                    <div class="meta-item">
+                        <span class="meta-label">BPM</span>
+                        <span class="meta-value" id="chart-bpm">143</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Version</span>
+                        <span class="meta-value" id="chart-version">maimai FiNALE</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Cabinet</span>
+                        <span class="meta-value" id="chart-cabinet">SD</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">ID</span>
+                        <span class="meta-value" id="chart-id">790</span>
+                    </div>
+                    <div class="meta-item" style="grid-column: span 2;">
+                        <span class="meta-label">Primary Designer</span>
+                        <span class="meta-value" id="chart-designer">緑風 犬三郎</span>
+                    </div>
+                    <div class="meta-item" style="grid-column: span 2;">
+                        <span class="meta-label">Converter</span>
+                        <span class="meta-value" id="chart-converter">Neskol</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2 class="card-title">Select Difficulty</h2>
+                <div class="difficulty-selector" id="diff-selector">
+                    <button class="diff-btn basic" data-diff="2">
+                        <div>
+                            BASIC
+                            <span class="diff-designer" id="des-2">-</span>
+                        </div>
+                        <span class="diff-level" id="lv-2">4</span>
+                    </button>
+                    <button class="diff-btn advanced" data-diff="3">
+                        <div>
+                            ADVANCED
+                            <span class="diff-designer" id="des-3">-</span>
+                        </div>
+                        <span class="diff-level" id="lv-3">7</span>
+                    </button>
+                    <button class="diff-btn expert" data-diff="4">
+                        <div>
+                            EXPERT
+                            <span class="diff-designer" id="des-4">華火職人</span>
+                        </div>
+                        <span class="diff-level" id="lv-4">10</span>
+                    </button>
+                    <button class="diff-btn master" data-diff="5">
+                        <div>
+                            MASTER
+                            <span class="diff-designer" id="des-5">緑風 犬三郎</span>
+                        </div>
+                        <span class="diff-level" id="lv-5">11</span>
+                    </button>
+                    <button class="diff-btn remaster" data-diff="6">
+                        <div>
+                            Re:MASTER
+                            <span class="diff-designer" id="des-6">LabiLabi</span>
+                        </div>
+                        <span class="diff-level" id="lv-6">12+</span>
+                    </button>
+                </div>
+            </section>
+        </aside>
+
+        <section class="viewer-panel">
+            <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="controls-bar">
+                    <div class="active-diff-display">
+                        <span class="active-dot" id="active-dot" style="background-color: var(--master-color);"></span>
+                        <span id="active-diff-name">MASTER</span> Note Data
+                    </div>
+                    <span style="font-size: 0.8rem; color: var(--text-sub);">simai format</span>
+                </div>
+                <textarea class="raw-data-area" id="note-data-viewer" readonly spellcheck="false"></textarea>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        maimai Chart Viewer &copy; 2026 - Data format maintained via Simai / ChartConverter
+    </footer>
+
+    <script id="chart-data" type="text/plain">
 &title=only my railgun
 &wholebpm=143
 &artist=fripSide
@@ -336,18 +685,112 @@ E
 {16}7>2[8:1],,8,7,,,4,,3/6,,5,,1q5[4:1]/7,,6,,
 {4}5q1[4:1],1>5[4:1],5<1[4:1],1,
 {16}5,,,2/4,,,1/8,,,,5/6,,1/8,,3/4,,
-{4}4-8[8:1],,5,4,,,7,,7-3[8:1],,8,7,,,2,,
+{16}4-8[8:1],,5,4,,,7,,7-3[8:1],,8,7,,,2,,
 {16}2<7[8:1],,1,2,,,5,,3/6,,4,,2-5[8:1]/7-4[8:1],,1/8,,
 {8}2/7,,2/7,,1/8-4[8:1],6,1-3[8:1]/8,3,
 {4}1/8<5[8:1],8>3[8:1],8w4[8:1],8,
 {16}1,,3,4,,,8,,8,,6,5,,,2/7,,
-{16}2/7<2[2:1]/7,,1/8,1/8,,,,,,,,,,,,,
+{16}2/7<2[2:1],,1/8,1/8,,,,,,,,,,,,,
 {32}1,,8,,2,,7,,1,2,3,4,5,6,7,8,1b/5b,,,,,,3b/7b,,,,,,2b/6b,,,,
 {1},
 {1},
 {1},
 E
-</textarea>
+    </script>
 
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const rawData = document.getElementById("chart-data").textContent;
+            
+            // Parse Key-Value Metadata
+            const parseMetadata = (text) => {
+                const meta = {};
+                const lines = text.split("\n");
+                let currentKey = null;
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.startsWith("&")) {
+                        const parts = line.substring(1).split("=");
+                        const key = parts[0];
+                        const val = parts.slice(1).join("=");
+                        meta[key] = val;
+                        currentKey = key;
+                    } else if (currentKey && line !== "") {
+                        meta[currentKey] += "\n" + line;
+                    }
+                }
+                return meta;
+            };
+
+            const chartData = parseMetadata(rawData);
+
+            // Populate static UI metadata
+            document.getElementById("chart-title").textContent = chartData["title"] || "Untitled";
+            document.getElementById("chart-artist").textContent = chartData["artist"] || "Unknown";
+            document.getElementById("chart-genre").textContent = chartData["genre"] || "POPSアニメ";
+            document.getElementById("chart-bpm").textContent = chartData["wholebpm"] || "-";
+            document.getElementById("chart-version").textContent = chartData["version"] || "-";
+            document.getElementById("chart-cabinet").textContent = chartData["cabinet"] || "-";
+            document.getElementById("chart-id").textContent = chartData["shortid"] || "-";
+            document.getElementById("chart-designer").textContent = chartData["des"] || "-";
+            document.getElementById("chart-converter").textContent = chartData["chartconverter"] || "-";
+
+            // Set Difficulty level badges & designers
+            const diffNames = {
+                '2': { name: 'BASIC', color: 'var(--basic-color)' },
+                '3': { name: 'ADVANCED', color: 'var(--advanced-color)' },
+                '4': { name: 'EXPERT', color: 'var(--expert-color)' },
+                '5': { name: 'MASTER', color: 'var(--master-color)' },
+                '6': { name: 'Re:MASTER', color: 'var(--re-master-color)' }
+            };
+
+            for (let i = 2; i <= 6; i++) {
+                const lvElem = document.getElementById(`lv-${i}`);
+                const desElem = document.getElementById(`des-${i}`);
+                if (lvElem && chartData[`lv_${i}`]) {
+                    lvElem.textContent = chartData[`lv_${i}`];
+                }
+                if (desElem && chartData[`des_${i}`]) {
+                    desElem.textContent = chartData[`des_${i}`];
+                }
+            }
+
+            // Handling Difficulty Switching
+            const buttons = document.querySelectorAll(".diff-btn");
+            const viewer = document.getElementById("note-data-viewer");
+            const activeDot = document.getElementById("active-dot");
+            const activeDiffName = document.getElementById("active-diff-name");
+
+            const loadDifficulty = (diffIdx) => {
+                buttons.forEach(btn => {
+                    if (btn.getAttribute("data-diff") === String(diffIdx)) {
+                        btn.classList.add("active");
+                    } else {
+                        btn.classList.remove("active");
+                    }
+                });
+
+                const diffInfo = diffNames[diffIdx];
+                if (diffInfo) {
+                    activeDot.style.backgroundColor = diffInfo.color;
+                    activeDiffName.textContent = diffInfo.name;
+                }
+
+                const noteKey = `inote_${diffIdx}`;
+                viewer.value = chartData[noteKey] ? chartData[noteKey].trim() : "// No chart data available for this difficulty.";
+            };
+
+            buttons.forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const diff = btn.getAttribute("data-diff");
+                    loadDifficulty(diff);
+                });
+            });
+
+            // Default to MASTER (5)
+            loadDifficulty(5);
+        });
+    </script>
 </body>
 </html>
