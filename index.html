@@ -13,15 +13,19 @@
             padding: 0;
         }
 
-        body {
+        html, body {
+            width: 100%;
+            height: 100%;
             background-color: #0d0e15;
             font-family: 'Courier New', Courier, monospace;
             color: #ffffff;
+            overflow: hidden;
+        }
+
+        body {
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            overflow: hidden;
         }
 
         #game-wrapper {
@@ -33,6 +37,24 @@
             background: #111;
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
             border: 2px solid #333;
+        }
+
+        /* Adjust dimensions when actual browser fullscreen is active */
+        #game-wrapper:fullscreen {
+            max-width: none;
+            max-height: none;
+            width: 100vw;
+            height: 100vh;
+            border: none;
+        }
+
+        /* Fallback selector for vendor prefixes */
+        #game-wrapper:-webkit-full-screen {
+            max-width: none;
+            max-height: none;
+            width: 100vw;
+            height: 100vh;
+            border: none;
         }
 
         canvas {
@@ -58,7 +80,7 @@
         }
 
         .bar-container {
-            width: 150px;
+            width: 130px;
             height: 16px;
             background: #222;
             border: 2px solid #fff;
@@ -84,19 +106,34 @@
             transition: opacity 0.3s ease;
         }
 
-        #reset-btn {
+        .top-controls {
             position: absolute;
             top: 60px;
             left: 10px;
-            background: rgba(231, 76, 60, 0.8);
-            border: 1px solid #fff;
-            color: #fff;
-            padding: 4px 8px;
-            font-family: inherit;
-            font-size: 10px;
-            cursor: pointer;
+            display: flex;
+            gap: 6px;
             z-index: 6;
             pointer-events: auto;
+        }
+
+        .ui-btn {
+            background: rgba(40, 40, 60, 0.85);
+            border: 1px solid #fff;
+            color: #fff;
+            padding: 6px 10px;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .ui-btn:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #reset-btn {
+            background: rgba(231, 76, 60, 0.85);
         }
 
         #dialogue-box {
@@ -178,7 +215,10 @@
     <div id="game-wrapper">
         <canvas id="gameCanvas" width="400" height="300"></canvas>
 
-        <button id="reset-btn">Reset Save</button>
+        <div class="top-controls">
+            <button id="fullscreen-btn" class="ui-btn">⛶ Fullscreen</button>
+            <button id="reset-btn" class="ui-btn">Reset Save</button>
+        </div>
 
         <!-- HUD -->
         <div id="hud">
@@ -213,14 +253,49 @@
     </div>
 
     <script>
+        const wrapper = document.getElementById('game-wrapper');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // --- FULLSCREEN API HANDLER ---
+        function toggleFullscreen() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                // Request Fullscreen (Handles WebKit for Android Chrome)
+                if (wrapper.requestFullscreen) {
+                    wrapper.requestFullscreen();
+                } else if (wrapper.webkitRequestFullscreen) {
+                    wrapper.webkitRequestFullscreen();
+                }
+            } else {
+                // Exit Fullscreen
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        // Update button text when full screen changes
+        document.addEventListener('fullscreenchange', updateFullscreenBtn);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
+
+        function updateFullscreenBtn() {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                fullscreenBtn.innerText = "✖ Exit Fullscreen";
+            } else {
+                fullscreenBtn.innerText = "⛶ Fullscreen";
+            }
+        }
+
+        // --- GAME ENGINE LOGIC ---
         const keys = {};
         let dialogueTimeout;
         let saveTimeout;
 
-        // Player State
         const player = {
             x: 180,
             y: 140,
@@ -247,7 +322,6 @@
 
         let particles = [];
 
-        // Save & Load Functions
         function saveGame() {
             const data = {
                 hp: player.hp,
@@ -260,7 +334,6 @@
             };
             localStorage.setItem('rpg_save_data', JSON.stringify(data));
 
-            // Show Save Status indicator
             const status = document.getElementById('save-status');
             status.style.opacity = '1';
             clearTimeout(saveTimeout);
@@ -288,7 +361,6 @@
 
         document.getElementById('reset-btn').addEventListener('click', resetGame);
 
-        // Input Handlers
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
             if (e.code === 'Space') attack();
@@ -323,8 +395,6 @@
             player.isAttacking = true;
             player.attackTimer = 15;
 
-            // EXTENDED ATTACK RANGE
-            // Expanded hit area reach and width
             const reach = 22; 
             const thickness = 26;
             
@@ -352,7 +422,6 @@
                 hitbox.h = thickness;
             }
 
-            // Damage Check
             enemies.forEach(e => {
                 if (rectOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h, e.x, e.y, e.width, e.height)) {
                     e.hp -= 15 + (player.level * 2);
@@ -426,7 +495,6 @@
                 showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
             }
 
-            // Update Enemies
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
                 e.x += e.vx * e.speed;
@@ -484,7 +552,7 @@
             ctx.fillStyle = '#f1c40f';
             ctx.fillRect(npc.x + 2, npc.y - 3, 8, 4);
 
-            // Enemies (with Dynamic HP bar if damaged)
+            // Enemies
             enemies.forEach(e => {
                 ctx.fillStyle = '#2ecc71';
                 ctx.fillRect(e.x, e.y, e.width, e.height);
@@ -492,18 +560,15 @@
                 ctx.fillRect(e.x + 2, e.y + 3, 2, 2);
                 ctx.fillRect(e.x + 6, e.y + 3, 2, 2);
 
-                // DYNAMIC ENEMY HP BAR (Displays when HP is not full)
                 if (e.hp < e.maxHp) {
                     const barW = 14;
                     const barH = 3;
                     const bx = e.x + (e.width / 2) - (barW / 2);
                     const by = e.y - 6;
 
-                    // Bar background
                     ctx.fillStyle = '#000000';
                     ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
 
-                    // Bar fill
                     const pct = Math.max(0, e.hp / e.maxHp);
                     ctx.fillStyle = '#e74c3c';
                     ctx.fillRect(bx, by, barW * pct, barH);
@@ -514,7 +579,6 @@
             ctx.fillStyle = '#e67e22';
             ctx.fillRect(player.x, player.y, player.width, player.height);
 
-            // EXTENDED VISUAL SWORD SWEEP
             if (player.isAttacking) {
                 ctx.fillStyle = '#ecf0f1';
                 let sx = player.x, sy = player.y;
@@ -542,10 +606,7 @@
             requestAnimationFrame(loop);
         }
 
-        // Auto Save interval every 5 seconds
         setInterval(saveGame, 5000);
-
-        // Init
         loadGame();
         updateHUD();
         loop();
