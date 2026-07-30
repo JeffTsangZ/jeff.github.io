@@ -199,7 +199,7 @@
             
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
-                <p>Tap single notes or HOLD long notes along the perspective tracks as they reach the judgment line.</p>
+                <p>Press start of hold notes, KEEP HOLDING, and RELEASE when the end note reaches the line!</p>
                 
                 <div class="title-btn-group">
                     <button id="startBtn" class="btn-play">PLAY GAME</button>
@@ -309,12 +309,12 @@
                 const isHold = Math.random() < 0.3;
 
                 if (isHold) {
-                    const holdLengthPx = 180 + Math.random() * 120;
+                    const holdLengthPx = 220 + Math.random() * 140;
                     notes.push({
                         type: 'hold',
                         lane: lane1,
-                        y: 0,
-                        headY: -holdLengthPx,
+                        y: -holdLengthPx,       // Tail / End Note Y
+                        headY: 0,               // Head / Start Note Y
                         length: holdLengthPx,
                         holding: false,
                         headHit: false,
@@ -340,6 +340,7 @@
 
             const judgeY = canvas.height * 0.85;
 
+            // Sync active lane holds from touch state
             laneHoldStatus.fill(false);
             for (let lane of activeTouches.values()) {
                 if (lane >= 0 && lane < LANES) {
@@ -360,35 +361,40 @@
                         addHitEffect(n.lane, judgeY, "MISS", "#ff3333");
                     }
                 } else if (n.type === 'hold') {
-                    n.y += NOTE_SPEED_PX * dt;
-                    n.headY += NOTE_SPEED_PX * dt;
+                    n.y += NOTE_SPEED_PX * dt;      // Tail moves down
+                    n.headY += NOTE_SPEED_PX * dt;  // Head moves down
 
-                    if (n.holding) {
-                        score += Math.round(200 * dt);
-                        updateHUD();
-
-                        if (!laneHoldStatus[n.lane] && n.y < judgeY - HIT_WINDOW_PX) {
-                            n.holding = false;
-                            n.missed = true;
-                            combo = 0;
-                            updateHUD();
-                            addHitEffect(n.lane, judgeY, "DROP", "#ffaa00");
-                        }
-                    }
-
+                    // 1. Head Start Note Missed
                     if (!n.headHit && n.headY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
                         updateHUD();
                         addHitEffect(n.lane, judgeY, "MISS", "#ff3333");
+                        continue;
                     }
 
-                    if (n.headHit && n.y >= judgeY - HIT_WINDOW_PX) {
-                        score += 800;
-                        combo++;
+                    // 2. Active Holding Process
+                    if (n.holding) {
+                        score += Math.round(150 * dt);
                         updateHUD();
-                        addHitEffect(n.lane, judgeY, "PERFECT", "#00f2fe");
+
+                        // Released early before tail reached release window
+                        if (!laneHoldStatus[n.lane] && n.y < judgeY - HIT_WINDOW_PX) {
+                            n.holding = false;
+                            n.missed = true;
+                            combo = 0;
+                            updateHUD();
+                            addHitEffect(n.lane, judgeY, "EARLY RELEASE", "#ffaa00");
+                        }
+                    }
+
+                    // 3. Held too long past tail end (Player forgot to release)
+                    if (n.headHit && n.holding && n.y > judgeY + HIT_WINDOW_PX) {
+                        n.holding = false;
                         n.missed = true;
+                        combo = 0;
+                        updateHUD();
+                        addHitEffect(n.lane, judgeY, "LATE RELEASE", "#ff3333");
                     }
                 }
             }
@@ -398,6 +404,7 @@
             hitEffects = hitEffects.filter(e => e.life > 0);
         }
 
+        // Triggered on Touch Start
         function handlePressLane(laneIndex) {
             const judgeY = canvas.height * 0.85;
             let hitFound = false;
@@ -445,13 +452,36 @@
             }
         }
 
+        // Triggered on Touch Release (End Note Judgment)
+        function handleReleaseLane(laneIndex) {
+            const judgeY = canvas.height * 0.85;
+
+            for (let n of notes) {
+                if (n.lane === laneIndex && n.type === 'hold' && n.headHit && n.holding && !n.missed) {
+                    const diff = Math.abs(n.y - judgeY);
+                    
+                    if (diff <= HIT_WINDOW_PX) {
+                        // Successful Timed Release!
+                        n.holding = false;
+                        n.missed = true; // Mark completed
+                        playTapSound(laneIndex, 200);
+
+                        score += 1000;
+                        combo++;
+                        updateHUD();
+                        addHitEffect(laneIndex, judgeY, "PERFECT RELEASE!", "#00f2fe");
+                    }
+                }
+            }
+        }
+
         function addHitEffect(lane, y, text, color) {
             hitEffects.push({
                 lane: lane,
                 y: y,
                 text: text,
                 color: color,
-                life: 0.25
+                life: 0.3
             });
         }
 
@@ -482,7 +512,6 @@
             };
         }
 
-        // Helper to render angled quadrilaterals aligned with track directions
         function drawTrapezoid(topY, bottomY, lane, color, inset = 2) {
             const top = getTrackCoords(lane, topY);
             const bot = getTrackCoords(lane, bottomY);
@@ -503,7 +532,7 @@
             const topY = canvas.height * 0.15;
             const judgeY = canvas.height * 0.85;
 
-            // Draw Perspective Lane Dividers
+            // Perspective Lane Dividers
             for (let i = 0; i <= LANES; i++) {
                 const topTrackWidth = canvas.width * 0.35;
                 const bottomTrackWidth = canvas.width * 0.95;
@@ -519,11 +548,11 @@
                 ctx.stroke();
             }
 
-            // Draw Collision Hit Window Box Indicator
+            // Hit Area Zone Box
             ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
             ctx.fillRect(0, judgeY - HIT_WINDOW_PX, canvas.width, HIT_WINDOW_PX * 2);
 
-            // Draw Target Judgment Line
+            // Judgment Target Line
             const pLeft = getTrackCoords(0, judgeY);
             const pRight = getTrackCoords(7, judgeY);
             ctx.strokeStyle = '#ffffff';
@@ -536,14 +565,14 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Draw Active Lane Highlights
+            // Lane Touch Highlights
             for (let i = 0; i < LANES; i++) {
                 if (laneHoldStatus[i]) {
                     drawTrapezoid(topY, canvas.height, i, LANE_COLORS[i] + '33', 0);
                 }
             }
 
-            // Draw Falling Notes (Perspectively Aligned to Track Angles)
+            // Draw Falling Notes
             for (let n of notes) {
                 if (n.missed) continue;
 
@@ -551,27 +580,26 @@
                     const noteHeight = 16;
                     ctx.shadowColor = LANE_COLORS[n.lane];
                     ctx.shadowBlur = 8;
-                    
-                    // Render note as a trapezoid matching track perspective slope
                     drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, LANE_COLORS[n.lane], 2);
-                    
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    // Draw Main Hold Body Strip
-                    drawTrapezoid(n.headY, n.y, n.lane, LANE_COLORS[n.lane] + '77', 4);
+                    // Hold Body Strip
+                    drawTrapezoid(n.y, n.headY, n.lane, LANE_COLORS[n.lane] + '77', 4);
 
-                    // Draw Hold Head & Tail Cap Bars
-                    drawTrapezoid(n.headY - 6, n.headY + 6, n.lane, LANE_COLORS[n.lane], 2);
-                    drawTrapezoid(n.y - 6, n.y + 6, n.lane, LANE_COLORS[n.lane], 2);
+                    // Start Head Note Bar
+                    drawTrapezoid(n.headY - 8, n.headY + 8, n.lane, LANE_COLORS[n.lane], 2);
+                    
+                    // End Tail Release Bar (White edge accent to signal release)
+                    drawTrapezoid(n.y - 8, n.y + 8, n.lane, '#ffffff', 2);
                 }
             }
 
-            // Draw Hit Visual Effects
+            // Visual Effects
             for (let e of hitEffects) {
                 const c = getTrackCoords(e.lane, e.y);
 
                 ctx.fillStyle = e.color;
-                ctx.globalAlpha = (e.life / 0.25) * 0.5;
+                ctx.globalAlpha = (e.life / 0.3) * 0.5;
                 ctx.fillRect(c.x, c.y - 8, c.width, 16);
                 ctx.globalAlpha = 1.0;
 
@@ -619,8 +647,15 @@
         function handleTouchEnd(e) {
             e.preventDefault();
             const touches = e.changedTouches;
+
             for (let i = 0; i < touches.length; i++) {
-                activeTouches.delete(touches[i].identifier);
+                const touch = touches[i];
+                const laneIndex = activeTouches.get(touch.identifier);
+                
+                if (laneIndex !== undefined) {
+                    handleReleaseLane(laneIndex);
+                    activeTouches.delete(touch.identifier);
+                }
             }
         }
 
