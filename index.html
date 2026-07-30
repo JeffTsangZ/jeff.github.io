@@ -2,15 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Arcade Rhythm Hub</title>
   <style>
     * { 
       box-sizing: border-box; 
       margin: 0; 
       padding: 0; 
-      user-select: none;
-      -webkit-user-select: none;
       touch-action: manipulation;
     }
     body {
@@ -31,16 +29,17 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      z-index: 100;
     }
 
     header h1 {
-      font-size: 1.2rem;
+      font-size: 1.3rem;
       color: #00ffcc;
       cursor: pointer;
     }
 
     .nav-btn {
-      padding: 6px 12px;
+      padding: 8px 14px;
       background: #2a2d42;
       color: #fff;
       border: 1px solid #00ffcc;
@@ -109,14 +108,23 @@
       display: flex;
       gap: 20px;
       align-items: center;
-      flex-wrap: wrap;
-      justify-content: center;
+      flex-direction: column;
       width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 900px) {
+      .app-container {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: center;
+      }
     }
 
     .control-panel {
       width: 100%;
-      max-width: 340px;
+      max-width: 400px;
       background: #161824;
       border: 2px solid #2a2d42;
       border-radius: 12px;
@@ -127,7 +135,7 @@
     }
 
     .control-panel h2 {
-      font-size: 1rem;
+      font-size: 1.1rem;
       color: #00ffcc;
       border-bottom: 1px solid #2a2d42;
       padding-bottom: 6px;
@@ -140,7 +148,7 @@
     }
 
     .input-group label {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       color: #aaa;
       display: flex;
       justify-content: space-between;
@@ -175,7 +183,7 @@
 
     .playerContainer {
       width: 100%;
-      height: 160px;
+      height: 140px;
       background: #000;
       border-radius: 8px;
       overflow: hidden;
@@ -191,7 +199,7 @@
       opacity: 0;
       transition: opacity 0.15s;
       pointer-events: none;
-      z-index: 20;
+      z-index: 50;
     }
     .judgment.show { opacity: 1; }
     .perfect { color: #00ffcc; }
@@ -199,11 +207,20 @@
     .good { color: #1e90ff; }
     .miss { color: #ff4757; }
 
+    .game-area-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 550px;
+    }
+
     /* RHYTHM KEYS CSS */
     .keys-container {
       position: relative;
       width: 100%;
-      max-width: 450px;
+      max-width: 500px;
       height: 70vh;
       max-height: 550px;
       background: #181828;
@@ -218,10 +235,11 @@
     .hud {
       display: flex;
       justify-content: space-between;
-      padding: 10px 14px;
-      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 16px;
+      background: rgba(0, 0, 0, 0.5);
       z-index: 10;
       font-weight: bold;
+      width: 100%;
       font-size: 0.9rem;
     }
     .hud div span { color: #00ffcc; }
@@ -259,13 +277,13 @@
       box-shadow: 0 0 8px currentColor;
     }
 
-    .lane-0 .note { background: #ff4757; color: #ff4757; }
-    .lane-1 .note { background: #2ed573; color: #2ed573; }
-    .lane-2 .note { background: #ffa502; color: #ffa502; }
-    .lane-3 .note { background: #00ffcc; color: #00ffcc; }
-    .lane-4 .note { background: #1e90ff; color: #1e90ff; }
-    .lane-5 .note { background: #a55eea; color: #a55eea; }
-    .lane-6 .note { background: #ff6b81; color: #ff6b81; }
+    .lane-1 .note { background: #ff4757; color: #ff4757; }
+    .lane-2 .note { background: #2ed573; color: #2ed573; }
+    .lane-3 .note { background: #ffa502; color: #ffa502; }
+    .lane-4 .note { background: #00ffcc; color: #00ffcc; }
+    .lane-5 .note { background: #1e90ff; color: #1e90ff; }
+    .lane-6 .note { background: #a55eea; color: #a55eea; }
+    .lane-7 .note { background: #ff6b81; color: #ff6b81; }
 
     .key-hints {
       display: flex;
@@ -278,21 +296,23 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.9rem;
+      font-size: 1rem;
       font-weight: bold;
       color: #aaa;
       border-right: 1px solid rgba(255, 255, 255, 0.05);
+      user-select: none;
       cursor: pointer;
     }
     .key-btn:last-child { border-right: none; }
-    .key-btn.active { background: rgba(255, 255, 255, 0.3); color: #fff; }
+    .key-btn.active { background: rgba(255, 255, 255, 0.25); color: #fff; }
 
     /* OSU MODE CSS */
     .osu-playfield {
       position: relative;
-      width: 95vw;
-      max-width: 480px;
-      height: 480px;
+      width: 100vw;
+      max-width: 500px;
+      height: 70vh;
+      max-height: 500px;
       background: #10101c;
       border-radius: 12px;
       border: 3px solid #ff4757;
@@ -303,8 +323,8 @@
 
     .osu-target {
       position: absolute;
-      width: 55px;
-      height: 55px;
+      width: 54px;
+      height: 54px;
       border-radius: 50%;
       background: radial-gradient(circle, #ff4757 30%, #ff6b81 100%);
       border: 3px solid #fff;
@@ -329,21 +349,23 @@
     /* MAIMAI MODE CSS */
     .maimai-wrapper {
       position: relative;
+      width: 90vw;
+      height: 90vw;
+      max-width: 500px;
+      max-height: 500px;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
     }
 
     .maimai-playfield {
       position: relative;
-      width: 88vw;
-      height: 88vw;
-      max-width: 420px;
-      max-height: 420px;
+      width: 100%;
+      height: 100%;
       background: #0f101d;
       border-radius: 50%;
       border: 8px solid #2a2d42;
-      box-shadow: 0 0 30px rgba(255, 0, 204, 0.25);
+      box-shadow: 0 0 35px rgba(255, 0, 204, 0.25);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -352,8 +374,8 @@
 
     .maimai-center-ring {
       position: absolute;
-      width: 20%;
-      height: 20%;
+      width: 16%;
+      height: 16%;
       border-radius: 50%;
       background: #161824;
       border: 3px solid #ff00cc;
@@ -363,8 +385,8 @@
 
     .maimai-sensor {
       position: absolute;
-      width: 44px;
-      height: 44px;
+      width: 11%;
+      height: 11%;
       border-radius: 50%;
       background: #1b1e30;
       border: 3px solid #ff00cc;
@@ -376,23 +398,25 @@
       color: #ff00cc;
       transition: background 0.1s, transform 0.1s;
       z-index: 10;
+      user-select: none;
+      transform: translate(-50%, -50%);
     }
 
-    .maimai-sensor:active, .maimai-sensor.active {
+    .maimai-sensor:hover, .maimai-sensor.active {
       background: #ff00cc;
       color: #fff;
-      transform: scale(1.15);
+      transform: translate(-50%, -50%) scale(1.15);
       box-shadow: 0 0 15px #ff00cc;
     }
 
     .maimai-note {
       position: absolute;
-      width: 28px;
-      height: 28px;
+      width: 8%;
+      height: 8%;
       border-radius: 50%;
       background: #00ffcc;
       border: 2px solid #fff;
-      box-shadow: 0 0 10px #00ffcc;
+      box-shadow: 0 0 12px #00ffcc;
       pointer-events: none;
       z-index: 8;
       transform: translate(-50%, -50%);
@@ -400,43 +424,43 @@
 
     .maimai-note.dual-note {
       background: #ff00cc;
-      box-shadow: 0 0 10px #ff00cc;
+      box-shadow: 0 0 12px #ff00cc;
     }
   </style>
 </head>
 <body>
 
   <header>
-    <h1 onclick="showHome()">🎮 Rhythm Hub</h1>
+    <h1 onclick="showHome()">🎮 Arcade Rhythm Hub</h1>
     <button class="nav-btn" onclick="showHome()">Library</button>
   </header>
 
   <!-- HOME VIEW -->
   <div id="home-view" class="view active">
-    <h2>Select a Game</h2>
+    <h2>Select a Rhythm Game</h2>
     <div class="game-grid">
       
       <!-- Game 1 -->
       <div class="game-card" onclick="launchGame('keys')">
-        <span class="tag">KEYBOARD / TAP</span>
+        <span class="tag">KEYBOARD / TOUCH</span>
         <h3>Rhythm Keys</h3>
-        <p>Vertical falling notes. Play with <b>Z, X, C, V, B, N, M</b> or tap the lanes directly on mobile!</p>
-        <button class="btn">Play Keys</button>
+        <p>Vertical scrolling mania game. Tap bottom key buttons on mobile or use keys <b>Z, X, C, V, B, N, M</b> on desktop!</p>
+        <button class="btn">Play Rhythm Keys</button>
       </div>
 
       <!-- Game 2 -->
       <div class="game-card" onclick="launchGame('osu')">
         <span class="tag">TARGET CLICKS</span>
         <h3>Circle Clicks</h3>
-        <p>Target circles spawn across the screen. Tap directly on mobile or use mouse + <b>Z / X</b> keys!</p>
+        <p>Inspired by <b>osu!</b>. Target circles spawn everywhere. Tap them directly on mobile, or aim with mouse & press <b>Z / X</b> on PC!</p>
         <button class="btn">Play Circle Clicks</button>
       </div>
 
-      <!-- Game 3 -->
+      <!-- Game 3 (maimai Mode) -->
       <div class="game-card" onclick="launchGame('maimai')">
         <span class="tag">CIRCLE RING</span>
         <h3>Ring Rhythm</h3>
-        <p>Arcade maimai simulator. Supports Single-Hand and Two-Hand modes with full touch ring controls!</p>
+        <p>Inspired by <b>maimai</b>. Spawns directly from center ring! Choose Single Hand (1 note) or Two Hands (simultaneous notes).</p>
         <button class="btn">Play Ring Rhythm</button>
       </div>
 
@@ -465,30 +489,32 @@
         <div class="playerContainer"><div id="player-keys"></div></div>
       </div>
 
-      <div class="keys-container">
-        <div class="hud">
-          <div>SCORE: <span id="score-keys">0</span></div>
-          <div>COMBO: <span id="combo-keys">0</span></div>
-        </div>
-        <div class="track">
-          <div class="target-line"></div>
-          <div class="lane lane-0" id="lane-0" onclick="checkHitKeys(0)" ontouchstart="checkHitKeys(0)"></div>
-          <div class="lane lane-1" id="lane-1" onclick="checkHitKeys(1)" ontouchstart="checkHitKeys(1)"></div>
-          <div class="lane lane-2" id="lane-2" onclick="checkHitKeys(2)" ontouchstart="checkHitKeys(2)"></div>
-          <div class="lane lane-3" id="lane-3" onclick="checkHitKeys(3)" ontouchstart="checkHitKeys(3)"></div>
-          <div class="lane lane-4" id="lane-4" onclick="checkHitKeys(4)" ontouchstart="checkHitKeys(4)"></div>
-          <div class="lane lane-5" id="lane-5" onclick="checkHitKeys(5)" ontouchstart="checkHitKeys(5)"></div>
-          <div class="lane lane-6" id="lane-6" onclick="checkHitKeys(6)" ontouchstart="checkHitKeys(6)"></div>
-          <div id="judgment-keys" class="judgment">PERFECT</div>
-        </div>
-        <div class="key-hints">
-          <div class="key-btn" id="btn-0" onclick="checkHitKeys(0)">Z</div>
-          <div class="key-btn" id="btn-1" onclick="checkHitKeys(1)">X</div>
-          <div class="key-btn" id="btn-2" onclick="checkHitKeys(2)">C</div>
-          <div class="key-btn" id="btn-3" onclick="checkHitKeys(3)">V</div>
-          <div class="key-btn" id="btn-4" onclick="checkHitKeys(4)">B</div>
-          <div class="key-btn" id="btn-5" onclick="checkHitKeys(5)">N</div>
-          <div class="key-btn" id="btn-6" onclick="checkHitKeys(6)">M</div>
+      <div class="game-area-wrapper">
+        <div class="keys-container">
+          <div class="hud">
+            <div>SCORE: <span id="score-keys">0</span></div>
+            <div>COMBO: <span id="combo-keys">0</span></div>
+          </div>
+          <div class="track">
+            <div class="target-line"></div>
+            <div class="lane lane-1" id="lane-0"></div>
+            <div class="lane lane-2" id="lane-1"></div>
+            <div class="lane lane-3" id="lane-2"></div>
+            <div class="lane lane-4" id="lane-3"></div>
+            <div class="lane lane-5" id="lane-4"></div>
+            <div class="lane lane-6" id="lane-5"></div>
+            <div class="lane lane-7" id="lane-6"></div>
+            <div id="judgment-keys" class="judgment">PERFECT</div>
+          </div>
+          <div class="key-hints">
+            <div class="key-btn" id="btn-0">Z</div>
+            <div class="key-btn" id="btn-1">X</div>
+            <div class="key-btn" id="btn-2">C</div>
+            <div class="key-btn" id="btn-3">V</div>
+            <div class="key-btn" id="btn-4">B</div>
+            <div class="key-btn" id="btn-5">N</div>
+            <div class="key-btn" id="btn-6">M</div>
+          </div>
         </div>
       </div>
     </div>
@@ -512,12 +538,14 @@
         <div class="playerContainer"><div id="player-osu"></div></div>
       </div>
 
-      <div class="osu-playfield" id="osu-field">
-        <div class="hud">
-          <div>SCORE: <span id="score-osu">0</span></div>
-          <div>COMBO: <span id="combo-osu">0</span></div>
+      <div class="game-area-wrapper">
+        <div class="osu-playfield" id="osu-field">
+          <div class="hud">
+            <div>SCORE: <span id="score-osu">0</span></div>
+            <div>COMBO: <span id="combo-osu">0</span></div>
+          </div>
+          <div id="judgment-osu" class="judgment">PERFECT</div>
         </div>
-        <div id="judgment-osu" class="judgment">PERFECT</div>
       </div>
     </div>
   </div>
@@ -547,14 +575,16 @@
         <div class="playerContainer"><div id="player-maimai"></div></div>
       </div>
 
-      <div class="maimai-wrapper">
-        <div class="hud" style="width: 100%; max-width: 420px; margin-bottom: 8px;">
+      <div class="game-area-wrapper">
+        <div class="hud" style="margin-bottom: 10px;">
           <div>SCORE: <span id="score-maimai">0</span></div>
           <div>COMBO: <span id="combo-maimai">0</span></div>
         </div>
-        <div class="maimai-playfield" id="maimai-field">
-          <div class="maimai-center-ring"></div>
-          <div id="judgment-maimai" class="judgment">PERFECT</div>
+        <div class="maimai-wrapper">
+          <div class="maimai-playfield" id="maimai-field">
+            <div class="maimai-center-ring"></div>
+            <div id="judgment-maimai" class="judgment">PERFECT</div>
+          </div>
         </div>
       </div>
     </div>
@@ -562,6 +592,22 @@
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script>
+    // System Navigation
+    function showHome() {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('home-view').classList.add('active');
+      stopActiveGames();
+    }
+
+    function launchGame(mode) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(`${mode}-view`).classList.add('active');
+      activeMode = mode;
+      if (mode === 'maimai') initMaimaiSensors();
+      if (mode === 'keys') initTouchKeys();
+    }
+
+    // Engine Variables
     const KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm'];
     let activeMode = 'keys';
     let noteSpeed = 350;
@@ -575,19 +621,7 @@
     let mousePos = { x: 0, y: 0 };
     let maimaiSensors = [];
 
-    function showHome() {
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.getElementById('home-view').classList.add('active');
-      stopActiveGames();
-    }
-
-    function launchGame(mode) {
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.getElementById(`${mode}-view`).classList.add('active');
-      activeMode = mode;
-      if (mode === 'maimai') initMaimaiSensors();
-    }
-
+    // YouTube API Initialization
     function onYouTubeIframeAPIReady() {
       players.keys = new YT.Player('player-keys', { height: '100%', width: '100%', videoId: 'vUvLQioor3U', events: { 'onReady': onPlayerReady } });
       players.osu = new YT.Player('player-osu', { height: '100%', width: '100%', videoId: 'vUvLQioor3U', events: { 'onReady': onPlayerReady } });
@@ -646,38 +680,55 @@
       return (match && match[2].length === 11) ? match[2] : url;
     }
 
-    /* Maimai Responsive Sensor Layout */
+    /* Init Maimai Dynamic Sensor Coordinates */
     function initMaimaiSensors() {
       const field = document.getElementById('maimai-field');
       document.querySelectorAll('.maimai-sensor').forEach(el => el.remove());
       maimaiSensors = [];
 
-      const fieldWidth = field.clientWidth || 380;
-      const radius = fieldWidth * 0.42; 
-      const centerX = fieldWidth / 2;
-      const centerY = fieldWidth / 2;
+      const rect = field.getBoundingClientRect();
+      const radiusPct = 42; // percentage from center
+      const centerX = 50;   // percentage
+      const centerY = 50;   // percentage
 
       for (let i = 0; i < 8; i++) {
         const angle = (i * 45 - 90) * (Math.PI / 180);
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
+        const xPct = centerX + radiusPct * Math.cos(angle);
+        const yPct = centerY + radiusPct * Math.sin(angle);
 
         const sensor = document.createElement('div');
         sensor.className = 'maimai-sensor';
-        sensor.style.left = `${x - 22}px`;
-        sensor.style.top = `${y - 22}px`;
+        sensor.style.left = `${xPct}%`;
+        sensor.style.top = `${yPct}%`;
         sensor.textContent = i + 1;
 
-        const handleHit = (e) => {
+        const handleSensorPress = (e) => {
           e.preventDefault();
           checkHitMaimai(i);
+          sensor.classList.add('active');
+          setTimeout(() => sensor.classList.remove('active'), 100);
         };
 
-        sensor.addEventListener('mousedown', handleHit);
-        sensor.addEventListener('touchstart', handleHit);
-
+        sensor.addEventListener('touchstart', handleSensorPress, { passive: false });
+        sensor.addEventListener('mousedown', handleSensorPress);
         field.appendChild(sensor);
-        maimaiSensors.push({ id: i, x, y, angle, element: sensor, radius });
+
+        maimaiSensors.push({ id: i, xPct, yPct, angle, element: sensor });
+      }
+    }
+
+    function initTouchKeys() {
+      for (let i = 0; i < 7; i++) {
+        const btn = document.getElementById(`btn-${i}`);
+        if (!btn) continue;
+        const handleTouch = (e) => {
+          e.preventDefault();
+          checkHitKeys(i);
+          btn.classList.add('active');
+          setTimeout(() => btn.classList.remove('active'), 100);
+        };
+        btn.addEventListener('touchstart', handleTouch, { passive: false });
+        btn.addEventListener('mousedown', handleTouch);
       }
     }
 
@@ -697,22 +748,23 @@
 
       const maimaiHandMode = document.getElementById('handModeInput-maimai').value;
 
-      // FIXED: Start spawning notes at 4.0s to give notes lead time to drop/travel smoothly
-      for (let time = 4.0; time < 240; time += beatInterval) {
+      for (let time = 2.0; time < 240; time += beatInterval) {
         const formattedTime = parseFloat(time.toFixed(3));
         const sensor1 = Math.floor(Math.random() * 8);
 
+        // Primary note
         notes.push({
           time: formattedTime,
           lane: Math.floor(Math.random() * 7),
           sensor: sensor1,
           isDual: false,
-          x: Math.floor(Math.random() * 320) + 50,
-          y: Math.floor(Math.random() * 280) + 80,
+          xPct: Math.floor(Math.random() * 70) + 15,
+          yPct: Math.floor(Math.random() * 70) + 15,
           num: (circleCounter % 9) + 1,
           spawned: false, hit: false, element: null
         });
 
+        // Two-Hand Mode Logic
         if (mode === 'maimai' && maimaiHandMode === 'two' && Math.random() < 0.35) {
           let sensor2 = (sensor1 + Math.floor(Math.random() * 7) + 1) % 8;
           notes.push({
@@ -768,21 +820,22 @@
             note.spawned = true;
             const target = document.createElement('div');
             target.className = 'osu-target';
-            target.style.left = `${note.x}px`;
-            target.style.top = `${note.y}px`;
+            target.style.left = `${note.xPct}%`;
+            target.style.top = `${note.yPct}%`;
             target.textContent = note.num;
 
             const ring = document.createElement('div');
             ring.className = 'osu-approach';
             target.appendChild(ring);
 
-            const handleOsuTouch = (e) => {
+            const touchHit = (e) => {
               e.preventDefault();
-              checkHitOsuAt(note.x, note.y);
+              e.stopPropagation();
+              checkOsuDirectHit(note);
             };
 
-            target.addEventListener('touchstart', handleOsuTouch);
-            target.addEventListener('mousedown', handleOsuTouch);
+            target.addEventListener('touchstart', touchHit, { passive: false });
+            target.addEventListener('mousedown', touchHit);
 
             document.getElementById('osu-field').appendChild(target);
             note.element = target; note.ring = ring;
@@ -801,31 +854,36 @@
         });
       } else if (activeMode === 'maimai') {
         const travelTime = 0.9;
-        const field = document.getElementById('maimai-field');
-        const fieldWidth = field.clientWidth || 380;
-        const centerX = fieldWidth / 2;
-        const centerY = fieldWidth / 2;
-        const targetRadius = fieldWidth * 0.42;
+        const centerPct = 50; 
+        const targetRadiusPct = 42; 
 
         notes.forEach(note => {
+          // SPAWN AT CENTER (0 progress)
           if (!note.spawned && currentTime >= (note.time - travelTime)) {
             note.spawned = true;
             const el = document.createElement('div');
             el.className = `maimai-note ${note.isDual ? 'dual-note' : ''}`;
-            field.appendChild(el);
+            
+            // Initial positioning explicitly starting at 50% center
+            el.style.left = `${centerPct}%`;
+            el.style.top = `${centerPct}%`;
+            
+            document.getElementById('maimai-field').appendChild(el);
             note.element = el;
           }
 
           if (note.spawned && !note.hit) {
-            const progress = 1 - ((note.time - currentTime) / travelTime);
+            // Calculate progress strictly from 0 (Center) to 1 (Outer Sensor)
+            const progress = Math.max(0, 1 - ((note.time - currentTime) / travelTime));
             const sensor = maimaiSensors[note.sensor];
-            const currentDist = progress * targetRadius;
+            
+            const currentDistPct = progress * targetRadiusPct;
 
-            const currentX = centerX + currentDist * Math.cos(sensor.angle);
-            const currentY = centerY + currentDist * Math.sin(sensor.angle);
+            const currentXPct = centerPct + currentDistPct * Math.cos(sensor.angle);
+            const currentYPct = centerPct + currentDistPct * Math.sin(sensor.angle);
 
-            note.element.style.left = `${currentX}px`;
-            note.element.style.top = `${currentY}px`;
+            note.element.style.left = `${currentXPct}%`;
+            note.element.style.top = `${currentYPct}%`;
 
             if (currentTime > note.time + 0.2) {
               note.hit = true; note.element.remove();
@@ -840,7 +898,7 @@
     }
 
     function checkHitKeys(laneIndex) {
-      if (!isPlaying || activeMode !== 'keys') return;
+      if (!isPlaying) return;
       const activeNotes = notes.filter(n => n.lane === laneIndex && n.spawned && !n.hit);
       if (activeNotes.length === 0) return;
 
@@ -853,17 +911,32 @@
       else if (diff < 150) { closest.hit = true; closest.element.remove(); triggerJudgment('MISS'); combo = 0; updateHUD(); }
     }
 
-    function checkHitOsuAt(targetX, targetY) {
+    function checkOsuDirectHit(note) {
+      if (!isPlaying || note.hit) return;
+      const currentTime = players.osu.getCurrentTime();
+      const timeDiff = Math.abs(currentTime - note.time);
+      if (timeDiff <= 0.15) registerHit(note, 'PERFECT', 100);
+      else if (timeDiff <= 0.25) registerHit(note, 'GREAT', 65);
+      else if (timeDiff <= 0.35) registerHit(note, 'GOOD', 30);
+    }
+
+    function checkHitOsu() {
       if (!isPlaying || activeMode !== 'osu') return;
       const currentTime = players.osu.getCurrentTime();
       const activeNotes = notes.filter(n => n.spawned && !n.hit);
+      if (activeNotes.length === 0) return;
+
+      const field = document.getElementById('osu-field').getBoundingClientRect();
+      const clickX = mousePos.x - field.left;
+      const clickY = mousePos.y - field.top;
 
       for (let note of activeNotes) {
-        if (note.x === targetX && note.y === targetY) {
-          const timeDiff = Math.abs(currentTime - note.time);
-          if (timeDiff <= 0.18) registerHit(note, 'PERFECT', 100);
-          else if (timeDiff <= 0.28) registerHit(note, 'GREAT', 65);
-          else if (timeDiff <= 0.38) registerHit(note, 'GOOD', 30);
+        const noteX = (note.xPct / 100) * field.width;
+        const noteY = (note.yPct / 100) * field.height;
+        const dx = clickX - noteX;
+        const dy = clickY - noteY;
+        if (Math.sqrt(dx * dx + dy * dy) <= 40) {
+          checkOsuDirectHit(note);
           break;
         }
       }
@@ -879,9 +952,9 @@
       const closest = activeNotes[0];
       const timeDiff = Math.abs(currentTime - closest.time);
 
-      if (timeDiff <= 0.14) registerHit(closest, 'PERFECT', 100);
-      else if (timeDiff <= 0.24) registerHit(closest, 'GREAT', 65);
-      else if (timeDiff <= 0.34) registerHit(closest, 'GOOD', 30);
+      if (timeDiff <= 0.12) registerHit(closest, 'PERFECT', 100);
+      else if (timeDiff <= 0.22) registerHit(closest, 'GREAT', 65);
+      else if (timeDiff <= 0.32) registerHit(closest, 'GOOD', 30);
     }
 
     function registerHit(note, rating, pts) {
@@ -907,7 +980,7 @@
       document.getElementById(`combo-${activeMode}`).textContent = combo;
     }
 
-    // Controls
+    // Controls Handling
     window.addEventListener('keydown', (e) => {
       initAudio();
       const k = e.key.toLowerCase();
@@ -917,6 +990,8 @@
           document.getElementById(`btn-${keyIndex}`).classList.add('active');
           checkHitKeys(keyIndex);
         }
+      } else if (activeMode === 'osu') {
+        if ((k === 'z' || k === 'x') && !e.repeat) checkHitOsu();
       }
     });
 
@@ -927,6 +1002,12 @@
       }
     });
 
+    window.addEventListener('mousemove', (e) => {
+      mousePos.x = e.clientX;
+      mousePos.y = e.clientY;
+    });
+
+    // Resize Event Adjustments
     window.addEventListener('resize', () => {
       if (activeMode === 'maimai') initMaimaiSensors();
     });
