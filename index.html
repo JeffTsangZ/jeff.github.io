@@ -135,21 +135,25 @@
             background: rgba(231, 76, 60, 0.85);
         }
 
+        /* Dialogue UI - Controlled Sizing & Placement */
         #dialogue-box {
             position: absolute;
-            bottom: 20px;
+            top: 90px;
             left: 50%;
             transform: translateX(-50%);
-            width: 90%;
+            width: 85%;
+            max-width: 500px;
+            max-height: 130px;
             background: rgba(16, 18, 27, 0.95);
             border: 3px solid #f1c40f;
             border-radius: 4px;
-            padding: 12px 16px;
-            font-size: 14px;
-            line-height: 1.4;
+            padding: 10px 14px;
+            font-size: 13px;
+            line-height: 1.3;
             display: none;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
             z-index: 10;
+            overflow-y: auto;
         }
 
         #dialogue-title {
@@ -175,7 +179,7 @@
             justify-content: space-between;
             align-items: flex-end;
             pointer-events: none;
-            z-index: 5;
+            z-index: 15;
         }
 
         /* Joystick styles */
@@ -206,7 +210,7 @@
             width: 65px;
             height: 65px;
             border-radius: 50%;
-            background: rgba(231, 76, 60, 0.7);
+            background: rgba(231, 76, 60, 0.85);
             border: 2px solid #fff;
             pointer-events: auto;
             font-size: 12px;
@@ -216,12 +220,19 @@
             justify-content: center;
             align-items: center;
             touch-action: manipulation;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
 
         #btn-attack:active { background: rgba(231, 76, 60, 1); }
 
-        @media (pointer: coarse) {
+        @media (pointer: coarse), (max-width: 600px) {
             #mobile-controls { display: flex; }
+            #dialogue-box {
+                top: 15px;
+                width: 90%;
+                max-height: 110px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
@@ -255,7 +266,7 @@
         <div id="dialogue-box">
             <div id="dialogue-title">Village Elder</div>
             <div id="dialogue-text">Welcome back, Hero! Clean up those slimes. Your progress is saved!</div>
-            <div id="dialogue-hint">[ Click Attack or Space to close ]</div>
+            <div id="dialogue-hint">[ Tap Attack or press Space to close ]</div>
         </div>
 
         <!-- Touch Controls -->
@@ -273,7 +284,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Fullscreen API
         function toggleFullscreen() {
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                 if (wrapper.requestFullscreen) wrapper.requestFullscreen();
@@ -295,10 +305,9 @@
             }
         }
 
-        // Game State & Input Variables
         const keys = {};
         let saveTimeout;
-        let isPaused = false; // Dialogue pause trigger
+        let isPaused = false;
 
         const player = {
             x: 180,
@@ -328,7 +337,6 @@
 
         let particles = [];
 
-        // Joystick Input Engine
         const joystick = {
             active: false,
             touchId: null,
@@ -388,7 +396,6 @@
             }
         });
 
-        // Save / Load System
         function saveGame() {
             const data = {
                 hp: player.hp,
@@ -429,9 +436,8 @@
         }
         document.getElementById('reset-btn').addEventListener('click', resetGame);
 
-        // Dialogue Box Handlers
         function showDialogue(title, text) {
-            isPaused = true; // Pause game execution loops
+            isPaused = true;
             const box = document.getElementById('dialogue-box');
             document.getElementById('dialogue-title').innerText = title;
             document.getElementById('dialogue-text').innerText = text;
@@ -440,17 +446,15 @@
 
         function closeDialogue() {
             document.getElementById('dialogue-box').style.display = 'none';
-            isPaused = false; // Unpause execution
+            isPaused = false;
         }
 
-        // Keyboard Handlers
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
             if (e.code === 'Space') handleAction();
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        // Attack Button Binding
         document.getElementById('btn-attack').addEventListener('touchstart', (e) => {
             e.preventDefault();
             handleAction();
@@ -505,7 +509,7 @@
                 player.nextXp = Math.floor(player.nextXp * 1.5);
                 player.maxHp += 20;
                 player.hp = player.maxHp;
-                player.atk += 5; // Increase attack power on level up
+                player.atk += 5;
                 showDialogue('LEVEL UP!', `You reached Level ${player.level}!\nMax HP & ATK increased.`);
                 createBurst(player.x, player.y, '#f1c40f');
             }
@@ -537,19 +541,16 @@
             return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
         }
 
-        // --- UPDATE ENGINE LOOP ---
         function update() {
-            if (isPaused) return; // Freeze everything if dialogue box is active
+            if (isPaused) return;
 
             let dx = 0, dy = 0;
 
-            // Check Keyboard Inputs
             if (keys['w'] || keys['arrowup']) { dy -= 1; player.facing = 'up'; }
             if (keys['s'] || keys['arrowdown']) { dy += 1; player.facing = 'down'; }
             if (keys['a'] || keys['arrowleft']) { dx -= 1; player.facing = 'left'; }
             if (keys['d'] || keys['arrowright']) { dx += 1; player.facing = 'right'; }
 
-            // Override with Joystick input if active
             if (joystick.active) {
                 dx = joystick.dx;
                 dy = joystick.dy;
@@ -576,18 +577,15 @@
                 if (player.attackTimer <= 0) player.isAttacking = false;
             }
 
-            // Invulnerability cooldown timer tracking
             if (player.invulnerableTimer > 0) {
                 player.invulnerableTimer--;
             }
 
-            // NPC Interaction Trigger
             const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
             if (distToNpc < 20 && document.getElementById('dialogue-box').style.display !== 'block') {
                 showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
             }
 
-            // Update Enemies
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
                 e.x += e.vx * e.speed;
@@ -596,11 +594,10 @@
                 if (e.x < 20 || e.x > 370) e.vx *= -1;
                 if (e.y < 20 || e.y > 270) e.vy *= -1;
 
-                // Enemy Collision Damage to Player
                 if (rectOverlap(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
                     if (player.invulnerableTimer === 0) {
-                        player.hp -= 10; // Take flat collision hit damage
-                        player.invulnerableTimer = 45; // ~0.75 seconds invulnerability window
+                        player.hp -= 10;
+                        player.invulnerableTimer = 45;
                         createBurst(player.x + 6, player.y + 6, '#e74c3c');
                         updateHUD();
 
@@ -616,7 +613,6 @@
                 }
             });
 
-            // Enemy respawn check
             if (enemies.length === 0) {
                 const baseHp = 30 + (player.level * 5);
                 enemies.push(
@@ -637,7 +633,6 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Ground
             ctx.fillStyle = '#2d5a27';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -646,13 +641,11 @@
             ctx.fillRect(320, 80, 6, 6);
             ctx.fillRect(120, 240, 4, 4);
 
-            // NPC
             ctx.fillStyle = '#3498db';
             ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
             ctx.fillStyle = '#f1c40f';
             ctx.fillRect(npc.x + 2, npc.y - 3, 8, 4);
 
-            // Enemies
             enemies.forEach(e => {
                 ctx.fillStyle = '#2ecc71';
                 ctx.fillRect(e.x, e.y, e.width, e.height);
@@ -675,13 +668,11 @@
                 }
             });
 
-            // Player (Flashing effect when invulnerable)
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
                 ctx.fillStyle = '#e67e22';
                 ctx.fillRect(player.x, player.y, player.width, player.height);
             }
 
-            // Sword Sweep Animation
             if (player.isAttacking) {
                 ctx.fillStyle = '#ecf0f1';
                 let sx = player.x, sy = player.y;
