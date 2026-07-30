@@ -135,7 +135,7 @@
             background: rgba(231, 76, 60, 0.85);
         }
 
-        /* Dialogue UI - Controlled Sizing & Placement */
+        /* Dialogue UI */
         #dialogue-box {
             position: absolute;
             top: 90px;
@@ -152,7 +152,7 @@
             line-height: 1.3;
             display: none;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            z-index: 10;
+            z-index: 20;
             overflow-y: auto;
         }
 
@@ -308,6 +308,7 @@
         const keys = {};
         let saveTimeout;
         let isPaused = false;
+        let npcCooldown = 0; // Cooldown timer to prevent instant re-triggering
 
         const player = {
             x: 180,
@@ -447,6 +448,7 @@
         function closeDialogue() {
             document.getElementById('dialogue-box').style.display = 'none';
             isPaused = false;
+            npcCooldown = 60; // 1-second cooldown frame delay before NPC dialogue can reopen
         }
 
         window.addEventListener('keydown', e => {
@@ -544,6 +546,11 @@
         function update() {
             if (isPaused) return;
 
+            // Tick down NPC interaction cooldown
+            if (npcCooldown > 0) {
+                npcCooldown--;
+            }
+
             let dx = 0, dy = 0;
 
             if (keys['w'] || keys['arrowup']) { dy -= 1; player.facing = 'up'; }
@@ -581,8 +588,9 @@
                 player.invulnerableTimer--;
             }
 
+            // NPC Interaction Trigger with Cooldown check
             const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
-            if (distToNpc < 20 && document.getElementById('dialogue-box').style.display !== 'block') {
+            if (distToNpc < 20 && npcCooldown === 0) {
                 showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
             }
 
