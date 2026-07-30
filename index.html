@@ -3,158 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Catch & Dodge - Mobile Web Game</title>
+    <title>Retro Pixel RPG</title>
     <style>
         * {
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none;
             margin: 0;
             padding: 0;
         }
 
         body {
-            background-color: #1a1a24;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0d0e15;
+            font-family: 'Courier New', Courier, monospace;
             color: #ffffff;
-            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            width: 100vw;
+            min-height: 100vh;
+            overflow: hidden;
         }
 
-        #game-container {
+        #game-wrapper {
             position: relative;
-            width: 100%;
-            height: 100%;
-            max-width: 480px; /* Standard mobile width boundary on desktop */
-            max-height: 850px;
-            background: linear-gradient(180deg, #0f0c20 0%, #1b1638 100%);
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            max-width: 800px;
+            max-height: 600px;
+            background: #111;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            border: 2px solid #333;
         }
 
         canvas {
-            display: block;
             width: 100%;
             height: 100%;
+            display: block;
+            image-rendering: pixelated; /* Ensures sharp retro pixel graphics */
         }
 
-        /* Overlay Screens */
-        .screen {
+        /* UI Overlays */
+        #hud {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 10px;
+            left: 10px;
+            right: 10px;
             display: flex;
-            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        .bar-container {
+            width: 150px;
+            height: 16px;
+            background: #222;
+            border: 2px solid #fff;
+            margin-top: 4px;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 100%;
+            transition: width 0.2s ease;
+        }
+
+        #hp-fill { background: #e74c3c; }
+        #xp-fill { background: #f1c40f; }
+
+        #dialogue-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            background: rgba(16, 18, 27, 0.95);
+            border: 3px solid #f1c40f;
+            border-radius: 4px;
+            padding: 12px 16px;
+            font-size: 14px;
+            line-height: 1.4;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        #dialogue-title {
+            color: #f1c40f;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        /* Mobile Virtual Controls */
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: none;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: none;
+        }
+
+        .dpad {
+            display: grid;
+            grid-template-columns: repeat(3, 45px);
+            grid-template-rows: repeat(3, 45px);
+            gap: 3px;
+            pointer-events: auto;
+        }
+
+        .btn-ctrl {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 6px;
+            color: white;
+            font-size: 18px;
+            display: flex;
             justify-content: center;
             align-items: center;
-            background: rgba(15, 12, 32, 0.85);
-            backdrop-filter: blur(4px);
-            z-index: 10;
-            padding: 20px;
-            text-align: center;
+            touch-action: manipulation;
         }
 
-        .hidden {
-            display: none !important;
-        }
+        .btn-ctrl:active { background: rgba(255, 255, 255, 0.5); }
 
-        h1 {
-            font-size: 2.2rem;
-            margin-bottom: 10px;
-            color: #ff007f;
-            text-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
-        }
-
-        p {
-            font-size: 1rem;
-            color: #a0a0c0;
-            margin-bottom: 25px;
-            line-height: 1.4;
-        }
-
-        .score-display {
-            font-size: 1.2rem;
-            color: #00f0ff;
-            margin-bottom: 15px;
-        }
-
-        .btn {
-            background: linear-gradient(45deg, #ff007f, #7928ca);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            border-radius: 30px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(255, 0, 127, 0.4);
-            transition: transform 0.1s ease;
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Instructions list */
-        .instructions {
-            text-align: left;
-            margin-bottom: 25px;
-            font-size: 0.95rem;
-            color: #d0d0f0;
-        }
-
-        .instructions div {
-            margin: 8px 0;
-            display: flex;
-            align-items: center;
-        }
-
-        .dot {
-            width: 12px;
-            height: 12px;
+        #btn-attack {
+            width: 65px;
+            height: 65px;
             border-radius: 50%;
-            display: inline-block;
-            margin-right: 10px;
+            background: rgba(231, 76, 60, 0.6);
+            border: 2px solid #fff;
+            pointer-events: auto;
+            font-size: 14px;
+            font-weight: bold;
         }
 
-        .dot.green { background: #00ff66; box-shadow: 0 0 8px #00ff66; }
-        .dot.red { background: #ff0055; box-shadow: 0 0 8px #ff0055; }
-        .dot.blue { background: #00f0ff; box-shadow: 0 0 8px #00f0ff; }
+        @media (pointer: coarse) {
+            #mobile-controls { display: flex; }
+        }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="400" height="300"></canvas>
 
-        <!-- Start Screen -->
-        <div id="start-screen" class="screen">
-            <h1>CATCH & DODGE</h1>
-            <p>Drag your paddle across the screen to play.</p>
-            
-            <div class="instructions">
-                <div><span class="dot green"></span> Green: +10 Points</div>
-                <div><span class="dot blue"></span> Blue: Power-up (Double Size)</div>
-                <div><span class="dot red"></span> Red: Fatal Hazard</div>
+        <!-- HUD -->
+        <div id="hud">
+            <div>
+                HP
+                <div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div>
             </div>
-
-            <button class="btn" id="start-btn">PLAY</button>
+            <div style="text-align: right;">
+                <span id="level-txt">LVL 1</span>
+                <div class="bar-container"><div id="xp-fill" class="bar-fill" style="width: 0%;"></div></div>
+            </div>
         </div>
 
-        <!-- Game Over Screen -->
-        <div id="gameover-screen" class="screen hidden">
-            <h1>GAME OVER</h1>
-            <div class="score-display">Score: <span id="final-score">0</span></div>
-            <div class="score-display" style="font-size: 0.9rem; color: #8080a0;">High Score: <span id="high-score">0</span></div>
-            <p id="game-over-msg">Watch out for the red orbs!</p>
-            <button class="btn" id="restart-btn">TRY AGAIN</button>
+        <!-- Dialogue UI -->
+        <div id="dialogue-box">
+            <div id="dialogue-title">Village Elder</div>
+            <div id="dialogue-text">Welcome, Hero! The forest is infested with Slimes. Clear them out to gain experience!</div>
+        </div>
+
+        <!-- Touch Controls -->
+        <div id="mobile-controls">
+            <div class="dpad">
+                <div></div><div class="btn-ctrl" id="btn-up">▲</div><div></div>
+                <div class="btn-ctrl" id="btn-left">◄</div><div></div><div class="btn-ctrl" id="btn-right">►</div>
+                <div></div><div class="btn-ctrl" id="btn-down">▼</div><div></div>
+            </div>
+            <button class="btn-ctrl" id="btn-attack">ATTACK</button>
         </div>
     </div>
 
@@ -162,291 +183,260 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const startScreen = document.getElementById('start-screen');
-        const gameoverScreen = document.getElementById('gameover-screen');
-        const startBtn = document.getElementById('start-btn');
-        const restartBtn = document.getElementById('restart-btn');
-        const finalScoreEl = document.getElementById('final-score');
-        const highScoreEl = document.getElementById('high-score');
+        // State & Systems
+        const keys = {};
+        let dialogueTimeout;
 
-        // Game State Variables
-        let isPlaying = false;
-        let score = 0;
-        let highScore = localStorage.getItem('cd_highscore') || 0;
-        let animationFrameId;
-        let spawnTimer = 0;
-        let difficultyMultiplier = 1;
-
-        // Dynamic Sizing
-        let width, height;
-
-        function resize() {
-            const container = document.getElementById('game-container');
-            width = container.clientWidth;
-            height = container.clientHeight;
-            canvas.width = width;
-            canvas.height = height;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // Player Object
+        // Player State
         const player = {
-            x: 0,
-            y: 0,
-            baseWidth: 70,
-            width: 70,
+            x: 180,
+            y: 140,
+            width: 12,
             height: 12,
-            targetX: 0,
-            color: '#00f0ff',
-            powerTimer: 0,
-
-            init() {
-                this.width = this.baseWidth;
-                this.x = width / 2 - this.width / 2;
-                this.targetX = this.x;
-                this.y = height - 60;
-                this.powerTimer = 0;
-            },
-
-            update() {
-                // Smooth movement towards touch position
-                this.x += (this.targetX - this.x) * 0.25;
-
-                // Clamp inside bounds
-                if (this.x < 0) this.x = 0;
-                if (this.x + this.width > width) this.x = width - this.width;
-
-                // Handle Power-up timers
-                if (this.powerTimer > 0) {
-                    this.powerTimer--;
-                    if (this.powerTimer === 0) {
-                        this.width = this.baseWidth;
-                    }
-                }
-            },
-
-            draw() {
-                ctx.save();
-                ctx.fillStyle = this.powerTimer > 0 ? '#00ff66' : this.color;
-                ctx.shadowColor = ctx.fillStyle;
-                ctx.shadowBlur = 10;
-                ctx.beginPath();
-                ctx.roundRect(this.x, this.y, this.width, this.height, 6);
-                ctx.fill();
-                ctx.restore();
-            },
-
-            expand() {
-                this.width = this.baseWidth * 1.8;
-                this.powerTimer = 300; // ~5 seconds at 60fps
-            }
+            speed: 1.5,
+            hp: 100,
+            maxHp: 100,
+            level: 1,
+            xp: 0,
+            nextXp: 50,
+            facing: 'down',
+            isAttacking: false,
+            attackTimer: 0
         };
 
-        // Item/Entity Management
-        let items = [];
+        // World Objects
+        const npc = { x: 200, y: 80, width: 12, height: 12, name: 'Village Elder' };
+        
+        let enemies = [
+            { x: 60, y: 60, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: 1, vy: 0 },
+            { x: 300, y: 200, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: 0, vy: -1 },
+            { x: 100, y: 220, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: -1, vy: 0 }
+        ];
 
-        class Item {
-            constructor() {
-                this.radius = 10 + Math.random() * 4;
-                this.x = this.radius + Math.random() * (width - this.radius * 2);
-                this.y = -this.radius;
-                this.speed = (2.5 + Math.random() * 2) * difficultyMultiplier;
-                
-                // Roll item type
-                const rand = Math.random();
-                if (rand < 0.65) {
-                    this.type = 'point'; // 65% chance
-                    this.color = '#00ff66';
-                } else if (rand < 0.90) {
-                    this.type = 'hazard'; // 25% chance
-                    this.color = '#ff0055';
-                } else {
-                    this.type = 'powerup'; // 10% chance
-                    this.color = '#00f0ff';
-                }
-            }
-
-            update() {
-                this.y += this.speed;
-            }
-
-            draw() {
-                ctx.save();
-                ctx.fillStyle = this.color;
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 8;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-
-        // Particle Effects
         let particles = [];
 
-        class Particle {
-            constructor(x, y, color) {
-                this.x = x;
-                this.y = y;
-                this.color = color;
-                this.radius = Math.random() * 4 + 1;
-                this.vx = (Math.random() - 0.5) * 6;
-                this.vy = (Math.random() - 0.5) * 6;
-                this.alpha = 1;
-            }
+        // Input Handlers
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.code === 'Space') attack();
+        });
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-            update() {
-                this.x += this.vx;
-                this.y += this.vy;
-                this.alpha -= 0.03;
-            }
+        // Mobile Control Bindings
+        const bindTouch = (id, keyName) => {
+            const el = document.getElementById(id);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
+        };
+        bindTouch('btn-up', 'w');
+        bindTouch('btn-down', 's');
+        bindTouch('btn-left', 'a');
+        bindTouch('btn-right', 'd');
+        document.getElementById('btn-attack').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            attack();
+        });
 
-            draw() {
-                ctx.save();
-                ctx.globalAlpha = this.alpha;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+        function showDialogue(title, text) {
+            const box = document.getElementById('dialogue-box');
+            document.getElementById('dialogue-title').innerText = title;
+            document.getElementById('dialogue-text').innerText = text;
+            box.style.display = 'block';
+            clearTimeout(dialogueTimeout);
+            dialogueTimeout = setTimeout(() => { box.style.display = 'none'; }, 4000);
+        }
+
+        function attack() {
+            if (player.isAttacking) return;
+            player.isAttacking = true;
+            player.attackTimer = 15; // Frames of swing animation
+
+            // Calculate hitbox based on direction
+            let hitbox = { x: player.x, y: player.y, w: 16, h: 16 };
+            if (player.facing === 'up') hitbox.y -= 12;
+            if (player.facing === 'down') hitbox.y += 12;
+            if (player.facing === 'left') hitbox.x -= 12;
+            if (player.facing === 'right') hitbox.x += 12;
+
+            // Damage Enemies
+            enemies.forEach(e => {
+                if (rectOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h, e.x, e.y, e.width, e.height)) {
+                    e.hp -= 15 + (player.level * 2);
+                    createBurst(e.x, e.y, '#e74c3c');
+                    if (e.hp <= 0) {
+                        gainXp(25);
+                    }
+                }
+            });
+        }
+
+        function gainXp(amount) {
+            player.xp += amount;
+            if (player.xp >= player.nextXp) {
+                player.level++;
+                player.xp -= player.nextXp;
+                player.nextXp = Math.floor(player.nextXp * 1.5);
+                player.maxHp += 20;
+                player.hp = player.maxHp;
+                showDialogue('LEVEL UP!', `You reached Level ${player.level}! Stats increased.`);
+                createBurst(player.x, player.y, '#f1c40f');
             }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hp-fill').style.width = Math.max(0, (player.hp / player.maxHp) * 100) + '%';
+            document.getElementById('xp-fill').style.width = ((player.xp / player.nextXp) * 100) + '%';
+            document.getElementById('level-txt').innerText = `LVL ${player.level}`;
         }
 
         function createBurst(x, y, color) {
-            for (let i = 0; i < 12; i++) {
-                particles.push(new Particle(x, y, color));
+            for (let i = 0; i < 6; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    color,
+                    life: 10
+                });
             }
         }
 
-        // Touch & Drag Controls
-        function handleMove(e) {
-            if (!isPlaying) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const rect = canvas.getBoundingClientRect();
-            // Align target center to user finger/pointer position
-            player.targetX = (clientX - rect.left) - player.width / 2;
+        function rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > x2;
         }
 
-        canvas.addEventListener('mousemove', handleMove);
-        canvas.addEventListener('touchmove', (e) => {
-            handleMove(e);
-            e.preventDefault();
-        }, { passive: false });
+        // --- GAME LOOP ---
+        function update() {
+            // Player Movement
+            let dx = 0, dy = 0;
+            if (keys['w'] || keys['arrowup']) { dy -= 1; player.facing = 'up'; }
+            if (keys['s'] || keys['arrowdown']) { dy += 1; player.facing = 'down'; }
+            if (keys['a'] || keys['arrowleft']) { dx -= 1; player.facing = 'left'; }
+            if (keys['d'] || keys['arrowright']) { dx += 1; player.facing = 'right'; }
 
-        // Collision Logic
-        function checkCollisions(item) {
-            // Circle to AABB Collision
-            const closestX = Math.max(player.x, Math.min(item.x, player.x + player.width));
-            const closestY = Math.max(player.y, Math.min(item.y, player.y + player.height));
+            if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; } // Normalize diagonal
 
-            const distX = item.x - closestX;
-            const distY = item.y - closestY;
-            const distance = Math.sqrt((distX * distX) + (distY * distY));
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
 
-            return distance < item.radius;
-        }
+            // World Boundaries
+            player.x = Math.max(10, Math.min(378, player.x));
+            player.y = Math.max(10, Math.min(278, player.y));
 
-        // Game Loop
-        function gameLoop() {
-            if (!isPlaying) return;
-
-            // Clear Screen
-            ctx.clearRect(0, 0, width, height);
-
-            // Progressive difficulty ramp
-            difficultyMultiplier += 0.0003;
-
-            // Spawn Entities
-            spawnTimer++;
-            if (spawnTimer > Math.max(20, 50 - Math.floor(difficultyMultiplier * 5))) {
-                items.push(new Item());
-                spawnTimer = 0;
+            // Attack cooldown reset
+            if (player.isAttacking) {
+                player.attackTimer--;
+                if (player.attackTimer <= 0) player.isAttacking = false;
             }
 
-            // Update & Draw Player
-            player.update();
-            player.draw();
+            // NPC Interaction Distance
+            const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
+            if (distToNpc < 20 && !document.getElementById('dialogue-box').style.display.includes('block')) {
+                showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
+            }
 
-            // Handle Items
-            for (let i = items.length - 1; i >= 0; i--) {
-                const item = items[i];
-                item.update();
-                item.draw();
+            // Update Enemies
+            enemies = enemies.filter(e => e.hp > 0);
+            enemies.forEach(e => {
+                // Simple AI Movement
+                e.x += e.vx * e.speed;
+                e.y += e.vy * e.speed;
 
-                // Check Paddle Collision
-                if (checkCollisions(item)) {
-                    createBurst(item.x, item.y, item.color);
+                if (e.x < 20 || e.x > 370) e.vx *= -1;
+                if (e.y < 20 || e.y > 270) e.vy *= -1;
 
-                    if (item.type === 'point') {
-                        score += 10;
-                    } else if (item.type === 'powerup') {
-                        player.expand();
-                        score += 5;
-                    } else if (item.type === 'hazard') {
-                        gameOver();
-                        return;
+                // Player Collision (Damage)
+                if (rectOverlap(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
+                    player.hp -= 0.3;
+                    updateHUD();
+                    if (player.hp <= 0) {
+                        player.hp = player.maxHp;
+                        player.x = 180;
+                        player.y = 140;
+                        showDialogue('DEFEATED', 'You passed out and woke up back in town.');
+                        updateHUD();
                     }
-                    items.splice(i, 1);
-                    continue;
                 }
+            });
 
-                // Remove out-of-bounds items
-                if (item.y - item.radius > height) {
-                    items.splice(i, 1);
-                }
+            // Respawn Slimes if cleared
+            if (enemies.length === 0) {
+                enemies.push(
+                    { x: 50, y: 50, width: 10, height: 10, hp: 30 + (player.level*5), maxHp: 30, speed: 0.6, vx: 1, vy: 1 },
+                    { x: 320, y: 220, width: 10, height: 10, hp: 30 + (player.level*5), maxHp: 30, speed: 0.6, vx: -1, vy: 1 }
+                );
+                showDialogue('WARNING', 'More slimes have appeared!');
             }
 
-            // Handle Particles
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.update();
-                p.draw();
-                if (p.alpha <= 0) {
-                    particles.splice(i, 1);
-                }
+            // Particles
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+            });
+            particles = particles.filter(p => p.life > 0);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Map Background (Grid / Grass Effect)
+            ctx.fillStyle = '#2d5a27';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Map Details (Pebbles/Flowers)
+            ctx.fillStyle = '#1e3f1b';
+            ctx.fillRect(40, 40, 4, 4);
+            ctx.fillRect(320, 80, 6, 6);
+            ctx.fillRect(120, 240, 4, 4);
+
+            // Draw NPC
+            ctx.fillStyle = '#3498db'; // Blue tunic
+            ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
+            ctx.fillStyle = '#f1c40f'; // Gold hat
+            ctx.fillRect(npc.x + 2, npc.y - 3, 8, 4);
+
+            // Draw Enemies (Slimes)
+            enemies.forEach(e => {
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillRect(e.x, e.y, e.width, e.height);
+                // Slime Eyes
+                ctx.fillStyle = '#000';
+                ctx.fillRect(e.x + 2, e.y + 3, 2, 2);
+                ctx.fillRect(e.x + 6, e.y + 3, 2, 2);
+            });
+
+            // Draw Player
+            ctx.fillStyle = '#e67e22'; // Orange/Red Hero Armor
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // Player Sword Swing Visual
+            if (player.isAttacking) {
+                ctx.fillStyle = '#ecf0f1';
+                let sx = player.x, sy = player.y;
+                if (player.facing === 'up') { sy -= 8; ctx.fillRect(sx + 2, sy, 8, 6); }
+                if (player.facing === 'down') { sy += 12; ctx.fillRect(sx + 2, sy, 8, 6); }
+                if (player.facing === 'left') { sx -= 8; ctx.fillRect(sx, sy + 2, 6, 8); }
+                if (player.facing === 'right') { sx += 12; ctx.fillRect(sx, sy + 2, 6, 8); }
             }
 
-            // Draw HUD
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 20px sans-serif';
-            ctx.fillText(`Score: ${score}`, 20, 35);
-
-            animationFrameId = requestAnimationFrame(gameLoop);
+            // Draw Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 2, 2);
+            });
         }
 
-        // Start / Reset Engine
-        function startGame() {
-            isPlaying = true;
-            score = 0;
-            difficultyMultiplier = 1;
-            items = [];
-            particles = [];
-            player.init();
-
-            startScreen.classList.add('hidden');
-            gameoverScreen.classList.add('hidden');
-
-            cancelAnimationFrame(animationFrameId);
-            gameLoop();
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
         }
 
-        function gameOver() {
-            isPlaying = false;
-            if (score > highScore) {
-                highScore = score;
-                localStorage.setItem('cd_highscore', highScore);
-            }
-
-            finalScoreEl.textContent = score;
-            highScoreEl.textContent = highScore;
-            gameoverScreen.classList.remove('hidden');
-        }
-
-        // Event Listeners
-        startBtn.addEventListener('click', startGame);
-        restartBtn.addEventListener('click', startGame);
+        // Initialize HUD & Start
+        updateHUD();
+        loop();
     </script>
 </body>
 </html>
