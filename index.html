@@ -590,7 +590,6 @@
     </div>
   </div>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     // System Navigation
     function showHome() {
@@ -613,6 +612,7 @@
     let noteSpeed = 350;
     let players = { keys: null, osu: null, maimai: null };
     let ytReady = false;
+    let playersReadyCount = 0;
     let isPlaying = false;
     let score = 0, combo = 0;
     let notes = [];
@@ -621,20 +621,51 @@
     let mousePos = { x: 0, y: 0 };
     let maimaiSensors = [];
 
-    // YouTube API Initialization
-    function onYouTubeIframeAPIReady() {
-      players.keys = new YT.Player('player-keys', { height: '100%', width: '100%', videoId: 'vUvLQioor3U', events: { 'onReady': onPlayerReady } });
-      players.osu = new YT.Player('player-osu', { height: '100%', width: '100%', videoId: 'vUvLQioor3U', events: { 'onReady': onPlayerReady } });
-      players.maimai = new YT.Player('player-maimai', { height: '100%', width: '100%', videoId: 'vUvLQioor3U', events: { 'onReady': onPlayerReady } });
-    }
-
-    function onPlayerReady() {
-      ytReady = true;
-      document.querySelectorAll('.playBtn').forEach(b => {
-        b.disabled = false;
-        b.textContent = "Load YouTube & Play";
+    // Dynamically Load YouTube API & Initialize Safe Race-Condition Handling
+    function initYouTubePlayers() {
+      players.keys = new YT.Player('player-keys', { 
+        height: '100%', width: '100%', videoId: 'vUvLQioor3U', 
+        playerVars: { 'playsinline': 1 },
+        events: { 'onReady': onSinglePlayerReady, 'onError': onPlayerError } 
+      });
+      players.osu = new YT.Player('player-osu', { 
+        height: '100%', width: '100%', videoId: 'vUvLQioor3U', 
+        playerVars: { 'playsinline': 1 },
+        events: { 'onReady': onSinglePlayerReady, 'onError': onPlayerError } 
+      });
+      players.maimai = new YT.Player('player-maimai', { 
+        height: '100%', width: '100%', videoId: 'vUvLQioor3U', 
+        playerVars: { 'playsinline': 1 },
+        events: { 'onReady': onSinglePlayerReady, 'onError': onPlayerError } 
       });
     }
+
+    window.onYouTubeIframeAPIReady = function() {
+      initYouTubePlayers();
+    };
+
+    function onSinglePlayerReady() {
+      playersReadyCount++;
+      if (playersReadyCount >= 1) { // Ready to play as soon as players mount
+        ytReady = true;
+        document.querySelectorAll('.playBtn').forEach(b => {
+          b.disabled = false;
+          b.textContent = "Load YouTube & Play";
+        });
+      }
+    }
+
+    function onPlayerError(e) {
+      alert("YouTube Video Error: Unable to play this video. It may be restricted, embed-disabled, or unavailable.");
+    }
+
+    // Inject Script Safely
+    (function loadYTScript() {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    })();
 
     function stopActiveGames() {
       isPlaying = false;
@@ -686,7 +717,6 @@
       document.querySelectorAll('.maimai-sensor').forEach(el => el.remove());
       maimaiSensors = [];
 
-      const rect = field.getBoundingClientRect();
       const radiusPct = 42; // percentage from center
       const centerX = 50;   // percentage
       const centerY = 50;   // percentage
