@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Mobile Web Rhythm Game</title>
+    <title>8-Lane Mobile Rhythm Game</title>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -24,8 +24,8 @@
         }
 
         html, body {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -40,28 +40,31 @@
         /* Top Bar & HUD */
         .hud {
             width: 100%;
-            padding: 10px 16px;
+            padding: 8px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(15, 18, 26, 0.9);
+            background: rgba(15, 18, 26, 0.95);
             z-index: 10;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
         .score-box {
             display: flex;
-            flex-direction: column;
+            flex-direction: flex-row;
+            gap: 8px;
+            align-items: baseline;
         }
 
         .score-title {
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             letter-spacing: 1px;
             color: #888;
             text-transform: uppercase;
         }
 
         .score-val {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             font-weight: 800;
             color: var(--accent-cyan);
             font-family: monospace;
@@ -72,16 +75,16 @@
         }
 
         .combo-val {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: 800;
             color: #fff;
         }
 
-        /* Game Canvas Container */
+        /* Game Canvas Container - Horizontal Stretch */
         .game-container {
             position: relative;
             width: 100%;
-            max-width: 480px;
+            height: 100%;
             flex-grow: 1;
             display: flex;
             align-items: center;
@@ -98,18 +101,18 @@
         /* Bottom Controls */
         .controls {
             width: 100%;
-            max-width: 480px;
-            padding: 10px;
+            padding: 6px 16px;
             display: flex;
-            gap: 8px;
+            gap: 12px;
             justify-content: center;
-            background: rgba(15, 18, 26, 0.9);
+            background: rgba(15, 18, 26, 0.95);
             z-index: 10;
         }
 
         button {
             flex: 1;
-            padding: 10px 12px;
+            max-width: 200px;
+            padding: 8px 12px;
             background: #1f2833;
             color: #fff;
             border: 1px solid #45a29e;
@@ -137,26 +140,37 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(11, 12, 16, 0.85);
+            background: rgba(11, 12, 16, 0.9);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 20;
-            gap: 15px;
+            gap: 12px;
         }
 
         .start-overlay h1 {
-            font-size: 1.8rem;
+            font-size: 2rem;
             color: var(--accent-cyan);
             text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
         }
 
         .start-overlay p {
-            font-size: 0.9rem;
-            color: #888;
+            font-size: 0.95rem;
+            color: #ccc;
             max-width: 80%;
             text-align: center;
+        }
+
+        /* Portrait Warning for Mobile */
+        @media screen and (orientation: portrait) {
+            .start-overlay::before {
+                content: "🔄 Rotate device to Landscape Mode";
+                color: #ff007f;
+                font-weight: bold;
+                font-size: 1.1rem;
+                margin-bottom: 10px;
+            }
         }
     </style>
 </head>
@@ -175,9 +189,9 @@
     <div class="game-container" id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="startOverlay" class="start-overlay">
-            <h1>BEAT RUNNER</h1>
-            <p>Tap lanes at the bottom when falling notes hit the line.</p>
-            <button id="startBtn" class="primary" style="padding: 14px 28px; font-size: 1rem;">PLAY GAME</button>
+            <h1>BEAT RUNNER (8-LANES)</h1>
+            <p>Hold phone horizontally with both hands. Tap lanes at the bottom when notes hit the line.</p>
+            <button id="startBtn" class="primary" style="padding: 12px 32px; font-size: 1.1rem;">START GAME</button>
         </div>
     </div>
 
@@ -187,9 +201,13 @@
     </div>
 
     <script>
-        const LANES = 4;
-        const LANE_COLORS = ['#ff007f', '#00f2fe', '#00f2fe', '#ff007f'];
-        const JUDGMENT_Y_RATIO = 0.85; // 85% down the screen
+        const LANES = 8;
+        // 8 lane color scheme: Vibrant alternating neon palette
+        const LANE_COLORS = [
+            '#ff007f', '#00f2fe', '#39ff14', '#ffbf00',
+            '#ffbf00', '#39ff14', '#00f2fe', '#ff007f'
+        ];
+        const JUDGMENT_Y_RATIO = 0.82; // 82% down the screen
         
         let canvas, ctx;
         let score = 0;
@@ -200,13 +218,12 @@
 
         // Note tracking
         let notes = [];
-        let activeTouches = new Map();
         let hitEffects = [];
 
-        // Simple Chart Generator (Song simulation)
+        // Note spawner settings
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.45; // Spawn a note roughly every 0.45s
-        const NOTE_SPEED = 0.85; // Screen height per second
+        const SPAWN_INTERVAL = 0.35; // Spawns every 0.35s
+        const NOTE_SPEED = 0.85; // Screen height travel speed per second
 
         function initAudio() {
             if (!audioCtx) {
@@ -214,19 +231,23 @@
             }
         }
 
-        function playTapSound() {
+        function playTapSound(pitchMultiplier = 1) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
-            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            
+            const baseFreq = 600 + (pitchMultiplier * 50);
+            osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.04);
+            
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+            
             osc.connect(gain);
             gain.connect(audioCtx.destination);
             osc.start();
-            osc.stop(audioCtx.currentTime + 0.05);
+            osc.stop(audioCtx.currentTime + 0.04);
         }
 
         function resizeCanvas() {
@@ -256,11 +277,12 @@
             spawnTimer += dt;
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
-                // Randomly pick 1 or 2 lanes
+                
+                // Spawn 1 to 2 notes across the 8 lanes
                 const lane1 = Math.floor(Math.random() * LANES);
                 notes.push({ lane: lane1, y: 0, hit: false });
                 
-                if (Math.random() > 0.7) {
+                if (Math.random() > 0.65) {
                     let lane2 = (lane1 + Math.floor(Math.random() * (LANES - 1)) + 1) % LANES;
                     notes.push({ lane: lane2, y: 0, hit: false });
                 }
@@ -289,16 +311,16 @@
                 }
             }
 
-            // Clean up old notes & effects
+            // Cleanup inactive objects
             notes = notes.filter(n => !n.hit);
             for (let e of hitEffects) e.life -= dt;
             hitEffects = hitEffects.filter(e => e.life > 0);
         }
 
         function checkLaneHit(laneIndex) {
-            playTapSound();
+            playTapSound(laneIndex);
             const judgeY = canvas.height * JUDGMENT_Y_RATIO;
-            const hitWindow = 0.1 * canvas.height;
+            const hitWindow = 0.12 * canvas.height;
 
             let hitFound = false;
 
@@ -309,7 +331,7 @@
                         n.hit = true;
                         hitFound = true;
 
-                        if (diff < hitWindow * 0.4) {
+                        if (diff < hitWindow * 0.35) {
                             score += 1000;
                             combo++;
                             addHitEffect(laneIndex, "PERFECT", "#66fcf1");
@@ -325,8 +347,7 @@
             }
 
             if (!hitFound) {
-                // Tap on empty lane registers visual touch
-                addHitEffect(laneIndex, "", "rgba(255,255,255,0.2)");
+                addHitEffect(laneIndex, "", "rgba(255,255,255,0.15)");
             }
         }
 
@@ -335,7 +356,7 @@
                 lane: lane,
                 text: text,
                 color: color,
-                life: 0.35
+                life: 0.3
             });
         }
 
@@ -350,46 +371,46 @@
             const laneWidth = canvas.width / LANES;
             const judgeY = canvas.height * JUDGMENT_Y_RATIO;
 
-            // Draw Lanes & Perspective Lines
+            // Draw Lane Dividers
             for (let i = 0; i <= LANES; i++) {
                 ctx.strokeStyle = '#1f2833';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = i === LANES / 2 ? 3 : 1; // Center line slightly thicker
                 ctx.beginPath();
                 ctx.moveTo(i * laneWidth, 0);
                 ctx.lineTo(i * laneWidth, canvas.height);
                 ctx.stroke();
             }
 
-            // Draw Judgment Bar
+            // Draw Judgment Target Line
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(0, judgeY);
             ctx.lineTo(canvas.width, judgeY);
             ctx.stroke();
 
-            // Draw Target Tap Buttons at Bottom
+            // Draw Target Tap Zones at Bottom
             for (let i = 0; i < LANES; i++) {
-                ctx.fillStyle = LANE_COLORS[i] + '33';
-                ctx.fillRect(i * laneWidth + 2, judgeY, laneWidth - 4, canvas.height - judgeY);
+                ctx.fillStyle = LANE_COLORS[i] + '22';
+                ctx.fillRect(i * laneWidth + 1, judgeY, laneWidth - 2, canvas.height - judgeY);
             }
 
             // Draw Falling Notes
-            const noteHeight = 16;
+            const noteHeight = 12;
             for (let n of notes) {
                 if (!n.hit) {
                     ctx.fillStyle = LANE_COLORS[n.lane];
                     ctx.shadowColor = LANE_COLORS[n.lane];
-                    ctx.shadowBlur = 10;
+                    ctx.shadowBlur = 8;
 
                     ctx.fillRect(
-                        n.lane * laneWidth + 6,
+                        n.lane * laneWidth + 4,
                         n.y - noteHeight / 2,
-                        laneWidth - 12,
+                        laneWidth - 8,
                         noteHeight
                     );
 
-                    ctx.shadowBlur = 0; // reset
+                    ctx.shadowBlur = 0;
                 }
             }
 
@@ -397,17 +418,17 @@
             for (let e of hitEffects) {
                 const x = e.lane * laneWidth + laneWidth / 2;
                 
-                // Active lane highlight
+                // Highlight active hit zone
                 ctx.fillStyle = e.color;
-                ctx.globalAlpha = e.life / 0.35 * 0.3;
+                ctx.globalAlpha = (e.life / 0.3) * 0.4;
                 ctx.fillRect(e.lane * laneWidth, judgeY, laneWidth, canvas.height - judgeY);
                 ctx.globalAlpha = 1.0;
 
                 if (e.text) {
                     ctx.fillStyle = e.color;
-                    ctx.font = 'bold 20px sans-serif';
+                    ctx.font = 'bold 14px sans-serif';
                     ctx.textAlign = 'center';
-                    ctx.fillText(e.text, x, judgeY - 30);
+                    ctx.fillText(e.text, x, judgeY - 20);
                 }
             }
         }
@@ -455,12 +476,13 @@
             ctx = canvas.getContext('2d');
 
             window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('orientationchange', resizeCanvas);
             resizeCanvas();
 
-            // Prevent double-tap zoom
+            // Prevent zoom behaviors
             document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 
-            // Touch events on Canvas
+            // Multi-touch handler
             canvas.addEventListener('touchstart', handleTouch, { passive: false });
 
             document.getElementById('startBtn').addEventListener('click', startGame);
