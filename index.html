@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Arcade Rhythm Hub - SIMAI Parser</title>
+  <title>Arcade Rhythm Hub - Multi Game Engine</title>
   <style>
     * { 
       box-sizing: border-box; 
@@ -296,7 +296,6 @@
     }
 
     /* NOTE TYPES */
-    /* 1. Touch Ring Note */
     .maimai-note {
       position: absolute;
       width: 10%;
@@ -315,7 +314,6 @@
       box-shadow: 0 0 14px #ffea00;
     }
 
-    /* 2. Break Note (Orange/Gold Star) */
     .maimai-note.break-note {
       border-color: #ffaa00;
       background: rgba(255, 170, 0, 0.4);
@@ -323,7 +321,6 @@
       clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
     }
 
-    /* 3. Hold Note */
     .maimai-note.hold-note {
       border-radius: 8px;
       background: rgba(255, 230, 0, 0.8);
@@ -331,7 +328,6 @@
       box-shadow: 0 0 15px #ffea00;
     }
 
-    /* 4. TAP Note (Fixed Blue Triangles) */
     .maimai-tap-note {
       position: absolute;
       width: 44px;
@@ -353,17 +349,18 @@
     .tap-tri-br { bottom: 0; right: 0; border-width: 0 0 20px 20px; border-color: transparent transparent #00d2ff transparent; }
     .tap-tri-bl { bottom: 0; left: 0; border-width: 20px 0 0 20px; border-color: transparent transparent transparent #00d2ff; }
 
-    /* 5. Slide Arrow Path */
-    .slide-arrow {
-      position: absolute;
-      width: 14px;
-      height: 14px;
-      background: #00ffff;
-      border: 2px solid #fff;
-      transform: translate(-50%, -50%) rotate(45deg);
-      box-shadow: 0 0 10px #00ffff;
-      pointer-events: none;
-      z-index: 7;
+    /* LANE & CATCH RHYTHM PLACEHOLDERS */
+    .lane-container, .catch-container {
+      width: 100%;
+      height: 400px;
+      background: #161824;
+      border: 2px solid #2a2d42;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #00ffcc;
+      font-size: 1.2rem;
     }
   </style>
 </head>
@@ -374,16 +371,35 @@
     <button class="nav-btn" onclick="showHome()">Library</button>
   </header>
 
-  <!-- HOME VIEW -->
+  <!-- HOME VIEW (ALL GAMES PRESERVED) -->
   <div id="home-view" class="view active">
-    <h2>Select a Rhythm Game</h2>
+    <h2>Select a Rhythm Game Mode</h2>
     <div class="game-grid">
+
+      <!-- Game 1: Ring Rhythm (Maimai SIMAI) -->
       <div class="game-card" onclick="launchGame('maimai')">
         <span class="tag">SIMAI CHARTS</span>
         <h3>Ring Rhythm (maimai)</h3>
-        <p>Supports SIMAI chart scripts with <b>TAP, TOUCH, HOLD, SLIDE & BREAK</b> notes!</p>
+        <p>Supports SIMAI chart scripts with TAP, TOUCH, HOLD, SLIDE & BREAK notes!</p>
         <button class="btn">Play Ring Rhythm</button>
       </div>
+
+      <!-- Game 2: Lane Rhythm (Mania / 4Key) -->
+      <div class="game-card" onclick="launchGame('lane')">
+        <span class="tag">4-KEY / MANIA</span>
+        <h3>Lane Rhythm (Mania)</h3>
+        <p>Standard 4-key scrolling rhythm style for fast-paced chart reading.</p>
+        <button class="btn">Play Lane Rhythm</button>
+      </div>
+
+      <!-- Game 3: Catch Rhythm (Taiko / Drum) -->
+      <div class="game-card" onclick="launchGame('catch')">
+        <span class="tag">DRUM / TAIKO</span>
+        <h3>Catch Rhythm (Taiko)</h3>
+        <p>Horizontal scrolling drum-hit style game mode with center and rim notes.</p>
+        <button class="btn">Play Catch Rhythm</button>
+      </div>
+
     </div>
   </div>
 
@@ -430,6 +446,24 @@
     </div>
   </div>
 
+  <!-- LANE VIEW -->
+  <div id="lane-view" class="view">
+    <div class="app-container">
+      <div class="lane-container">
+        Lane Rhythm Game Mode Active
+      </div>
+    </div>
+  </div>
+
+  <!-- CATCH VIEW -->
+  <div id="catch-view" class="view">
+    <div class="app-container">
+      <div class="catch-container">
+        Catch Rhythm Game Mode Active
+      </div>
+    </div>
+  </div>
+
   <script>
     function showHome() {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -440,7 +474,7 @@
     function launchGame(mode) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(`${mode}-view`).classList.add('active');
-      initMaimaiSensors();
+      if (mode === 'maimai') initMaimaiSensors();
     }
 
     // Engine Variables
@@ -453,7 +487,7 @@
     let judgmentTimeout = null;
     let maimaiSensors = [];
 
-    // Default Sample Chart Data (only my railgun snippet)
+    // Default SIMAI Chart
     const defaultSimaiChart = `
 &title=only my railgun
 &wholebpm=143
@@ -497,7 +531,7 @@ E
     function stopActiveGames() {
       isPlaying = false;
       if (maimaiPlayer && typeof maimaiPlayer.stopVideo === 'function') maimaiPlayer.stopVideo();
-      document.querySelectorAll('.maimai-note, .maimai-tap-note, .slide-arrow').forEach(el => el.remove());
+      document.querySelectorAll('.maimai-note, .maimai-tap-note').forEach(el => el.remove());
     }
 
     function initAudio() {
@@ -564,14 +598,12 @@ E
       let rawNotes = [];
       let currentBpm = 140;
       let currentDiv = 4;
-      let currentTime = 2.0; // Start at 2 sec mark
+      let currentTime = 2.0;
 
-      // Find the specific diff block (&inote_4=...)
       let diffPattern = new RegExp(`&${selectedDiff}=([\\s\\S]*?)(?=&inote|&lv|E|$)`, 'g');
       let match = diffPattern.exec(chartText);
       let content = match ? match[1] : chartText;
 
-      // Extract BPM if set at top
       let bpmMatch = chartText.match(/&wholebpm=(\d+)/);
       if (bpmMatch) currentBpm = parseFloat(bpmMatch[1]);
 
@@ -581,53 +613,41 @@ E
         measure = measure.trim();
         if (!measure || measure.startsWith('&') || measure.startsWith('E')) return;
 
-        // Check for inline BPM change (143)
         let inlineBpm = measure.match(/\((\d+(\.\d+)?)\)/);
         if (inlineBpm) currentBpm = parseFloat(inlineBpm[1]);
 
-        // Check for measure division {4}, {8}, {16}
         let divMatch = measure.match(/\{(\d+)\}/);
         if (divMatch) currentDiv = parseInt(divMatch[1]);
 
-        // Clean annotations
         let cleanMeasure = measure.replace(/\(\d+(\.\d+)?\)/g, '').replace(/\{\d+\}/g, '').trim();
 
         if (cleanMeasure) {
-          // Simultaneous notes are split by '/'
           let simNotes = cleanMeasure.split('/');
 
           simNotes.forEach(noteStr => {
             noteStr = noteStr.trim();
             if (!noteStr) return;
 
-            let sensorNum = parseInt(noteStr[0]) - 1; // Convert 1-8 to 0-7 index
+            let sensorNum = parseInt(noteStr[0]) - 1;
             if (isNaN(sensorNum) || sensorNum < 0 || sensorNum > 7) return;
 
             let isBreak = noteStr.includes('b');
             let isHold = noteStr.includes('h');
             let isSlide = noteStr.includes('-') || noteStr.includes('>') || noteStr.includes('<') || noteStr.includes('v');
 
-            let endSensor = sensorNum;
-            if (isSlide) {
-              let matchEnd = noteStr.match(/[-><v](\d)/);
-              if (matchEnd) endSensor = parseInt(matchEnd[1]) - 1;
-            }
-
             rawNotes.push({
               time: currentTime,
               sensor: sensorNum,
-              endSensor: endSensor,
               isBreak: isBreak,
               isHold: isHold,
               isSlide: isSlide,
-              isTap: !isHold && !isSlide && Math.random() < 0.3, // Randomly designate TAP vs TOUCH
+              isTap: !isHold && !isSlide && Math.random() < 0.3,
               isDual: simNotes.length > 1,
               spawned: false, hit: false, element: null
             });
           });
         }
 
-        // Advance timing clock based on measure division
         let beatDuration = (60 / currentBpm) * (4 / currentDiv);
         currentTime += beatDuration;
       });
@@ -649,12 +669,11 @@ E
 
       maimaiPlayer.loadVideoById(videoId);
 
-      // Parse chart!
       notes = parseSimaiChart(chartCode, diffKey);
 
       score = 0; combo = 0;
       updateHUD();
-      document.querySelectorAll('.maimai-note, .maimai-tap-note, .slide-arrow').forEach(el => el.remove());
+      document.querySelectorAll('.maimai-note, .maimai-tap-note').forEach(el => el.remove());
 
       isPlaying = true;
       requestAnimationFrame(gameLoop);
@@ -672,7 +691,6 @@ E
           note.spawned = true;
 
           if (note.isTap) {
-            // TAP Note
             const el = document.createElement('div');
             el.className = 'maimai-tap-note';
             const sensor = maimaiSensors[note.sensor];
@@ -690,7 +708,6 @@ E
             note.element = el;
             note.triElements = [t1, t2, t3, t4];
           } else {
-            // Touch / Break / Hold / Slide Start
             const el = document.createElement('div');
             let classes = 'maimai-note';
             if (note.isDual) classes += ' dual-note';
