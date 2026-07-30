@@ -409,22 +409,64 @@
       box-shadow: 0 0 15px #ff00cc;
     }
 
+    /* Maimai Red Doughnut Note */
     .maimai-note {
       position: absolute;
-      width: 8%;
-      height: 8%;
+      width: 10%;
+      height: 10%;
       border-radius: 50%;
-      background: #00ffcc;
-      border: 2px solid #fff;
-      box-shadow: 0 0 12px #00ffcc;
+      background: transparent;
+      border: 5px solid #ff4757;
+      box-shadow: 0 0 12px #ff4757, inset 0 0 8px #ff4757;
       pointer-events: none;
       z-index: 8;
       transform: translate(-50%, -50%);
     }
 
+    /* Maimai Yellow Doughnut Note (Dual / Simultaneous) */
     .maimai-note.dual-note {
-      background: #ff00cc;
-      box-shadow: 0 0 12px #ff00cc;
+      border-color: #ffd32a;
+      box-shadow: 0 0 12px #ffd32a, inset 0 0 8px #ffd32a;
+    }
+
+    /* Maimai TAP Note Container & Blue Triangles */
+    .maimai-tap-note {
+      position: absolute;
+      width: 10%;
+      height: 10%;
+      pointer-events: none;
+      z-index: 9;
+      transform: translate(-50%, -50%);
+    }
+
+    .tap-tri {
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      filter: drop-shadow(0 0 6px #00a8ff);
+    }
+
+    /* 4 Blue Triangles forming a full square when combined */
+    .tap-tri-tl {
+      top: -12px; left: -12px;
+      border-width: 16px 16px 0 0;
+      border-color: #00a8ff transparent transparent transparent;
+    }
+    .tap-tri-tr {
+      top: -12px; right: -12px;
+      border-width: 0 16px 16px 0;
+      border-color: transparent #00a8ff transparent transparent;
+    }
+    .tap-tri-bl {
+      bottom: -12px; left: -12px;
+      border-width: 16px 0 0 16px;
+      border-color: transparent transparent transparent #00a8ff;
+    }
+    .tap-tri-br {
+      bottom: -12px; right: -12px;
+      border-width: 0 0 16px 16px;
+      border-color: transparent transparent #00a8ff transparent;
     }
   </style>
 </head>
@@ -460,7 +502,7 @@
       <div class="game-card" onclick="launchGame('maimai')">
         <span class="tag">CIRCLE RING</span>
         <h3>Ring Rhythm</h3>
-        <p>Inspired by <b>maimai</b>. Spawns directly from center ring! Choose Single Hand (1 note) or Two Hands (simultaneous notes).</p>
+        <p>Inspired by <b>maimai</b>. Spawns red/yellow doughnut notes & blue 4-triangle TAP squares from center ring!</p>
         <button class="btn">Play Ring Rhythm</button>
       </div>
 
@@ -670,7 +712,7 @@
     function stopActiveGames() {
       isPlaying = false;
       Object.values(players).forEach(p => { if (p && typeof p.stopVideo === 'function') p.stopVideo(); });
-      document.querySelectorAll('.note, .osu-target, .maimai-note').forEach(el => el.remove());
+      document.querySelectorAll('.note, .osu-target, .maimai-note, .maimai-tap-note').forEach(el => el.remove());
     }
 
     function initAudio() {
@@ -782,12 +824,16 @@
         const formattedTime = parseFloat(time.toFixed(3));
         const sensor1 = Math.floor(Math.random() * 8);
 
+        // Decide maimai note type: 'doughnut' or 'tap'
+        const isTapNote = (mode === 'maimai' && Math.random() < 0.3);
+
         // Primary note
         notes.push({
           time: formattedTime,
           lane: Math.floor(Math.random() * 7),
           sensor: sensor1,
           isDual: false,
+          type: isTapNote ? 'tap' : 'doughnut',
           xPct: Math.floor(Math.random() * 70) + 15,
           yPct: Math.floor(Math.random() * 70) + 15,
           num: (circleCounter % 9) + 1,
@@ -801,6 +847,7 @@
             time: formattedTime,
             sensor: sensor2,
             isDual: true,
+            type: 'doughnut', // Dual notes are yellow doughnuts
             spawned: false, hit: false, element: null
           });
         }
@@ -810,7 +857,7 @@
 
       score = 0; combo = 0;
       updateHUD();
-      document.querySelectorAll('.note, .osu-target, .maimai-note').forEach(el => el.remove());
+      document.querySelectorAll('.note, .osu-target, .maimai-note, .maimai-tap-note').forEach(el => el.remove());
 
       isPlaying = true;
       requestAnimationFrame(gameLoop);
@@ -888,18 +935,39 @@
         const targetRadiusPct = 42; 
 
         notes.forEach(note => {
-          // SPAWN AT CENTER (0 progress)
+          // SPAWN AT CENTER
           if (!note.spawned && currentTime >= (note.time - travelTime)) {
             note.spawned = true;
-            const el = document.createElement('div');
-            el.className = `maimai-note ${note.isDual ? 'dual-note' : ''}`;
             
-            // Initial positioning explicitly starting at 50% center
-            el.style.left = `${centerPct}%`;
-            el.style.top = `${centerPct}%`;
-            
-            document.getElementById('maimai-field').appendChild(el);
-            note.element = el;
+            if (note.type === 'tap') {
+              // TAP Note (4 Triangles combining into a square)
+              const el = document.createElement('div');
+              el.className = 'maimai-tap-note';
+              el.innerHTML = `
+                <div class="tap-tri tap-tri-tl"></div>
+                <div class="tap-tri tap-tri-tr"></div>
+                <div class="tap-tri tap-tri-bl"></div>
+                <div class="tap-tri tap-tri-br"></div>
+              `;
+              el.style.left = `${centerPct}%`;
+              el.style.top = `${centerPct}%`;
+              document.getElementById('maimai-field').appendChild(el);
+              note.element = el;
+              note.triangles = {
+                tl: el.querySelector('.tap-tri-tl'),
+                tr: el.querySelector('.tap-tri-tr'),
+                bl: el.querySelector('.tap-tri-bl'),
+                br: el.querySelector('.tap-tri-br')
+              };
+            } else {
+              // Doughnut Note (Red for single, Yellow for dual)
+              const el = document.createElement('div');
+              el.className = `maimai-note ${note.isDual ? 'dual-note' : ''}`;
+              el.style.left = `${centerPct}%`;
+              el.style.top = `${centerPct}%`;
+              document.getElementById('maimai-field').appendChild(el);
+              note.element = el;
+            }
           }
 
           if (note.spawned && !note.hit) {
@@ -914,6 +982,18 @@
 
             note.element.style.left = `${currentXPct}%`;
             note.element.style.top = `${currentYPct}%`;
+
+            if (note.type === 'tap' && note.triangles) {
+              // Animate 4 triangles flying inwards to lock into a square at hit time
+              const offset = (1 - Math.min(1, progress)) * 18; // offset contracts to 0
+              note.triangles.tl.style.transform = `translate(${offset}px, ${offset}px)`;
+              note.triangles.tr.style.transform = `translate(${-offset}px, ${offset}px)`;
+              note.triangles.bl.style.transform = `translate(${offset}px, ${-offset}px)`;
+              note.triangles.br.style.transform = `translate(${-offset}px, ${-offset}px)`;
+            } else {
+              // Scale up the doughnut as it approaches target
+              note.element.style.transform = `translate(-50%, -50%) scale(${0.4 + progress * 0.6})`;
+            }
 
             if (currentTime > note.time + 0.2) {
               note.hit = true; note.element.remove();
