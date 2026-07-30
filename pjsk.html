@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>8-Lane Mobile Rhythm Game</title>
+    <title>8-Lane Landscape Rhythm Game</title>
     <style>
         :root {
-            --bg-color: #0b0c10;
-            --lane-border: #1f2833;
-            --accent-cyan: #66fcf1;
+            --bg-color: #060709;
+            --accent-cyan: #00f2fe;
             --accent-magenta: #ff007f;
-            --text-color: #c5c6c7;
+            --text-color: #ffffff;
         }
 
         * {
@@ -31,64 +30,59 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             overflow: hidden;
             touch-action: manipulation;
+        }
+
+        /* Fullscreen Layout Container */
+        .app-container {
+            width: 100%;
+            height: 100%;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: space-between;
+            position: relative;
         }
 
-        /* Top Bar & HUD */
+        /* Minimal HUD Overlay */
         .hud {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            padding: 8px 24px;
+            padding: 8px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(15, 18, 26, 0.95);
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
             z-index: 10;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            pointer-events: none;
         }
 
-        .score-box {
+        .hud-item {
             display: flex;
-            flex-direction: flex-row;
-            gap: 8px;
             align-items: baseline;
+            gap: 8px;
         }
 
-        .score-title {
-            font-size: 0.75rem;
-            letter-spacing: 1px;
-            color: #888;
+        .hud-label {
+            font-size: 0.7rem;
+            color: #aaa;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .score-val {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--accent-cyan);
+        .hud-value {
+            font-size: 1.4rem;
+            font-weight: 900;
             font-family: monospace;
         }
 
-        .combo-box {
-            text-align: right;
-        }
+        #score { color: var(--accent-cyan); }
+        #combo { color: #fff; }
 
-        .combo-val {
-            font-size: 1.3rem;
-            font-weight: 800;
-            color: #fff;
-        }
-
-        /* Game Canvas Container - Horizontal Stretch */
+        /* Game Canvas Container */
         .game-container {
-            position: relative;
             width: 100%;
             height: 100%;
-            flex-grow: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: relative;
         }
 
         canvas {
@@ -98,49 +92,37 @@
             touch-action: none;
         }
 
-        /* Bottom Controls */
+        /* Floating Controls */
         .controls {
-            width: 100%;
-            padding: 6px 16px;
+            position: absolute;
+            bottom: 6px;
+            right: 12px;
             display: flex;
-            gap: 12px;
-            justify-content: center;
-            background: rgba(15, 18, 26, 0.95);
-            z-index: 10;
+            gap: 8px;
+            z-index: 15;
         }
 
         button {
-            flex: 1;
-            max-width: 200px;
-            padding: 8px 12px;
-            background: #1f2833;
+            padding: 6px 12px;
+            background: rgba(31, 40, 51, 0.7);
             color: #fff;
-            border: 1px solid #45a29e;
-            border-radius: 6px;
-            font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            font-size: 0.75rem;
             font-weight: 700;
             cursor: pointer;
-            transition: background 0.2s;
+            backdrop-filter: blur(4px);
         }
 
         button:active {
-            background: #45a29e;
+            background: rgba(102, 252, 241, 0.4);
         }
 
-        button.primary {
-            background: linear-gradient(135deg, #45a29e, #66fcf1);
-            color: #0b0c10;
-            border: none;
-        }
-
-        /* Overlay for Game Start */
+        /* Start Overlay */
         .start-overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(11, 12, 16, 0.9);
+            inset: 0;
+            background: rgba(6, 7, 9, 0.92);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -150,64 +132,70 @@
         }
 
         .start-overlay h1 {
-            font-size: 2rem;
-            color: var(--accent-cyan);
-            text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
         }
 
         .start-overlay p {
-            font-size: 0.95rem;
-            color: #ccc;
+            font-size: 0.85rem;
+            color: #aaa;
             max-width: 80%;
             text-align: center;
         }
 
-        /* Portrait Warning for Mobile */
+        /* Orientation Warning */
         @media screen and (orientation: portrait) {
             .start-overlay::before {
-                content: "🔄 Rotate device to Landscape Mode";
-                color: #ff007f;
+                content: "⚠️ Please rotate device to Landscape";
+                color: #ff3333;
                 font-weight: bold;
-                font-size: 1.1rem;
-                margin-bottom: 10px;
+                font-size: 1rem;
+                padding: 6px 12px;
+                border: 1px solid #ff3333;
+                border-radius: 4px;
+                background: rgba(255,0,0,0.1);
             }
         }
     </style>
 </head>
 <body>
 
-    <div class="hud">
-        <div class="score-box">
-            <span class="score-title">Score</span>
-            <span id="score" class="score-val">000000</span>
+    <div class="app-container">
+        <div class="hud">
+            <div class="hud-item">
+                <span class="hud-label">Score</span>
+                <span id="score" class="hud-value">000000</span>
+            </div>
+            <div class="hud-item">
+                <span id="combo" class="hud-value">0 COMBO</span>
+            </div>
         </div>
-        <div class="combo-box">
-            <span id="combo" class="combo-val">0 COMBO</span>
-        </div>
-    </div>
 
-    <div class="game-container" id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
-        <div id="startOverlay" class="start-overlay">
-            <h1>BEAT RUNNER (8-LANES)</h1>
-            <p>Hold phone horizontally with both hands. Tap lanes at the bottom when notes hit the line.</p>
-            <button id="startBtn" class="primary" style="padding: 12px 32px; font-size: 1.1rem;">START GAME</button>
+        <div class="game-container" id="gameContainer">
+            <canvas id="gameCanvas"></canvas>
+            <div id="startOverlay" class="start-overlay">
+                <h1>BEAT STRIKE (8-LANES)</h1>
+                <p>Hold phone horizontally with both thumbs. Tap the 8 bottom target zones as notes reach the judgment line.</p>
+                <button id="startBtn" style="padding: 10px 24px; font-size: 1rem; background: var(--accent-cyan); color: #000; border: none; font-weight: 800; border-radius: 20px;">PLAY GAME</button>
+            </div>
         </div>
-    </div>
 
-    <div class="controls">
-        <button id="fullscreenBtn">Full Screen</button>
-        <button id="restartBtn">Restart</button>
+        <div class="controls">
+            <button id="fullscreenBtn">Full Screen</button>
+            <button id="restartBtn">Restart</button>
+        </div>
     </div>
 
     <script>
         const LANES = 8;
-        // 8 lane color scheme: Vibrant alternating neon palette
+        // 4 Left Hand Lanes (Cyan Tone), 4 Right Hand Lanes (Magenta Tone)
         const LANE_COLORS = [
-            '#ff007f', '#00f2fe', '#39ff14', '#ffbf00',
-            '#ffbf00', '#39ff14', '#00f2fe', '#ff007f'
+            '#00f2fe', '#00c3ff', '#0099ff', '#0066ff',
+            '#ff00aa', '#ff007f', '#ff0055', '#ff2a2a'
         ];
-        const JUDGMENT_Y_RATIO = 0.82; // 82% down the screen
         
         let canvas, ctx;
         let score = 0;
@@ -216,14 +204,12 @@
         let lastTime = 0;
         let audioCtx = null;
 
-        // Note tracking
         let notes = [];
         let hitEffects = [];
 
-        // Note spawner settings
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.35; // Spawns every 0.35s
-        const NOTE_SPEED = 0.85; // Screen height travel speed per second
+        const SPAWN_INTERVAL = 0.32; // Note frequency
+        const NOTE_SPEED = 1.1; // Speed factor
 
         function initAudio() {
             if (!audioCtx) {
@@ -231,23 +217,24 @@
             }
         }
 
-        function playTapSound(pitchMultiplier = 1) {
+        function playTapSound(lane) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.type = 'sine';
+            osc.type = 'triangle';
             
-            const baseFreq = 600 + (pitchMultiplier * 50);
-            osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.04);
+            // Pitch scales across the 8 lanes
+            const freq = 300 + (lane * 65);
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.05);
             
-            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+            gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
             
             osc.connect(gain);
             gain.connect(audioCtx.destination);
             osc.start();
-            osc.stop(audioCtx.currentTime + 0.04);
+            osc.stop(audioCtx.currentTime + 0.05);
         }
 
         function resizeCanvas() {
@@ -278,13 +265,13 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
                 
-                // Spawn 1 to 2 notes across the 8 lanes
+                // Spawn 1 or 2 notes across 8 lanes
                 const lane1 = Math.floor(Math.random() * LANES);
-                notes.push({ lane: lane1, y: 0, hit: false });
+                notes.push({ lane: lane1, progress: 0, hit: false });
                 
-                if (Math.random() > 0.65) {
+                if (Math.random() > 0.6) {
                     let lane2 = (lane1 + Math.floor(Math.random() * (LANES - 1)) + 1) % LANES;
-                    notes.push({ lane: lane2, y: 0, hit: false });
+                    notes.push({ lane: lane2, progress: 0, hit: false });
                 }
             }
         }
@@ -294,15 +281,12 @@
 
             spawnNotes(dt);
 
-            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
-            const missWindow = 0.12 * canvas.height;
-
             for (let n of notes) {
                 if (!n.hit) {
-                    n.y += NOTE_SPEED * canvas.height * dt;
+                    n.progress += NOTE_SPEED * dt;
 
-                    // Miss detection
-                    if (n.y > judgeY + missWindow) {
+                    // Miss detection (past judgment line at 0.85 progress)
+                    if (n.progress > 0.98) {
                         n.hit = true;
                         combo = 0;
                         updateHUD();
@@ -311,7 +295,6 @@
                 }
             }
 
-            // Cleanup inactive objects
             notes = notes.filter(n => !n.hit);
             for (let e of hitEffects) e.life -= dt;
             hitEffects = hitEffects.filter(e => e.life > 0);
@@ -319,22 +302,21 @@
 
         function checkLaneHit(laneIndex) {
             playTapSound(laneIndex);
-            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
-            const hitWindow = 0.12 * canvas.height;
-
+            
             let hitFound = false;
 
             for (let n of notes) {
                 if (n.lane === laneIndex && !n.hit) {
-                    const diff = Math.abs(n.y - judgeY);
-                    if (diff <= hitWindow) {
+                    // Target judgment is around progress = 0.85
+                    const diff = Math.abs(n.progress - 0.85);
+                    if (diff <= 0.12) {
                         n.hit = true;
                         hitFound = true;
 
-                        if (diff < hitWindow * 0.35) {
+                        if (diff < 0.04) {
                             score += 1000;
                             combo++;
-                            addHitEffect(laneIndex, "PERFECT", "#66fcf1");
+                            addHitEffect(laneIndex, "PERFECT", "#00f2fe");
                         } else {
                             score += 500;
                             combo++;
@@ -356,7 +338,7 @@
                 lane: lane,
                 text: text,
                 color: color,
-                life: 0.3
+                life: 0.25
             });
         }
 
@@ -365,70 +347,112 @@
             document.getElementById('combo').textContent = `${combo} COMBO`;
         }
 
+        // Perspective projection helper for CHUNITHM / Sekai 3D Track look
+        function getTrackCoords(lane, progress) {
+            const topY = canvas.height * 0.15;
+            const bottomY = canvas.height * 0.88;
+
+            const currentY = topY + (bottomY - topY) * progress;
+
+            // Track width narrows at top (0.35 width) and expands at bottom (0.95 width)
+            const topTrackWidth = canvas.width * 0.35;
+            const bottomTrackWidth = canvas.width * 0.95;
+
+            const currentTrackWidth = topTrackWidth + (bottomTrackWidth - topTrackWidth) * progress;
+            const trackLeft = (canvas.width - currentTrackWidth) / 2;
+
+            const laneWidth = currentTrackWidth / LANES;
+            const laneLeft = trackLeft + laneWidth * lane;
+
+            return {
+                x: laneLeft,
+                y: currentY,
+                width: laneWidth
+            };
+        }
+
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const laneWidth = canvas.width / LANES;
-            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
+            const topY = canvas.height * 0.15;
+            const judgeY = canvas.height * 0.88;
 
-            // Draw Lane Dividers
+            // Draw Perspective Lane Lines
             for (let i = 0; i <= LANES; i++) {
-                ctx.strokeStyle = '#1f2833';
-                ctx.lineWidth = i === LANES / 2 ? 3 : 1; // Center line slightly thicker
+                const pTop = getTrackCoords(0, 0);
+                const pBottom = getTrackCoords(0, 1);
+
+                const topTrackWidth = canvas.width * 0.35;
+                const bottomTrackWidth = canvas.width * 0.95;
+
+                const xTop = ((canvas.width - topTrackWidth) / 2) + (topTrackWidth / LANES) * i;
+                const xBottom = ((canvas.width - bottomTrackWidth) / 2) + (bottomTrackWidth / LANES) * i;
+
+                ctx.strokeStyle = i === 4 ? '#ffffff' : '#1f2833'; // Center divider is bright
+                ctx.lineWidth = i === 4 ? 2 : 1;
                 ctx.beginPath();
-                ctx.moveTo(i * laneWidth, 0);
-                ctx.lineTo(i * laneWidth, canvas.height);
+                ctx.moveTo(xTop, topY);
+                ctx.lineTo(xBottom, canvas.height);
                 ctx.stroke();
             }
 
-            // Draw Judgment Target Line
+            // Draw Target Judgment Line
+            const pLeft = getTrackCoords(0, 0.85);
+            const pRight = getTrackCoords(7, 0.85);
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
+            ctx.shadowColor = '#66fcf1';
+            ctx.shadowBlur = 8;
             ctx.beginPath();
-            ctx.moveTo(0, judgeY);
-            ctx.lineTo(canvas.width, judgeY);
+            ctx.moveTo(pLeft.x, pLeft.y);
+            ctx.lineTo(pRight.x + pRight.width, pRight.y);
             ctx.stroke();
+            ctx.shadowBlur = 0;
 
-            // Draw Target Tap Zones at Bottom
+            // Draw Target Touch Zones at Bottom
             for (let i = 0; i < LANES; i++) {
+                const coords = getTrackCoords(i, 0.85);
+                const bottomCoords = getTrackCoords(i, 1.0);
+
                 ctx.fillStyle = LANE_COLORS[i] + '22';
-                ctx.fillRect(i * laneWidth + 1, judgeY, laneWidth - 2, canvas.height - judgeY);
+                ctx.beginPath();
+                ctx.moveTo(coords.x, coords.y);
+                ctx.lineTo(coords.x + coords.width, coords.y);
+                ctx.lineTo(bottomCoords.x + bottomCoords.width, canvas.height);
+                ctx.lineTo(bottomCoords.x, canvas.height);
+                ctx.closePath();
+                ctx.fill();
             }
 
-            // Draw Falling Notes
-            const noteHeight = 12;
+            // Draw Falling 3D Notes
             for (let n of notes) {
                 if (!n.hit) {
+                    const c = getTrackCoords(n.lane, n.progress);
+                    const noteHeight = 10 + n.progress * 8; // Notes grow bigger as they get closer
+
                     ctx.fillStyle = LANE_COLORS[n.lane];
                     ctx.shadowColor = LANE_COLORS[n.lane];
-                    ctx.shadowBlur = 8;
+                    ctx.shadowBlur = 10;
 
-                    ctx.fillRect(
-                        n.lane * laneWidth + 4,
-                        n.y - noteHeight / 2,
-                        laneWidth - 8,
-                        noteHeight
-                    );
-
+                    ctx.fillRect(c.x + 2, c.y - noteHeight / 2, c.width - 4, noteHeight);
                     ctx.shadowBlur = 0;
                 }
             }
 
-            // Draw Hit Effects
+            // Draw Hit Visual Effects
             for (let e of hitEffects) {
-                const x = e.lane * laneWidth + laneWidth / 2;
-                
-                // Highlight active hit zone
+                const c = getTrackCoords(e.lane, 0.85);
+
                 ctx.fillStyle = e.color;
-                ctx.globalAlpha = (e.life / 0.3) * 0.4;
-                ctx.fillRect(e.lane * laneWidth, judgeY, laneWidth, canvas.height - judgeY);
+                ctx.globalAlpha = (e.life / 0.25) * 0.5;
+                ctx.fillRect(c.x, c.y - 10, c.width, 30);
                 ctx.globalAlpha = 1.0;
 
                 if (e.text) {
                     ctx.fillStyle = e.color;
-                    ctx.font = 'bold 14px sans-serif';
+                    ctx.font = 'bold 16px sans-serif';
                     ctx.textAlign = 'center';
-                    ctx.fillText(e.text, x, judgeY - 20);
+                    ctx.fillText(e.text, c.x + c.width / 2, c.y - 25);
                 }
             }
         }
@@ -452,7 +476,13 @@
             for (let i = 0; i < touches.length; i++) {
                 const touch = touches[i];
                 const x = touch.clientX - rect.left;
-                const laneIndex = Math.floor(x / (canvas.width / LANES));
+                
+                // Map screen X to the 8 perspective track zones
+                const topTrackWidth = canvas.width * 0.95;
+                const trackLeft = (canvas.width - topTrackWidth) / 2;
+                const laneWidth = topTrackWidth / LANES;
+                
+                const laneIndex = Math.floor((x - trackLeft) / laneWidth);
 
                 if (laneIndex >= 0 && laneIndex < LANES) {
                     checkLaneHit(laneIndex);
@@ -479,10 +509,7 @@
             window.addEventListener('orientationchange', resizeCanvas);
             resizeCanvas();
 
-            // Prevent zoom behaviors
             document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
-
-            // Multi-touch handler
             canvas.addEventListener('touchstart', handleTouch, { passive: false });
 
             document.getElementById('startBtn').addEventListener('click', startGame);
