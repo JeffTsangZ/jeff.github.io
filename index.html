@@ -3,29 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Web Rhythm Game (7 Keys)</title>
+  <title>Arcade Rhythm Hub</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: #0d0e15;
       color: #fff;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       min-height: 100vh;
-      padding: 20px;
+      display: flex;
+      flex-direction: column;
     }
 
+    /* Top Navigation Header */
+    header {
+      background: #161824;
+      border-bottom: 2px solid #2a2d42;
+      padding: 15px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      color: #00ffcc;
+      cursor: pointer;
+    }
+
+    .nav-btn {
+      padding: 8px 16px;
+      background: #2a2d42;
+      color: #fff;
+      border: 1px solid #00ffcc;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    .nav-btn:hover { background: #00ffcc; color: #0d0e15; }
+
+    /* Screen Views */
+    .view { display: none; padding: 30px 20px; }
+    .view.active { display: flex; }
+
+    /* Homepage Grid */
+    #home-view {
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+    }
+
+    .game-grid {
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 900px;
+      margin-top: 20px;
+    }
+
+    .game-card {
+      background: #161824;
+      border: 2px solid #2a2d42;
+      border-radius: 12px;
+      width: 320px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      transition: transform 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+
+    .game-card:hover {
+      transform: translateY(-5px);
+      border-color: #00ffcc;
+      box-shadow: 0 10px 25px rgba(0, 255, 204, 0.2);
+    }
+
+    .game-card h3 { color: #00ffcc; font-size: 1.3rem; }
+    .game-card p { font-size: 0.9rem; color: #aaa; line-height: 1.4; }
+    .game-card .tag {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #2a2d42;
+      color: #ff4757;
+      font-size: 0.75rem;
+      font-weight: bold;
+      border-radius: 4px;
+      align-self: flex-start;
+    }
+
+    /* Common App Container Layout */
     .app-container {
       display: flex;
       gap: 20px;
       align-items: flex-start;
       flex-wrap: wrap;
       justify-content: center;
+      width: 100%;
     }
 
-    /* Control Panel */
     .control-panel {
       width: 320px;
       background: #161824;
@@ -67,11 +146,7 @@
       border-radius: 6px;
     }
 
-    input[type="range"] {
-      accent-color: #00ffcc;
-      cursor: pointer;
-      padding: 0;
-    }
+    input[type="range"] { accent-color: #00ffcc; cursor: pointer; padding: 0; }
 
     .btn {
       padding: 10px 16px;
@@ -86,13 +161,9 @@
     }
 
     .btn:hover { background: #00e6b8; }
-    .btn:disabled {
-      background: #444;
-      color: #888;
-      cursor: not-allowed;
-    }
+    .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
 
-    #playerContainer {
+    .playerContainer {
       width: 100%;
       height: 180px;
       background: #000;
@@ -100,8 +171,8 @@
       overflow: hidden;
     }
 
-    /* Game Track */
-    .game-container {
+    /* Rhythm Keys Game CSS */
+    .keys-container {
       position: relative;
       width: 560px;
       height: 600px;
@@ -183,11 +254,7 @@
       border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
     .key-btn:last-child { border-right: none; }
-
-    .key-btn.active {
-      background: rgba(255, 255, 255, 0.25);
-      color: #fff;
-    }
+    .key-btn.active { background: rgba(255, 255, 255, 0.25); color: #fff; }
 
     .judgment {
       position: absolute;
@@ -199,328 +266,452 @@
       opacity: 0;
       transition: opacity 0.15s;
       pointer-events: none;
+      z-index: 20;
     }
     .judgment.show { opacity: 1; }
     .perfect { color: #00ffcc; }
     .great { color: #ffa502; }
     .good { color: #1e90ff; }
     .miss { color: #ff4757; }
+
+    /* OSU Mode Game Playfield CSS */
+    .osu-playfield {
+      position: relative;
+      width: 600px;
+      height: 500px;
+      background: #10101c;
+      border-radius: 12px;
+      border: 3px solid #ff4757;
+      box-shadow: 0 0 30px rgba(255, 71, 87, 0.2);
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    .osu-target {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ff4757 30%, #ff6b81 100%);
+      border: 3px solid #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.2rem;
+      color: #fff;
+      transform: translate(-50%, -50%);
+      user-select: none;
+    }
+
+    .osu-approach {
+      position: absolute;
+      top: -10px; left: -10px;
+      right: -10px; bottom: -10px;
+      border-radius: 50%;
+      border: 2px solid #00ffcc;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
-  <div class="app-container">
-    <div class="control-panel">
-      <h2>YouTube Game Settings</h2>
+  <header>
+    <h1 onclick="showHome()">🎮 Arcade Rhythm Hub</h1>
+    <button class="nav-btn" onclick="showHome()">Game Library</button>
+  </header>
 
-      <div class="input-group">
-        <label for="ytUrlInput">YouTube Link or Video ID:</label>
-        <input type="text" id="ytUrlInput" value="https://www.youtube.com/watch?v=vUvLQioor3U">
+  <!-- HOME VIEW -->
+  <div id="home-view" class="view active">
+    <h2>Select a Rhythm Game</h2>
+    <div class="game-grid">
+      
+      <!-- Game 1 Card -->
+      <div class="game-card" onclick="launchGame('keys')">
+        <span class="tag">7-KEY MODE</span>
+        <h3>Rhythm Keys</h3>
+        <p>A classic vertical scrolling mania-style rhythm game. Notes slide down 7 lanes mapped to <b>Z, X, C, V, B, N, M</b>.</p>
+        <button class="btn">Play Rhythm Keys</button>
       </div>
 
-      <div class="input-group">
-        <label for="bpmInput">Estimated Song BPM:</label>
-        <input type="number" id="bpmInput" value="130" min="60" max="220">
+      <!-- Game 2 Card (osu! Style) -->
+      <div class="game-card" onclick="launchGame('osu')">
+        <span class="tag">OSU MODE</span>
+        <h3>Circle Clicks</h3>
+        <p>Inspired by <b>osu!</b>. Target circles appear anywhere on screen. Aim with your mouse and click or hit <b>Z / X</b> in time with the song!</p>
+        <button class="btn">Play Circle Clicks</button>
       </div>
 
-      <div class="input-group">
-        <label for="speedInput">
-          Drop Speed: <span id="speedValue" style="color: #00ffcc; font-weight: bold;">3.0x</span>
-        </label>
-        <input 
-          type="range" 
-          id="speedInput" 
-          min="100" 
-          max="700" 
-          step="25" 
-          value="350"
-          oninput="updateDropSpeed(this.value)"
-        >
-      </div>
-
-      <!-- Play Button (starts disabled until YouTube API is loaded) -->
-      <button class="btn" id="playBtn" onclick="loadYouTubeSong()" disabled>Initializing Player...</button>
-
-      <h2>Video Stream</h2>
-      <div id="playerContainer">
-        <div id="player"></div>
-      </div>
     </div>
+  </div>
 
-    <!-- Gameplay Area -->
-    <div class="game-container">
-      <div class="hud">
-        <div>SCORE: <span id="score">0</span></div>
-        <div>COMBO: <span id="combo">0</span></div>
+  <!-- GAME 1 VIEW: RHYTHM KEYS -->
+  <div id="keys-view" class="view">
+    <div class="app-container">
+      <div class="control-panel">
+        <h2>Rhythm Keys</h2>
+        <div class="input-group">
+          <label>YouTube Link / ID:</label>
+          <input type="text" id="ytUrlInput-keys" value="https://www.youtube.com/watch?v=vUvLQioor3U">
+        </div>
+        <div class="input-group">
+          <label>Song BPM:</label>
+          <input type="number" id="bpmInput-keys" value="130">
+        </div>
+        <div class="input-group">
+          <label>Drop Speed: <span id="speedValue-keys" style="color:#00ffcc;">3.0x</span></label>
+          <input type="range" id="speedInput-keys" min="100" max="700" step="25" value="350" oninput="updateDropSpeed(this.value)">
+        </div>
+        <button class="btn playBtn" onclick="loadYouTubeSong('keys')" disabled>Initializing...</button>
+        <h2>Video</h2>
+        <div class="playerContainer"><div id="player-keys"></div></div>
       </div>
 
-      <div class="track">
-        <div class="target-line"></div>
-        <div class="lane lane-1" id="lane-0"></div>
-        <div class="lane lane-2" id="lane-1"></div>
-        <div class="lane lane-3" id="lane-2"></div>
-        <div class="lane lane-4" id="lane-3"></div>
-        <div class="lane lane-5" id="lane-4"></div>
-        <div class="lane lane-6" id="lane-5"></div>
-        <div class="lane lane-7" id="lane-6"></div>
-        <div id="judgment" class="judgment">PERFECT</div>
-      </div>
-
-      <div class="key-hints">
-        <div class="key-btn" id="btn-0">Z</div>
-        <div class="key-btn" id="btn-1">X</div>
-        <div class="key-btn" id="btn-2">C</div>
-        <div class="key-btn" id="btn-3">V</div>
-        <div class="key-btn" id="btn-4">B</div>
-        <div class="key-btn" id="btn-5">N</div>
-        <div class="key-btn" id="btn-6">M</div>
+      <div class="keys-container">
+        <div class="hud">
+          <div>SCORE: <span id="score-keys">0</span></div>
+          <div>COMBO: <span id="combo-keys">0</span></div>
+        </div>
+        <div class="track">
+          <div class="target-line"></div>
+          <div class="lane lane-1" id="lane-0"></div>
+          <div class="lane lane-2" id="lane-1"></div>
+          <div class="lane lane-3" id="lane-2"></div>
+          <div class="lane lane-4" id="lane-3"></div>
+          <div class="lane lane-5" id="lane-4"></div>
+          <div class="lane lane-6" id="lane-5"></div>
+          <div class="lane lane-7" id="lane-6"></div>
+          <div id="judgment-keys" class="judgment">PERFECT</div>
+        </div>
+        <div class="key-hints">
+          <div class="key-btn" id="btn-0">Z</div>
+          <div class="key-btn" id="btn-1">X</div>
+          <div class="key-btn" id="btn-2">C</div>
+          <div class="key-btn" id="btn-3">V</div>
+          <div class="key-btn" id="btn-4">B</div>
+          <div class="key-btn" id="btn-5">N</div>
+          <div class="key-btn" id="btn-6">M</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script>
-    const KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm'];
-    const TARGET_Y = 480;
+  <!-- GAME 2 VIEW: CIRCLE CLICKS (OSU MODE) -->
+  <div id="osu-view" class="view">
+    <div class="app-container">
+      <div class="control-panel">
+        <h2>Circle Clicks (osu!)</h2>
+        <div class="input-group">
+          <label>YouTube Link / ID:</label>
+          <input type="text" id="ytUrlInput-osu" value="https://www.youtube.com/watch?v=vUvLQioor3U">
+        </div>
+        <div class="input-group">
+          <label>Song BPM:</label>
+          <input type="number" id="bpmInput-osu" value="130">
+        </div>
+        <button class="btn playBtn" onclick="loadYouTubeSong('osu')" disabled>Initializing...</button>
+        <h2>Video</h2>
+        <div class="playerContainer"><div id="player-osu"></div></div>
+      </div>
 
+      <div class="osu-playfield" id="osu-field">
+        <div class="hud">
+          <div>SCORE: <span id="score-osu">0</span></div>
+          <div>COMBO: <span id="combo-osu">0</span></div>
+        </div>
+        <div id="judgment-osu" class="judgment">PERFECT</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    // Navigation Routing
+    function showHome() {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('home-view').classList.add('active');
+      stopActiveGames();
+    }
+
+    function launchGame(mode) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(`${mode}-view`).classList.add('active');
+      activeMode = mode;
+    }
+
+    // Common Game Engine State
+    const KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm'];
+    let activeMode = 'keys';
     let noteSpeed = 350;
-    let player = null;
+    let players = { keys: null, osu: null };
     let ytReady = false;
     let isPlaying = false;
-    let score = 0;
-    let combo = 0;
+    let score = 0, combo = 0;
     let notes = [];
     let audioCtx = null;
     let judgmentTimeout = null;
+    let mousePos = { x: 0, y: 0 };
+    let circleCounter = 1;
 
-    // Load YouTube API dynamically to prevent initialization lockups
-    var tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
+    // YouTube API Load
     function onYouTubeIframeAPIReady() {
-      player = new YT.Player('player', {
-        height: '180',
-        width: '100%',
-        videoId: 'vUvLQioor3U',
-        playerVars: {
-          'playsinline': 1,
-          'enablejsapi': 1,
-          'origin': window.location.origin
-        },
-        events: {
-          'onReady': onPlayerReady
-        }
+      players.keys = new YT.Player('player-keys', {
+        height: '180', width: '100%', videoId: 'vUvLQioor3U',
+        events: { 'onReady': onPlayerReady }
+      });
+      players.osu = new YT.Player('player-osu', {
+        height: '180', width: '100%', videoId: 'vUvLQioor3U',
+        events: { 'onReady': onPlayerReady }
       });
     }
 
     function onPlayerReady() {
       ytReady = true;
-      const btn = document.getElementById('playBtn');
-      btn.disabled = false;
-      btn.textContent = "Load YouTube & Play";
+      document.querySelectorAll('.playBtn').forEach(b => {
+        b.disabled = false;
+        b.textContent = "Load YouTube & Play";
+      });
+    }
+
+    function stopActiveGames() {
+      isPlaying = false;
+      if (players.keys && typeof players.keys.stopVideo === 'function') players.keys.stopVideo();
+      if (players.osu && typeof players.osu.stopVideo === 'function') players.osu.stopVideo();
+      document.querySelectorAll('.note, .osu-target').forEach(el => el.remove());
     }
 
     function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
     }
 
     function playHitSound(type) {
       if (!audioCtx) return;
-
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       const now = audioCtx.currentTime;
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      osc.connect(gain); gain.connect(audioCtx.destination);
 
       if (type === 'PERFECT') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(1046.50, now);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(1046.50, now);
+        gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       } else if (type === 'GREAT') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(783.99, now);
-        gain.gain.setValueAtTime(0.25, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(783.99, now);
+        gain.gain.setValueAtTime(0.25, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
       } else if (type === 'GOOD') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(659.25, now);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-      } else if (type === 'MISS') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(130.81, now);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.type = 'sine'; osc.frequency.setValueAtTime(659.25, now);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      } else {
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(130.81, now);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
       }
-
-      osc.start(now);
-      osc.stop(now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
     }
 
     function updateDropSpeed(val) {
       noteSpeed = parseFloat(val);
-      const multiplier = (noteSpeed / 116.6).toFixed(1);
-      document.getElementById('speedValue').textContent = `${multiplier}x`;
+      document.getElementById('speedValue-keys').textContent = `${(noteSpeed / 116.6).toFixed(1)}x`;
     }
 
     function extractVideoId(url) {
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-      const match = url.match(regExp);
+      const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
       return (match && match[2].length === 11) ? match[2] : url;
     }
 
-    function generateBeatmap(bpm, duration) {
-      const generatedNotes = [];
-      const beatInterval = 60 / bpm;
-      let lane = 0;
-
-      for (let time = 2.0; time < duration; time += beatInterval) {
-        generatedNotes.push({ lane, time: parseFloat(time.toFixed(3)) });
-        lane = (lane + Math.floor(Math.random() * 6) + 1) % 7;
-      }
-      return generatedNotes;
-    }
-
-    function loadYouTubeSong() {
+    function loadYouTubeSong(mode) {
       initAudio();
-      if (!ytReady || !player || typeof player.loadVideoById !== 'function') {
-        alert("YouTube API is still connecting. Please wait 3 seconds and click again.");
-        return;
-      }
+      if (!ytReady) return;
 
-      const input = document.getElementById('ytUrlInput').value.trim();
-      const bpm = parseInt(document.getElementById('bpmInput').value) || 130;
+      const input = document.getElementById(`ytUrlInput-${mode}`).value.trim();
+      const bpm = parseInt(document.getElementById(`bpmInput-${mode}`).value) || 130;
       const videoId = extractVideoId(input);
 
-      player.loadVideoById(videoId);
+      players[mode].loadVideoById(videoId);
 
-      notes = generateBeatmap(bpm, 240).map(n => ({
-        ...n,
-        spawned: false,
-        hit: false,
-        element: null
-      }));
+      notes = [];
+      const beatInterval = 60 / bpm;
+      circleCounter = 1;
 
-      score = 0;
-      combo = 0;
+      for (let time = 2.0; time < 240; time += beatInterval) {
+        notes.push({
+          time: parseFloat(time.toFixed(3)),
+          lane: Math.floor(Math.random() * 7),
+          x: Math.floor(Math.random() * 480) + 60,
+          y: Math.floor(Math.random() * 340) + 100,
+          num: (circleCounter % 9) + 1,
+          spawned: false, hit: false, element: null
+        });
+        circleCounter++;
+      }
+
+      score = 0; combo = 0;
       updateHUD();
-      document.querySelectorAll('.note').forEach(el => el.remove());
+      document.querySelectorAll('.note, .osu-target').forEach(el => el.remove());
 
       isPlaying = true;
       requestAnimationFrame(gameLoop);
     }
 
     function gameLoop() {
-      if (!isPlaying || !player || typeof player.getCurrentTime !== 'function') return;
+      if (!isPlaying) return;
+      const player = players[activeMode];
+      if (!player || typeof player.getCurrentTime !== 'function') return;
 
       const currentTime = player.getCurrentTime();
-      const timeToHit = TARGET_Y / noteSpeed;
 
-      notes.forEach(note => {
-        if (!note.spawned && currentTime >= (note.time - timeToHit)) {
-          spawnNote(note);
-        }
-
-        if (note.spawned && !note.hit) {
-          const elapsedTime = currentTime - (note.time - timeToHit);
-          note.y = elapsedTime * noteSpeed;
-          note.element.style.top = `${note.y}px`;
-
-          if (note.y > TARGET_Y + 70) {
-            note.hit = true;
-            note.element.remove();
-            triggerJudgment('MISS');
-            playHitSound('MISS');
-            combo = 0;
-            updateHUD();
+      if (activeMode === 'keys') {
+        const timeToHit = 480 / noteSpeed;
+        notes.forEach(note => {
+          if (!note.spawned && currentTime >= (note.time - timeToHit)) {
+            note.spawned = true;
+            const el = document.createElement('div');
+            el.className = 'note';
+            document.getElementById(`lane-${note.lane}`).appendChild(el);
+            note.element = el;
           }
-        }
-      });
+          if (note.spawned && !note.hit) {
+            note.y = (currentTime - (note.time - timeToHit)) * noteSpeed;
+            note.element.style.top = `${note.y}px`;
+            if (note.y > 550) {
+              note.hit = true; note.element.remove();
+              triggerJudgment('MISS'); playHitSound('MISS');
+              combo = 0; updateHUD();
+            }
+          }
+        });
+      } else if (activeMode === 'osu') {
+        const approachTime = 0.8; // Time target is visible before hit point
+        notes.forEach(note => {
+          if (!note.spawned && currentTime >= (note.time - approachTime)) {
+            note.spawned = true;
+            const target = document.createElement('div');
+            target.className = 'osu-target';
+            target.style.left = `${note.x}px`;
+            target.style.top = `${note.y}px`;
+            target.textContent = note.num;
+
+            const ring = document.createElement('div');
+            ring.className = 'osu-approach';
+            target.appendChild(ring);
+
+            document.getElementById('osu-field').appendChild(target);
+            note.element = target;
+            note.ring = ring;
+          }
+
+          if (note.spawned && !note.hit) {
+            const progress = (note.time - currentTime) / approachTime;
+            if (progress > 0) {
+              const scale = 1 + progress * 1.5;
+              note.ring.style.transform = `scale(${scale})`;
+            } else if (currentTime > note.time + 0.25) {
+              note.hit = true; note.element.remove();
+              triggerJudgment('MISS'); playHitSound('MISS');
+              combo = 0; updateHUD();
+            }
+          }
+        });
+      }
 
       requestAnimationFrame(gameLoop);
     }
 
-    function spawnNote(note) {
-      note.spawned = true;
-      const el = document.createElement('div');
-      el.className = 'note';
-      document.getElementById(`lane-${note.lane}`).appendChild(el);
-      note.element = el;
-    }
-
-    function checkHit(laneIndex) {
-      if (!isPlaying || !player) return;
+    function checkHitKeys(laneIndex) {
+      if (!isPlaying) return;
       const activeNotes = notes.filter(n => n.lane === laneIndex && n.spawned && !n.hit);
       if (activeNotes.length === 0) return;
 
-      const closestNote = activeNotes[0];
-      const diff = Math.abs(closestNote.y - TARGET_Y);
+      const closest = activeNotes[0];
+      const diff = Math.abs(closest.y - 480);
 
-      if (diff < 45) {
-        closestNote.hit = true;
-        closestNote.element.remove();
-        score += 100; combo++;
-        triggerJudgment('PERFECT');
-        playHitSound('PERFECT');
-      } else if (diff < 85) {
-        closestNote.hit = true;
-        closestNote.element.remove();
-        score += 65; combo++;
-        triggerJudgment('GREAT');
-        playHitSound('GREAT');
-      } else if (diff < 125) {
-        closestNote.hit = true;
-        closestNote.element.remove();
-        score += 30; combo++;
-        triggerJudgment('GOOD');
-        playHitSound('GOOD');
-      } else if (diff < 150) {
-        closestNote.hit = true;
-        closestNote.element.remove();
-        combo = 0;
-        triggerJudgment('MISS');
-        playHitSound('MISS');
+      if (diff < 45) registerHit(closest, 'PERFECT', 100);
+      else if (diff < 85) registerHit(closest, 'GREAT', 65);
+      else if (diff < 125) registerHit(closest, 'GOOD', 30);
+      else if (diff < 150) { closest.hit = true; closest.element.remove(); triggerJudgment('MISS'); combo = 0; updateHUD(); }
+    }
+
+    function checkHitOsu() {
+      if (!isPlaying || activeMode !== 'osu') return;
+      const player = players.osu;
+      const currentTime = player.getCurrentTime();
+
+      const activeNotes = notes.filter(n => n.spawned && !n.hit);
+      if (activeNotes.length === 0) return;
+
+      const field = document.getElementById('osu-field').getBoundingClientRect();
+      const clickX = mousePos.x - field.left;
+      const clickY = mousePos.y - field.top;
+
+      for (let note of activeNotes) {
+        const dx = clickX - note.x;
+        const dy = clickY - note.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= 35) { // Radius of circle
+          const timeDiff = Math.abs(currentTime - note.time);
+          if (timeDiff <= 0.15) registerHit(note, 'PERFECT', 100);
+          else if (timeDiff <= 0.25) registerHit(note, 'GREAT', 65);
+          else if (timeDiff <= 0.35) registerHit(note, 'GOOD', 30);
+          break;
+        }
       }
+    }
+
+    function registerHit(note, rating, pts) {
+      note.hit = true;
+      if (note.element) note.element.remove();
+      score += pts; combo++;
+      triggerJudgment(rating);
+      playHitSound(rating);
       updateHUD();
     }
 
     function triggerJudgment(type) {
-      const el = document.getElementById('judgment');
+      const el = document.getElementById(`judgment-${activeMode}`);
+      if (!el) return;
       el.textContent = type;
       el.className = `judgment ${type.toLowerCase()} show`;
-
       if (judgmentTimeout) clearTimeout(judgmentTimeout);
       judgmentTimeout = setTimeout(() => el.classList.remove('show'), 400);
     }
 
     function updateHUD() {
-      document.getElementById('score').textContent = score;
-      document.getElementById('combo').textContent = combo;
+      document.getElementById(`score-${activeMode}`).textContent = score;
+      document.getElementById(`combo-${activeMode}`).textContent = combo;
     }
 
+    // Key Listeners
     window.addEventListener('keydown', (e) => {
       initAudio();
-      const keyIndex = KEYS.indexOf(e.key.toLowerCase());
-      if (keyIndex !== -1 && !e.repeat) {
-        document.getElementById(`btn-${keyIndex}`).classList.add('active');
-        checkHit(keyIndex);
+      const k = e.key.toLowerCase();
+      if (activeMode === 'keys') {
+        const keyIndex = KEYS.indexOf(k);
+        if (keyIndex !== -1 && !e.repeat) {
+          document.getElementById(`btn-${keyIndex}`).classList.add('active');
+          checkHitKeys(keyIndex);
+        }
+      } else if (activeMode === 'osu') {
+        if ((k === 'z' || k === 'x') && !e.repeat) {
+          checkHitOsu();
+        }
       }
     });
 
     window.addEventListener('keyup', (e) => {
-      const keyIndex = KEYS.indexOf(e.key.toLowerCase());
-      if (keyIndex !== -1) {
-        document.getElementById(`btn-${keyIndex}`).classList.remove('active');
+      if (activeMode === 'keys') {
+        const keyIndex = KEYS.indexOf(e.key.toLowerCase());
+        if (keyIndex !== -1) document.getElementById(`btn-${keyIndex}`).classList.remove('active');
       }
+    });
+
+    // Track Mouse Position for osu! clicks
+    window.addEventListener('mousemove', (e) => {
+      mousePos.x = e.clientX;
+      mousePos.y = e.clientY;
+    });
+
+    document.getElementById('osu-field').addEventListener('mousedown', () => {
+      checkHitOsu();
     });
   </script>
 </body>
