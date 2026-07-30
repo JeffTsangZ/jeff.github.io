@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Web Rhythm Game</title>
+  <title>YouTube Web Rhythm Game (7 Keys)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -95,10 +95,10 @@
       overflow: hidden;
     }
 
-    /* Game Track */
+    /* Expanded Game Track for 7 Lanes */
     .game-container {
       position: relative;
-      width: 360px;
+      width: 560px;
       height: 600px;
       background: #181828;
       border-radius: 12px;
@@ -153,10 +153,14 @@
       box-shadow: 0 0 8px currentColor;
     }
 
+    /* Distinct Colors for 7 Lanes */
     .lane-1 .note { background: #ff4757; color: #ff4757; }
     .lane-2 .note { background: #2ed573; color: #2ed573; }
     .lane-3 .note { background: #ffa502; color: #ffa502; }
-    .lane-4 .note { background: #1e90ff; color: #1e90ff; }
+    .lane-4 .note { background: #00ffcc; color: #00ffcc; }
+    .lane-5 .note { background: #1e90ff; color: #1e90ff; }
+    .lane-6 .note { background: #a55eea; color: #a55eea; }
+    .lane-7 .note { background: #ff6b81; color: #ff6b81; }
 
     .key-hints {
       display: flex;
@@ -172,7 +176,9 @@
       font-size: 1.1rem;
       font-weight: bold;
       color: #aaa;
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
+    .key-btn:last-child { border-right: none; }
 
     .key-btn.active {
       background: rgba(255, 255, 255, 0.25);
@@ -184,7 +190,7 @@
       top: 40%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 2rem;
+      font-size: 2.2rem;
       font-weight: 900;
       opacity: 0;
       transition: opacity 0.15s;
@@ -237,7 +243,7 @@
       </div>
     </div>
 
-    <!-- Gameplay Area -->
+    <!-- Gameplay Area (7 Lanes) -->
     <div class="game-container">
       <div class="hud">
         <div>SCORE: <span id="score">0</span></div>
@@ -250,14 +256,20 @@
         <div class="lane lane-2" id="lane-1"></div>
         <div class="lane lane-3" id="lane-2"></div>
         <div class="lane lane-4" id="lane-3"></div>
+        <div class="lane lane-5" id="lane-4"></div>
+        <div class="lane lane-6" id="lane-5"></div>
+        <div class="lane lane-7" id="lane-6"></div>
         <div id="judgment" class="judgment">PERFECT</div>
       </div>
 
       <div class="key-hints">
-        <div class="key-btn" id="btn-0">D</div>
-        <div class="key-btn" id="btn-1">F</div>
-        <div class="key-btn" id="btn-2">J</div>
-        <div class="key-btn" id="btn-3">K</div>
+        <div class="key-btn" id="btn-0">Z</div>
+        <div class="key-btn" id="btn-1">X</div>
+        <div class="key-btn" id="btn-2">C</div>
+        <div class="key-btn" id="btn-3">V</div>
+        <div class="key-btn" id="btn-4">B</div>
+        <div class="key-btn" id="btn-5">N</div>
+        <div class="key-btn" id="btn-6">M</div>
       </div>
     </div>
   </div>
@@ -266,7 +278,8 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
-    const KEYS = ['d', 'f', 'j', 'k'];
+    // 7 Keys Keyboard Mapping
+    const KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm'];
     const TARGET_Y = 480;
 
     let noteSpeed = 350;
@@ -352,6 +365,7 @@
       return (match && match[2].length === 11) ? match[2] : url;
     }
 
+    // Generate random notes across all 7 lanes
     function generateBeatmap(bpm, duration) {
       const generatedNotes = [];
       const beatInterval = 60 / bpm;
@@ -359,7 +373,7 @@
 
       for (let time = 2.0; time < duration; time += beatInterval) {
         generatedNotes.push({ lane, time: parseFloat(time.toFixed(3)) });
-        lane = (lane + Math.floor(Math.random() * 3) + 1) % 4;
+        lane = (lane + Math.floor(Math.random() * 6) + 1) % 7; // Distribute across 7 lanes
       }
       return generatedNotes;
     }
@@ -409,7 +423,6 @@
           note.y = elapsedTime * noteSpeed;
           note.element.style.top = `${note.y}px`;
 
-          // Expanded Miss threshold to match the wider timing window
           if (note.y > TARGET_Y + 70) {
             note.hit = true;
             note.element.remove();
@@ -440,26 +453,25 @@
       const closestNote = activeNotes[0];
       const diff = Math.abs(closestNote.y - TARGET_Y);
 
-      // --- EXPANDED TIMING WINDOWS ---
-      if (diff < 45) { // Perfect: expanded from 25 to 45px
+      if (diff < 45) {
         closestNote.hit = true;
         closestNote.element.remove();
         score += 100; combo++;
         triggerJudgment('PERFECT');
         playHitSound('PERFECT');
-      } else if (diff < 85) { // Great: expanded from 50 to 85px
+      } else if (diff < 85) {
         closestNote.hit = true;
         closestNote.element.remove();
         score += 65; combo++;
         triggerJudgment('GREAT');
         playHitSound('GREAT');
-      } else if (diff < 125) { // Good: expanded from 80 to 125px
+      } else if (diff < 125) {
         closestNote.hit = true;
         closestNote.element.remove();
         score += 30; combo++;
         triggerJudgment('GOOD');
         playHitSound('GOOD');
-      } else if (diff < 150) { // Miss threshold
+      } else if (diff < 150) {
         closestNote.hit = true;
         closestNote.element.remove();
         combo = 0;
@@ -474,7 +486,6 @@
       el.textContent = type;
       el.className = `judgment ${type.toLowerCase()} show`;
 
-      // Keep feedback on screen longer (400ms)
       if (judgmentTimeout) clearTimeout(judgmentTimeout);
       judgmentTimeout = setTimeout(() => el.classList.remove('show'), 400);
     }
