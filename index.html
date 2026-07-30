@@ -3,358 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>maimai Chart Viewer - only my railgun</title>
+    <title>maimai Mini Player - only my railgun</title>
     <style>
         :root {
-            --bg-color: #0f111a;
-            --panel-bg: #1a1d2d;
-            --panel-border: #2a2f4c;
-            --text-main: #f0f3f9;
-            --text-sub: #8c93b0;
+            --bg-color: #0b0d17;
+            --panel-bg: #16192b;
             --accent-color: #00f2fe;
-            --easy-color: #22c55e;
-            --basic-color: #eab308;
-            --advanced-color: #f97316;
-            --expert-color: #ef4444;
-            --master-color: #a855f7;
-            --re-master-color: #ec4899;
+            --text-color: #f0f3f9;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            user-select: none;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
-            color: var(--text-main);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            justify-content: center;
             min-height: 100vh;
+            overflow: hidden;
         }
 
-        header {
-            background: linear-gradient(135deg, #1e1b4b, #311042);
-            padding: 1.5rem 2rem;
-            border-bottom: 2px solid var(--panel-border);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
         }
 
-        .header-content {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .genre-badge {
-            display: inline-block;
-            background: #e11d48;
-            color: white;
-            font-size: 0.75rem;
-            font-weight: bold;
-            padding: 0.2rem 0.6rem;
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .song-title {
-            font-size: 2rem;
+        .title {
+            font-size: 1.5rem;
             font-weight: 800;
-            margin-bottom: 0.4rem;
-            background: linear-gradient(90deg, #fff, #a5f3fc);
+            background: linear-gradient(90deg, #00f2fe, #4facfe);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .song-artist {
-            font-size: 1.1rem;
-            color: var(--text-sub);
-            font-weight: 500;
+        .subtitle {
+            font-size: 0.85rem;
+            color: #7b849b;
         }
 
-        .main-container {
-            max-width: 1200px;
-            margin: 1.5rem auto;
-            padding: 0 1rem;
-            display: grid;
-            grid-template-columns: 320px 1fr;
-            gap: 1.5rem;
-            flex: 1;
+        .game-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            max-width: 95vw;
+            max-height: 95vw;
         }
 
-        @media (max-width: 850px) {
-            .main-container {
-                grid-template-columns: 1fr;
-            }
+        canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(0, 242, 254, 0.15), inset 0 0 15px rgba(0,0,0,0.8);
+            display: block;
         }
 
-        .sidebar {
+        .controls {
+            margin-top: 15px;
             display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        .card {
-            background-color: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            padding: 1.25rem;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .card-title {
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-sub);
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--panel-border);
-            padding-bottom: 0.4rem;
-        }
-
-        .meta-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.8rem;
-        }
-
-        .meta-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .meta-label {
-            font-size: 0.75rem;
-            color: var(--text-sub);
-        }
-
-        .meta-value {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-top: 0.1rem;
-        }
-
-        .difficulty-selector {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .diff-btn {
-            display: flex;
-            justify-content: space-between;
+            gap: 12px;
             align-items: center;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            border: 2px solid transparent;
-            background-color: rgba(255, 255, 255, 0.03);
-            color: var(--text-main);
-            font-size: 0.95rem;
+        }
+
+        select, button {
+            background-color: var(--panel-bg);
+            color: var(--text-color);
+            border: 1px solid #2d334d;
+            padding: 8px 16px;
+            border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: left;
-        }
-
-        .diff-btn:hover {
-            background-color: rgba(255, 255, 255, 0.08);
-            transform: translateX(2px);
-        }
-
-        .diff-btn.active {
-            border-color: currentColor;
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .diff-btn.basic { color: var(--basic-color); }
-        .diff-btn.advanced { color: var(--advanced-color); }
-        .diff-btn.expert { color: var(--expert-color); }
-        .diff-btn.master { color: var(--master-color); }
-        .diff-btn.remaster { color: var(--re-master-color); }
-
-        .diff-designer {
-            font-size: 0.75rem;
-            font-weight: normal;
-            opacity: 0.8;
-            display: block;
-            margin-top: 0.1rem;
-        }
-
-        .diff-level {
-            font-size: 1.1rem;
-            font-weight: 800;
-            background-color: rgba(0, 0, 0, 0.3);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-        }
-
-        .viewer-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .controls-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 8px;
-            padding: 0.75rem 1rem;
-        }
-
-        .active-diff-display {
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .active-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .raw-data-area {
-            width: 100%;
-            height: 520px;
-            background-color: #090a0f;
-            border: 1px solid var(--panel-border);
-            border-radius: 8px;
-            padding: 1rem;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 0.9rem;
-            color: #38edf8;
-            line-height: 1.5;
-            resize: vertical;
-            white-space: pre;
-            overflow-x: auto;
-            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
-        }
-
-        .raw-data-area:focus {
             outline: none;
-            border-color: var(--accent-color);
+            transition: all 0.2s;
         }
 
-        footer {
-            margin-top: auto;
-            background-color: var(--panel-bg);
-            border-top: 1px solid var(--panel-border);
-            padding: 1rem;
+        select:hover, button:hover {
+            border-color: var(--accent-color);
+            background-color: #21263e;
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, #00c6ff, #0072ff);
+            border: none;
+        }
+
+        button.primary:hover {
+            opacity: 0.9;
+        }
+
+        .key-hints {
+            margin-top: 10px;
+            font-size: 0.75rem;
+            color: #636b83;
             text-align: center;
-            font-size: 0.8rem;
-            color: var(--text-sub);
         }
     </style>
 </head>
 <body>
 
-    <header>
-        <div class="header-content">
-            <span class="genre-badge" id="chart-genre">POPSアニメ</span>
-            <h1 class="song-title" id="chart-title">only my railgun</h1>
-            <div class="song-artist" id="chart-artist">fripSide</div>
-        </div>
-    </header>
+    <div class="header">
+        <div class="title">only my railgun</div>
+        <div class="subtitle">fripSide — BPM 143</div>
+    </div>
 
-    <main class="main-container">
-        <aside class="sidebar">
-            <section class="card">
-                <h2 class="card-title">Chart Information</h2>
-                <div class="meta-grid">
-                    <div class="meta-item">
-                        <span class="meta-label">BPM</span>
-                        <span class="meta-value" id="chart-bpm">143</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Version</span>
-                        <span class="meta-value" id="chart-version">maimai FiNALE</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">Cabinet</span>
-                        <span class="meta-value" id="chart-cabinet">SD</span>
-                    </div>
-                    <div class="meta-item">
-                        <span class="meta-label">ID</span>
-                        <span class="meta-value" id="chart-id">790</span>
-                    </div>
-                    <div class="meta-item" style="grid-column: span 2;">
-                        <span class="meta-label">Primary Designer</span>
-                        <span class="meta-value" id="chart-designer">緑風 犬三郎</span>
-                    </div>
-                    <div class="meta-item" style="grid-column: span 2;">
-                        <span class="meta-label">Converter</span>
-                        <span class="meta-value" id="chart-converter">Neskol</span>
-                    </div>
-                </div>
-            </section>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+    </div>
 
-            <section class="card">
-                <h2 class="card-title">Select Difficulty</h2>
-                <div class="difficulty-selector" id="diff-selector">
-                    <button class="diff-btn basic" data-diff="2">
-                        <div>
-                            BASIC
-                            <span class="diff-designer" id="des-2">-</span>
-                        </div>
-                        <span class="diff-level" id="lv-2">4</span>
-                    </button>
-                    <button class="diff-btn advanced" data-diff="3">
-                        <div>
-                            ADVANCED
-                            <span class="diff-designer" id="des-3">-</span>
-                        </div>
-                        <span class="diff-level" id="lv-3">7</span>
-                    </button>
-                    <button class="diff-btn expert" data-diff="4">
-                        <div>
-                            EXPERT
-                            <span class="diff-designer" id="des-4">華火職人</span>
-                        </div>
-                        <span class="diff-level" id="lv-4">10</span>
-                    </button>
-                    <button class="diff-btn master" data-diff="5">
-                        <div>
-                            MASTER
-                            <span class="diff-designer" id="des-5">緑風 犬三郎</span>
-                        </div>
-                        <span class="diff-level" id="lv-5">11</span>
-                    </button>
-                    <button class="diff-btn remaster" data-diff="6">
-                        <div>
-                            Re:MASTER
-                            <span class="diff-designer" id="des-6">LabiLabi</span>
-                        </div>
-                        <span class="diff-level" id="lv-6">12+</span>
-                    </button>
-                </div>
-            </section>
-        </aside>
+    <div class="controls">
+        <select id="diffSelect">
+            <option value="2">BASIC (Lv.4)</option>
+            <option value="3">ADVANCED (Lv.7)</option>
+            <option value="4">EXPERT (Lv.10)</option>
+            <option value="5" selected>MASTER (Lv.11)</option>
+            <option value="6">Re:MASTER (Lv.12+)</option>
+        </select>
+        <button id="playBtn" class="primary">Play / Pause</button>
+        <button id="resetBtn">Reset</button>
+    </div>
 
-        <section class="viewer-panel">
-            <div class="card" style="flex: 1; display: flex; flex-direction: column;">
-                <div class="controls-bar">
-                    <div class="active-diff-display">
-                        <span class="active-dot" id="active-dot" style="background-color: var(--master-color);"></span>
-                        <span id="active-diff-name">MASTER</span> Note Data
-                    </div>
-                    <span style="font-size: 0.8rem; color: var(--text-sub);">simai format</span>
-                </div>
-                <textarea class="raw-data-area" id="note-data-viewer" readonly spellcheck="false"></textarea>
-            </div>
-        </section>
-    </main>
-
-    <footer>
-        maimai Chart Viewer &copy; 2026 - Data format maintained via Simai / ChartConverter
-    </footer>
+    <div class="key-hints">
+        Press key buttons <strong>1-8</strong> or click target zones to hit notes!
+    </div>
 
     <script id="chart-data" type="text/plain">
 &title=only my railgun
@@ -699,98 +477,273 @@ E
     </script>
 
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const rawData = document.getElementById("chart-data").textContent;
-            
-            // Parse Key-Value Metadata
-            const parseMetadata = (text) => {
-                const meta = {};
-                const lines = text.split("\n");
-                let currentKey = null;
+        // Engine parameters
+        const CANVAS_SIZE = 600;
+        const CENTER = CANVAS_SIZE / 2;
+        const SENSOR_RADIUS = 220;
+        const INNER_RADIUS = 30;
+        const NOTE_SPEED = 1.8; // seconds from center to ring
+        
+        let canvas, ctx;
+        let isPlaying = false;
+        let currentTime = 0;
+        let lastTimestamp = 0;
+        let notes = [];
+        let hitFeedback = [];
 
-                for (let line of lines) {
-                    line = line.trim();
-                    if (line.startsWith("&")) {
-                        const parts = line.substring(1).split("=");
-                        const key = parts[0];
-                        const val = parts.slice(1).join("=");
-                        meta[key] = val;
-                        currentKey = key;
-                    } else if (currentKey && line !== "") {
-                        meta[currentKey] += "\n" + line;
+        // Parse Simai text block
+        function parseMetadata(text) {
+            const meta = {};
+            const lines = text.split("\n");
+            let key = null;
+            for (let line of lines) {
+                line = line.trim();
+                if (line.startsWith("&")) {
+                    const idx = line.indexOf("=");
+                    key = line.substring(1, idx);
+                    meta[key] = line.substring(idx + 1);
+                } else if (key) {
+                    meta[key] += "\n" + line;
+                }
+            }
+            return meta;
+        }
+
+        const chartMetadata = parseMetadata(document.getElementById("chart-data").textContent);
+
+        // Parse Simai Inote string into playable timestamps
+        function parseInote(simaiStr, defaultBpm = 143) {
+            const parsedNotes = [];
+            let currentBpm = defaultBpm;
+            let currentSubdivision = 4; // default quarter notes
+            let timeAccumulator = 0;
+
+            // Simple tokens cleaner
+            const cleaned = simaiStr.replace(/[\r\n\t ]/g, '');
+            const measures = cleaned.split(',');
+
+            for (let m of measures) {
+                if (!m || m === 'E') continue;
+
+                // Handle Inline BPM
+                const bpmMatch = m.match(/\((\d+(\.\d+)?)\)/);
+                if (bpmMatch) {
+                    currentBpm = parseFloat(bpmMatch[1]);
+                    m = m.replace(bpmMatch[0], '');
+                }
+
+                // Handle Inline Subdivision {4}, {8}, {16}, etc.
+                const subMatch = m.match(/\{(\d+)\}/);
+                if (subMatch) {
+                    currentSubdivision = parseInt(subMatch[1]);
+                    m = m.replace(subMatch[0], '');
+                }
+
+                const beatDuration = 60 / currentBpm;
+                const noteDuration = (4 / currentSubdivision) * beatDuration;
+
+                if (m.length > 0) {
+                    // Splits simultaneously hit notes e.g., "1/8" or "2b/7b"
+                    const simultaneous = m.split('/');
+                    for (let sim of simultaneous) {
+                        const targetPos = parseInt(sim[0]);
+                        if (!isNaN(targetPos) && targetPos >= 1 && targetPos <= 8) {
+                            const isBreak = sim.includes('b');
+                            const isHold = sim.includes('h');
+                            parsedNotes.push({
+                                pos: targetPos,
+                                time: timeAccumulator,
+                                isBreak,
+                                isHold,
+                                hit: false
+                            });
+                        }
                     }
                 }
-                return meta;
-            };
+                timeAccumulator += noteDuration;
+            }
+            return parsedNotes;
+        }
 
-            const chartData = parseMetadata(rawData);
+        function getSensorAngle(pos) {
+            // Maimai positions: 1 is top-right, rotates clockwise
+            // Convert to Standard Canvas Radians
+            return ((pos - 1) * 45 - 67.5) * (Math.PI / 180);
+        }
 
-            // Populate static UI metadata
-            document.getElementById("chart-title").textContent = chartData["title"] || "Untitled";
-            document.getElementById("chart-artist").textContent = chartData["artist"] || "Unknown";
-            document.getElementById("chart-genre").textContent = chartData["genre"] || "POPSアニメ";
-            document.getElementById("chart-bpm").textContent = chartData["wholebpm"] || "-";
-            document.getElementById("chart-version").textContent = chartData["version"] || "-";
-            document.getElementById("chart-cabinet").textContent = chartData["cabinet"] || "-";
-            document.getElementById("chart-id").textContent = chartData["shortid"] || "-";
-            document.getElementById("chart-designer").textContent = chartData["des"] || "-";
-            document.getElementById("chart-converter").textContent = chartData["chartconverter"] || "-";
+        function init() {
+            canvas = document.getElementById("gameCanvas");
+            ctx = canvas.getContext("2d");
 
-            // Set Difficulty level badges & designers
-            const diffNames = {
-                '2': { name: 'BASIC', color: 'var(--basic-color)' },
-                '3': { name: 'ADVANCED', color: 'var(--advanced-color)' },
-                '4': { name: 'EXPERT', color: 'var(--expert-color)' },
-                '5': { name: 'MASTER', color: 'var(--master-color)' },
-                '6': { name: 'Re:MASTER', color: 'var(--re-master-color)' }
-            };
+            document.getElementById("diffSelect").addEventListener("change", (e) => {
+                resetGame();
+            });
 
-            for (let i = 2; i <= 6; i++) {
-                const lvElem = document.getElementById(`lv-${i}`);
-                const desElem = document.getElementById(`des-${i}`);
-                if (lvElem && chartData[`lv_${i}`]) {
-                    lvElem.textContent = chartData[`lv_${i}`];
+            document.getElementById("playBtn").addEventListener("click", () => {
+                isPlaying = !isPlaying;
+                if (isPlaying) lastTimestamp = performance.now();
+            });
+
+            document.getElementById("resetBtn").addEventListener("click", resetGame);
+
+            // User hit handling (Keyboard 1-8)
+            window.addEventListener("keydown", (e) => {
+                const key = parseInt(e.key);
+                if (key >= 1 && key <= 8) {
+                    checkHit(key);
                 }
-                if (desElem && chartData[`des_${i}`]) {
-                    desElem.textContent = chartData[`des_${i}`];
+            });
+
+            // Touch / Click on Canvas
+            canvas.addEventListener("pointerdown", (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width) - CENTER;
+                const y = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height) - CENTER;
+
+                let angle = Math.atan2(y, x) * (180 / Math.PI) + 67.5;
+                if (angle < 0) angle += 360;
+                const pos = Math.floor(angle / 45) + 1;
+                if (pos >= 1 && pos <= 8) {
+                    checkHit(pos);
+                }
+            });
+
+            resetGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resetGame() {
+            const diffKey = document.getElementById("diffSelect").value;
+            const inote = chartMetadata[`inote_${diffKey}`] || "";
+            const bpm = parseFloat(chartMetadata.wholebpm) || 143;
+            notes = parseInote(inote, bpm);
+            currentTime = -1.0; // Give short warm-up delay
+            hitFeedback = [];
+            isPlaying = false;
+        }
+
+        function checkHit(pos) {
+            // Find active notes near the sensor
+            const windowTime = 0.15; // 150ms hit window
+            for (let n of notes) {
+                if (n.pos === pos && !n.hit && Math.abs(n.time - currentTime) < windowTime) {
+                    n.hit = true;
+                    hitFeedback.push({
+                        pos: pos,
+                        text: "PERFECT",
+                        life: 0.4
+                    });
+                    return;
+                }
+            }
+        }
+
+        function update(dt) {
+            if (!isPlaying) return;
+            currentTime += dt;
+
+            // Expire hits & Misses
+            for (let n of notes) {
+                if (!n.hit && currentTime - n.time > 0.2) {
+                    n.hit = true; // Auto-clear missed notes
                 }
             }
 
-            // Handling Difficulty Switching
-            const buttons = document.querySelectorAll(".diff-btn");
-            const viewer = document.getElementById("note-data-viewer");
-            const activeDot = document.getElementById("active-dot");
-            const activeDiffName = document.getElementById("active-diff-name");
+            for (let f of hitFeedback) {
+                f.life -= dt;
+            }
+            hitFeedback = hitFeedback.filter(f => f.life > 0);
+        }
 
-            const loadDifficulty = (diffIdx) => {
-                buttons.forEach(btn => {
-                    if (btn.getAttribute("data-diff") === String(diffIdx)) {
-                        btn.classList.add("active");
-                    } else {
-                        btn.classList.remove("active");
-                    }
-                });
+        function render() {
+            ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-                const diffInfo = diffNames[diffIdx];
-                if (diffInfo) {
-                    activeDot.style.backgroundColor = diffInfo.color;
-                    activeDiffName.textContent = diffInfo.name;
+            // Outer Outer Ring
+            ctx.strokeStyle = "#2a2f4a";
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(CENTER, CENTER, SENSOR_RADIUS, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Inner Ring
+            ctx.strokeStyle = "#1a1d2e";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(CENTER, CENTER, INNER_RADIUS, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw 8 Sensors / Targets
+            for (let i = 1; i <= 8; i++) {
+                const angle = getSensorAngle(i);
+                const x = CENTER + Math.cos(angle) * SENSOR_RADIUS;
+                const y = CENTER + Math.sin(angle) * SENSOR_RADIUS;
+
+                ctx.fillStyle = "#1e2238";
+                ctx.strokeStyle = "#00f2fe";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, y, 22, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Position number text
+                ctx.fillStyle = "#8c93b0";
+                ctx.font = "bold 14px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(i.toString(), x, y);
+            }
+
+            // Draw Flying Notes
+            for (let n of notes) {
+                if (n.hit) continue;
+
+                const timeUntilHit = n.time - currentTime;
+                if (timeUntilHit <= NOTE_SPEED && timeUntilHit >= -0.1) {
+                    const progress = 1 - (timeUntilHit / NOTE_SPEED);
+                    const currentRadius = INNER_RADIUS + progress * (SENSOR_RADIUS - INNER_RADIUS);
+                    const angle = getSensorAngle(n.pos);
+
+                    const nx = CENTER + Math.cos(angle) * currentRadius;
+                    const ny = CENTER + Math.sin(angle) * currentRadius;
+
+                    // Note Style (Ring / Circle)
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 16 * (0.4 + 0.6 * progress), 0, Math.PI * 2);
+                    ctx.fillStyle = n.isBreak ? "#facc15" : (n.isHold ? "#22c55e" : "#ec4899");
+                    ctx.fill();
+                    ctx.strokeStyle = "#fff";
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
                 }
+            }
 
-                const noteKey = `inote_${diffIdx}`;
-                viewer.value = chartData[noteKey] ? chartData[noteKey].trim() : "// No chart data available for this difficulty.";
-            };
+            // Render Hit Feedback Text
+            for (let f of hitFeedback) {
+                const angle = getSensorAngle(f.pos);
+                const fx = CENTER + Math.cos(angle) * (SENSOR_RADIUS - 40);
+                const fy = CENTER + Math.sin(angle) * (SENSOR_RADIUS - 40);
 
-            buttons.forEach(btn => {
-                btn.addEventListener("click", () => {
-                    const diff = btn.getAttribute("data-diff");
-                    loadDifficulty(diff);
-                });
-            });
+                ctx.fillStyle = "#00f2fe";
+                ctx.font = "bold 16px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(f.text, fx, fy);
+            }
+        }
 
-            // Default to MASTER (5)
-            loadDifficulty(5);
-        });
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+
+            update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
