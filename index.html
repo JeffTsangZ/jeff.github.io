@@ -39,7 +39,7 @@
             width: 100%;
             height: 100%;
             display: block;
-            image-rendering: pixelated; /* Ensures sharp retro pixel graphics */
+            image-rendering: pixelated; /* Sharp retro pixel graphics */
         }
 
         /* UI Overlays */
@@ -50,9 +50,11 @@
             right: 10px;
             display: flex;
             justify-content: space-between;
+            align-items: flex-start;
             pointer-events: none;
             font-weight: bold;
             text-shadow: 2px 2px 0px #000;
+            z-index: 5;
         }
 
         .bar-container {
@@ -73,6 +75,30 @@
         #hp-fill { background: #e74c3c; }
         #xp-fill { background: #f1c40f; }
 
+        #save-status {
+            font-size: 11px;
+            color: #2ecc71;
+            margin-top: 4px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #reset-btn {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            background: rgba(231, 76, 60, 0.8);
+            border: 1px solid #fff;
+            color: #fff;
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: 10px;
+            cursor: pointer;
+            z-index: 6;
+            pointer-events: auto;
+        }
+
         #dialogue-box {
             position: absolute;
             bottom: 20px;
@@ -87,6 +113,7 @@
             line-height: 1.4;
             display: none;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            z-index: 5;
         }
 
         #dialogue-title {
@@ -105,6 +132,7 @@
             justify-content: space-between;
             align-items: flex-end;
             pointer-events: none;
+            z-index: 5;
         }
 
         .dpad {
@@ -150,11 +178,16 @@
     <div id="game-wrapper">
         <canvas id="gameCanvas" width="400" height="300"></canvas>
 
+        <button id="reset-btn">Reset Save</button>
+
         <!-- HUD -->
         <div id="hud">
             <div>
                 HP
                 <div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div>
+            </div>
+            <div>
+                <div id="save-status">Game Saved</div>
             </div>
             <div style="text-align: right;">
                 <span id="level-txt">LVL 1</span>
@@ -165,7 +198,7 @@
         <!-- Dialogue UI -->
         <div id="dialogue-box">
             <div id="dialogue-title">Village Elder</div>
-            <div id="dialogue-text">Welcome, Hero! The forest is infested with Slimes. Clear them out to gain experience!</div>
+            <div id="dialogue-text">Welcome back, Hero! Clean up those slimes. Your progress is saved!</div>
         </div>
 
         <!-- Touch Controls -->
@@ -183,9 +216,9 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // State & Systems
         const keys = {};
         let dialogueTimeout;
+        let saveTimeout;
 
         // Player State
         const player = {
@@ -204,7 +237,6 @@
             attackTimer: 0
         };
 
-        // World Objects
         const npc = { x: 200, y: 80, width: 12, height: 12, name: 'Village Elder' };
         
         let enemies = [
@@ -215,6 +247,47 @@
 
         let particles = [];
 
+        // Save & Load Functions
+        function saveGame() {
+            const data = {
+                hp: player.hp,
+                maxHp: player.maxHp,
+                level: player.level,
+                xp: player.xp,
+                nextXp: player.nextXp,
+                x: player.x,
+                y: player.y
+            };
+            localStorage.setItem('rpg_save_data', JSON.stringify(data));
+
+            // Show Save Status indicator
+            const status = document.getElementById('save-status');
+            status.style.opacity = '1';
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => { status.style.opacity = '0'; }, 1000);
+        }
+
+        function loadGame() {
+            const data = localStorage.getItem('rpg_save_data');
+            if (data) {
+                const parsed = JSON.parse(data);
+                player.hp = parsed.hp;
+                player.maxHp = parsed.maxHp;
+                player.level = parsed.level;
+                player.xp = parsed.xp;
+                player.nextXp = parsed.nextXp;
+                player.x = parsed.x || 180;
+                player.y = parsed.y || 140;
+            }
+        }
+
+        function resetGame() {
+            localStorage.removeItem('rpg_save_data');
+            location.reload();
+        }
+
+        document.getElementById('reset-btn').addEventListener('click', resetGame);
+
         // Input Handlers
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
@@ -222,7 +295,6 @@
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        // Mobile Control Bindings
         const bindTouch = (id, keyName) => {
             const el = document.getElementById(id);
             el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
@@ -249,20 +321,42 @@
         function attack() {
             if (player.isAttacking) return;
             player.isAttacking = true;
-            player.attackTimer = 15; // Frames of swing animation
+            player.attackTimer = 15;
 
-            // Calculate hitbox based on direction
-            let hitbox = { x: player.x, y: player.y, w: 16, h: 16 };
-            if (player.facing === 'up') hitbox.y -= 12;
-            if (player.facing === 'down') hitbox.y += 12;
-            if (player.facing === 'left') hitbox.x -= 12;
-            if (player.facing === 'right') hitbox.x += 12;
+            // EXTENDED ATTACK RANGE
+            // Expanded hit area reach and width
+            const reach = 22; 
+            const thickness = 26;
+            
+            let hitbox = { x: player.x, y: player.y, w: thickness, h: thickness };
+            
+            if (player.facing === 'up') {
+                hitbox.x = player.x - 7;
+                hitbox.y = player.y - reach;
+                hitbox.w = thickness;
+                hitbox.h = reach;
+            } else if (player.facing === 'down') {
+                hitbox.x = player.x - 7;
+                hitbox.y = player.y + player.height;
+                hitbox.w = thickness;
+                hitbox.h = reach;
+            } else if (player.facing === 'left') {
+                hitbox.x = player.x - reach;
+                hitbox.y = player.y - 7;
+                hitbox.w = reach;
+                hitbox.h = thickness;
+            } else if (player.facing === 'right') {
+                hitbox.x = player.x + player.width;
+                hitbox.y = player.y - 7;
+                hitbox.w = reach;
+                hitbox.h = thickness;
+            }
 
-            // Damage Enemies
+            // Damage Check
             enemies.forEach(e => {
                 if (rectOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h, e.x, e.y, e.width, e.height)) {
                     e.hp -= 15 + (player.level * 2);
-                    createBurst(e.x, e.y, '#e74c3c');
+                    createBurst(e.x + e.width/2, e.y + e.height/2, '#e74c3c');
                     if (e.hp <= 0) {
                         gainXp(25);
                     }
@@ -282,6 +376,7 @@
                 createBurst(player.x, player.y, '#f1c40f');
             }
             updateHUD();
+            saveGame();
         }
 
         function updateHUD() {
@@ -303,34 +398,29 @@
         }
 
         function rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
-            return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > x2;
+            return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
         }
 
-        // --- GAME LOOP ---
         function update() {
-            // Player Movement
             let dx = 0, dy = 0;
             if (keys['w'] || keys['arrowup']) { dy -= 1; player.facing = 'up'; }
             if (keys['s'] || keys['arrowdown']) { dy += 1; player.facing = 'down'; }
             if (keys['a'] || keys['arrowleft']) { dx -= 1; player.facing = 'left'; }
             if (keys['d'] || keys['arrowright']) { dx += 1; player.facing = 'right'; }
 
-            if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; } // Normalize diagonal
+            if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
 
             player.x += dx * player.speed;
             player.y += dy * player.speed;
 
-            // World Boundaries
             player.x = Math.max(10, Math.min(378, player.x));
             player.y = Math.max(10, Math.min(278, player.y));
 
-            // Attack cooldown reset
             if (player.isAttacking) {
                 player.attackTimer--;
                 if (player.attackTimer <= 0) player.isAttacking = false;
             }
 
-            // NPC Interaction Distance
             const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
             if (distToNpc < 20 && !document.getElementById('dialogue-box').style.display.includes('block')) {
                 showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
@@ -339,14 +429,12 @@
             // Update Enemies
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
-                // Simple AI Movement
                 e.x += e.vx * e.speed;
                 e.y += e.vy * e.speed;
 
                 if (e.x < 20 || e.x > 370) e.vx *= -1;
                 if (e.y < 20 || e.y > 270) e.vy *= -1;
 
-                // Player Collision (Damage)
                 if (rectOverlap(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
                     player.hp -= 0.3;
                     updateHUD();
@@ -356,20 +444,20 @@
                         player.y = 140;
                         showDialogue('DEFEATED', 'You passed out and woke up back in town.');
                         updateHUD();
+                        saveGame();
                     }
                 }
             });
 
-            // Respawn Slimes if cleared
             if (enemies.length === 0) {
+                const baseHp = 30 + (player.level * 5);
                 enemies.push(
-                    { x: 50, y: 50, width: 10, height: 10, hp: 30 + (player.level*5), maxHp: 30, speed: 0.6, vx: 1, vy: 1 },
-                    { x: 320, y: 220, width: 10, height: 10, hp: 30 + (player.level*5), maxHp: 30, speed: 0.6, vx: -1, vy: 1 }
+                    { x: 50, y: 50, width: 10, height: 10, hp: baseHp, maxHp: baseHp, speed: 0.6, vx: 1, vy: 1 },
+                    { x: 320, y: 220, width: 10, height: 10, hp: baseHp, maxHp: baseHp, speed: 0.6, vx: -1, vy: 1 }
                 );
                 showDialogue('WARNING', 'More slimes have appeared!');
             }
 
-            // Particles
             particles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -381,47 +469,67 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Map Background (Grid / Grass Effect)
+            // Ground
             ctx.fillStyle = '#2d5a27';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Map Details (Pebbles/Flowers)
             ctx.fillStyle = '#1e3f1b';
             ctx.fillRect(40, 40, 4, 4);
             ctx.fillRect(320, 80, 6, 6);
             ctx.fillRect(120, 240, 4, 4);
 
-            // Draw NPC
-            ctx.fillStyle = '#3498db'; // Blue tunic
+            // NPC
+            ctx.fillStyle = '#3498db';
             ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
-            ctx.fillStyle = '#f1c40f'; // Gold hat
+            ctx.fillStyle = '#f1c40f';
             ctx.fillRect(npc.x + 2, npc.y - 3, 8, 4);
 
-            // Draw Enemies (Slimes)
+            // Enemies (with Dynamic HP bar if damaged)
             enemies.forEach(e => {
                 ctx.fillStyle = '#2ecc71';
                 ctx.fillRect(e.x, e.y, e.width, e.height);
-                // Slime Eyes
                 ctx.fillStyle = '#000';
                 ctx.fillRect(e.x + 2, e.y + 3, 2, 2);
                 ctx.fillRect(e.x + 6, e.y + 3, 2, 2);
+
+                // DYNAMIC ENEMY HP BAR (Displays when HP is not full)
+                if (e.hp < e.maxHp) {
+                    const barW = 14;
+                    const barH = 3;
+                    const bx = e.x + (e.width / 2) - (barW / 2);
+                    const by = e.y - 6;
+
+                    // Bar background
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+
+                    // Bar fill
+                    const pct = Math.max(0, e.hp / e.maxHp);
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillRect(bx, by, barW * pct, barH);
+                }
             });
 
-            // Draw Player
-            ctx.fillStyle = '#e67e22'; // Orange/Red Hero Armor
+            // Player
+            ctx.fillStyle = '#e67e22';
             ctx.fillRect(player.x, player.y, player.width, player.height);
 
-            // Player Sword Swing Visual
+            // EXTENDED VISUAL SWORD SWEEP
             if (player.isAttacking) {
                 ctx.fillStyle = '#ecf0f1';
                 let sx = player.x, sy = player.y;
-                if (player.facing === 'up') { sy -= 8; ctx.fillRect(sx + 2, sy, 8, 6); }
-                if (player.facing === 'down') { sy += 12; ctx.fillRect(sx + 2, sy, 8, 6); }
-                if (player.facing === 'left') { sx -= 8; ctx.fillRect(sx, sy + 2, 6, 8); }
-                if (player.facing === 'right') { sx += 12; ctx.fillRect(sx, sy + 2, 6, 8); }
+                if (player.facing === 'up') {
+                    ctx.fillRect(sx - 7, sy - 22, 26, 20);
+                } else if (player.facing === 'down') {
+                    ctx.fillRect(sx - 7, sy + player.height + 2, 26, 20);
+                } else if (player.facing === 'left') {
+                    ctx.fillRect(sx - 22, sy - 7, 20, 26);
+                } else if (player.facing === 'right') {
+                    ctx.fillRect(sx + player.width + 2, sy - 7, 20, 26);
+                }
             }
 
-            // Draw Particles
+            // Particles
             particles.forEach(p => {
                 ctx.fillStyle = p.color;
                 ctx.fillRect(p.x, p.y, 2, 2);
@@ -434,7 +542,11 @@
             requestAnimationFrame(loop);
         }
 
-        // Initialize HUD & Start
+        // Auto Save interval every 5 seconds
+        setInterval(saveGame, 5000);
+
+        // Init
+        loadGame();
         updateHUD();
         loop();
     </script>
