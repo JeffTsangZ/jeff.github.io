@@ -428,7 +428,7 @@
       box-shadow: 0 0 14px #ffea00, inset 0 0 6px #ffea00;
     }
 
-    /* MAIMAI TAP NOTE (4 CONVERGING TRIANGLES) */
+    /* MAIMAI TAP NOTE (4 CONVERGING TRIANGLES - FIXED POSITION) */
     .maimai-tap-note {
       position: absolute;
       width: 44px;
@@ -503,7 +503,7 @@
       <div class="game-card" onclick="launchGame('maimai')">
         <span class="tag">CIRCLE RING</span>
         <h3>Ring Rhythm</h3>
-        <p>Inspired by <b>maimai</b>. Spawns Red & Yellow Doughnuts + Blue "TAP" converging squares!</p>
+        <p>Inspired by <b>maimai</b>. Spawns Red & Yellow Doughnuts + Fixed Position Blue TAP converging squares!</p>
         <button class="btn">Play Ring Rhythm</button>
       </div>
 
@@ -941,9 +941,14 @@
             note.spawned = true;
 
             if (note.isTap) {
-              // CREATE MAIMAI TAP NOTE (4 CONVERGING TRIANGLES)
+              // CREATE MAIMAI TAP NOTE AT FIXED SENSOR POSITION
               const el = document.createElement('div');
               el.className = 'maimai-tap-note';
+
+              // Position fixed directly over target sensor
+              const sensor = maimaiSensors[note.sensor];
+              el.style.left = `${sensor.xPct}%`;
+              el.style.top = `${sensor.yPct}%`;
 
               const t1 = document.createElement('div'); t1.className = 'tap-tri tap-tri-tl';
               const t2 = document.createElement('div'); t2.className = 'tap-tri tap-tri-tr';
@@ -971,20 +976,21 @@
             const progress = Math.max(0, 1 - ((note.time - currentTime) / travelTime));
             const sensor = maimaiSensors[note.sensor];
             
-            const currentDistPct = progress * targetRadiusPct;
-            const currentXPct = centerPct + currentDistPct * Math.cos(sensor.angle);
-            const currentYPct = centerPct + currentDistPct * Math.sin(sensor.angle);
-
-            note.element.style.left = `${currentXPct}%`;
-            note.element.style.top = `${currentYPct}%`;
-
-            // TAP CONVERGING MATH: 4 triangles close in as progress approaches 1.0
             if (note.isTap) {
-              const gap = Math.max(0, (1 - progress) * 22); // Gap shrinks to zero
+              // TAP CONVERGING MATH: Fixed position, 4 triangles move inward as progress reaches 1.0
+              const gap = Math.max(0, (1 - progress) * 25); // Gap closes down to zero
               note.triElements[0].style.transform = `translate(${-gap}px, ${-gap}px)`;
               note.triElements[1].style.transform = `translate(${gap}px, ${-gap}px)`;
               note.triElements[2].style.transform = `translate(${gap}px, ${gap}px)`;
               note.triElements[3].style.transform = `translate(${-gap}px, ${gap}px)`;
+            } else {
+              // DOUGHNUT NOTES MOVE FROM CENTER TO SENSOR EDGE
+              const currentDistPct = progress * targetRadiusPct;
+              const currentXPct = centerPct + currentDistPct * Math.cos(sensor.angle);
+              const currentYPct = centerPct + currentDistPct * Math.sin(sensor.angle);
+
+              note.element.style.left = `${currentXPct}%`;
+              note.element.style.top = `${currentYPct}%`;
             }
 
             if (currentTime > note.time + 0.2) {
