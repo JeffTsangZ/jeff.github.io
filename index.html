@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>maimai Mini Player - only my railgun</title>
     <style>
         :root {
@@ -17,27 +17,34 @@
             margin: 0;
             padding: 0;
             user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        body {
+        html, body {
+            width: 100%;
+            height: 100%;
+            /* Disables double-tap to zoom across mobile browsers */
+            touch-action: manipulation;
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
+            justify-content: flex-start;
+            overflow-x: hidden;
+            padding: 10px;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .title {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 800;
             background: linear-gradient(90deg, #00f2fe, #4facfe);
             -webkit-background-clip: text;
@@ -45,7 +52,7 @@
         }
 
         .subtitle {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #7b849b;
         }
 
@@ -55,6 +62,7 @@
             height: 500px;
             max-width: 95vw;
             max-height: 95vw;
+            margin: 0 auto;
         }
 
         canvas {
@@ -64,15 +72,18 @@
             border-radius: 50%;
             box-shadow: 0 0 30px rgba(0, 242, 254, 0.15), inset 0 0 15px rgba(0,0,0,0.8);
             display: block;
+            touch-action: none; /* Prevents touch gestures from causing scroll/zoom on canvas */
         }
 
         .controls {
-            margin-top: 15px;
+            margin-top: 12px;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
             flex-wrap: wrap;
             justify-content: center;
+            width: 100%;
+            max-width: 500px;
         }
 
         .speed-control {
@@ -88,7 +99,7 @@
         }
 
         .speed-control input[type="range"] {
-            width: 90px;
+            width: 80px;
             cursor: pointer;
             accent-color: var(--accent-color);
         }
@@ -102,12 +113,13 @@
             background-color: var(--panel-bg);
             color: var(--text-color);
             border: 1px solid #2d334d;
-            padding: 8px 16px;
+            padding: 8px 14px;
             border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
             outline: none;
             transition: all 0.2s;
+            font-size: 0.85rem;
         }
 
         select:hover, button:hover {
@@ -125,10 +137,34 @@
         }
 
         .key-hints {
-            margin-top: 10px;
+            margin-top: 8px;
             font-size: 0.75rem;
             color: #636b83;
             text-align: center;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            .game-container {
+                /* Maximizes size on mobile screens */
+                width: 98vw;
+                height: 98vw;
+                max-width: 98vw;
+                max-height: 98vw;
+            }
+
+            .title {
+                font-size: 1.2rem;
+            }
+
+            .controls {
+                gap: 8px;
+            }
+
+            select, button, .speed-control {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
@@ -163,7 +199,7 @@
     </div>
 
     <div class="key-hints">
-        Press key buttons <strong>1-8</strong> or click target zones to hit notes!
+        Press keys <strong>1-8</strong> or tap sensors on screen!
     </div>
 
     <script id="chart-data" type="text/plain">
@@ -509,13 +545,12 @@ E
     </script>
 
     <script>
-        // Engine parameters
         const CANVAS_SIZE = 600;
         const CENTER = CANVAS_SIZE / 2;
         const SENSOR_RADIUS = 220;
         const INNER_RADIUS = 30;
         
-        let noteSpeedSetting = 5.0; // Standard rhythm speed value (1.0 to 10.0)
+        let noteSpeedSetting = 5.0;
         let canvas, ctx;
         let isPlaying = false;
         let currentTime = 0;
@@ -523,13 +558,10 @@ E
         let notes = [];
         let hitFeedback = [];
 
-        // Converts speed setting (1.0 - 10.0) to travel time in seconds
         function getTravelTime() {
-            // Speed 1.0 = ~3.0s (Slow), Speed 5.0 = ~1.2s (Default), Speed 10.0 = ~0.4s (Fast)
             return 3.5 / noteSpeedSetting;
         }
 
-        // Parse Simai text block
         function parseMetadata(text) {
             const meta = {};
             const lines = text.split("\n");
@@ -549,7 +581,6 @@ E
 
         const chartMetadata = parseMetadata(document.getElementById("chart-data").textContent);
 
-        // Parse Simai Inote string into playable timestamps
         function parseInote(simaiStr, defaultBpm = 143) {
             const parsedNotes = [];
             let currentBpm = defaultBpm;
@@ -607,6 +638,11 @@ E
             canvas = document.getElementById("gameCanvas");
             ctx = canvas.getContext("2d");
 
+            // Prevent double-click zoom programmatically on iOS/Safari
+            document.addEventListener('dblclick', function(e) {
+                e.preventDefault();
+            }, { passive: false });
+
             const speedSlider = document.getElementById("speedSlider");
             const speedVal = document.getElementById("speedVal");
 
@@ -633,18 +669,26 @@ E
                 }
             });
 
-            canvas.addEventListener("pointerdown", (e) => {
+            // Handles multi-touch and single taps without zoom lag
+            const handleTouch = (e) => {
+                e.preventDefault();
                 const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width) - CENTER;
-                const y = (e.clientY - rect.top) * (CANVAS_SIZE / rect.height) - CENTER;
+                const touches = e.changedTouches ? e.changedTouches : [e];
 
-                let angle = Math.atan2(y, x) * (180 / Math.PI) + 67.5;
-                if (angle < 0) angle += 360;
-                const pos = Math.floor(angle / 45) + 1;
-                if (pos >= 1 && pos <= 8) {
-                    checkHit(pos);
+                for (let i = 0; i < touches.length; i++) {
+                    const x = (touches[i].clientX - rect.left) * (CANVAS_SIZE / rect.width) - CENTER;
+                    const y = (touches[i].clientY - rect.top) * (CANVAS_SIZE / rect.height) - CENTER;
+
+                    let angle = Math.atan2(y, x) * (180 / Math.PI) + 67.5;
+                    if (angle < 0) angle += 360;
+                    const pos = Math.floor(angle / 45) + 1;
+                    if (pos >= 1 && pos <= 8) {
+                        checkHit(pos);
+                    }
                 }
-            });
+            };
+
+            canvas.addEventListener("pointerdown", handleTouch, { passive: false });
 
             resetGame();
             requestAnimationFrame(gameLoop);
@@ -729,7 +773,6 @@ E
                 ctx.fillText(i.toString(), x, y);
             }
 
-            // Calculate travel time dynamically based on speed slider
             const travelTime = getTravelTime();
 
             // Notes
