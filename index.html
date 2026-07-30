@@ -409,31 +409,30 @@
       box-shadow: 0 0 15px #ff00cc;
     }
 
-    /* Maimai Red Doughnut Note */
+    /* MAIMAI DOUGHNUT NOTES */
     .maimai-note {
       position: absolute;
       width: 10%;
       height: 10%;
       border-radius: 50%;
       background: transparent;
-      border: 5px solid #ff4757;
-      box-shadow: 0 0 12px #ff4757, inset 0 0 8px #ff4757;
+      border: 6px solid #ff3344; /* Single: Red Doughnut */
+      box-shadow: 0 0 14px #ff3344, inset 0 0 6px #ff3344;
       pointer-events: none;
       z-index: 8;
       transform: translate(-50%, -50%);
     }
 
-    /* Maimai Yellow Doughnut Note (Dual / Simultaneous) */
     .maimai-note.dual-note {
-      border-color: #ffd32a;
-      box-shadow: 0 0 12px #ffd32a, inset 0 0 8px #ffd32a;
+      border-color: #ffea00; /* Pair/Dual: Yellow Doughnut */
+      box-shadow: 0 0 14px #ffea00, inset 0 0 6px #ffea00;
     }
 
-    /* Maimai TAP Note Container & Blue Triangles */
+    /* MAIMAI TAP NOTE (4 CONVERGING TRIANGLES) */
     .maimai-tap-note {
       position: absolute;
-      width: 10%;
-      height: 10%;
+      width: 44px;
+      height: 44px;
       pointer-events: none;
       z-index: 9;
       transform: translate(-50%, -50%);
@@ -444,29 +443,31 @@
       width: 0;
       height: 0;
       border-style: solid;
-      filter: drop-shadow(0 0 6px #00a8ff);
     }
 
-    /* 4 Blue Triangles forming a full square when combined */
+    /* Top-Left Triangle */
     .tap-tri-tl {
-      top: -12px; left: -12px;
-      border-width: 16px 16px 0 0;
-      border-color: #00a8ff transparent transparent transparent;
+      top: 0; left: 0;
+      border-width: 20px 20px 0 0;
+      border-color: #00d2ff transparent transparent transparent;
     }
+    /* Top-Right Triangle */
     .tap-tri-tr {
-      top: -12px; right: -12px;
-      border-width: 0 16px 16px 0;
-      border-color: transparent #00a8ff transparent transparent;
+      top: 0; right: 0;
+      border-width: 0 20px 20px 0;
+      border-color: transparent #00d2ff transparent transparent;
     }
-    .tap-tri-bl {
-      bottom: -12px; left: -12px;
-      border-width: 16px 0 0 16px;
-      border-color: transparent transparent transparent #00a8ff;
-    }
+    /* Bottom-Right Triangle */
     .tap-tri-br {
-      bottom: -12px; right: -12px;
-      border-width: 0 0 16px 16px;
-      border-color: transparent transparent #00a8ff transparent;
+      bottom: 0; right: 0;
+      border-width: 0 0 20px 20px;
+      border-color: transparent transparent #00d2ff transparent;
+    }
+    /* Bottom-Left Triangle */
+    .tap-tri-bl {
+      bottom: 0; left: 0;
+      border-width: 20px 0 0 20px;
+      border-color: transparent transparent transparent #00d2ff;
     }
   </style>
 </head>
@@ -502,7 +503,7 @@
       <div class="game-card" onclick="launchGame('maimai')">
         <span class="tag">CIRCLE RING</span>
         <h3>Ring Rhythm</h3>
-        <p>Inspired by <b>maimai</b>. Spawns red/yellow doughnut notes & blue 4-triangle TAP squares from center ring!</p>
+        <p>Inspired by <b>maimai</b>. Spawns Red & Yellow Doughnuts + Blue "TAP" converging squares!</p>
         <button class="btn">Play Ring Rhythm</button>
       </div>
 
@@ -663,7 +664,7 @@
     let mousePos = { x: 0, y: 0 };
     let maimaiSensors = [];
 
-    // Dynamically Load YouTube API & Initialize Safe Race-Condition Handling
+    // Initialize YouTube Players
     function initYouTubePlayers() {
       players.keys = new YT.Player('player-keys', { 
         height: '100%', width: '100%', videoId: 'vUvLQioor3U', 
@@ -688,7 +689,7 @@
 
     function onSinglePlayerReady() {
       playersReadyCount++;
-      if (playersReadyCount >= 1) { // Ready to play as soon as players mount
+      if (playersReadyCount >= 1) { 
         ytReady = true;
         document.querySelectorAll('.playBtn').forEach(b => {
           b.disabled = false;
@@ -698,10 +699,10 @@
     }
 
     function onPlayerError(e) {
-      alert("YouTube Video Error: Unable to play this video. It may be restricted, embed-disabled, or unavailable.");
+      alert("YouTube Video Error: Unable to play this video. It may be restricted or embed-disabled.");
     }
 
-    // Inject Script Safely
+    // Inject YouTube API Script
     (function loadYTScript() {
       const tag = document.createElement('script');
       tag.src = "https://www.youtube.com/iframe_api";
@@ -753,15 +754,15 @@
       return (match && match[2].length === 11) ? match[2] : url;
     }
 
-    /* Init Maimai Dynamic Sensor Coordinates */
+    /* Maimai Dynamic Sensors */
     function initMaimaiSensors() {
       const field = document.getElementById('maimai-field');
       document.querySelectorAll('.maimai-sensor').forEach(el => el.remove());
       maimaiSensors = [];
 
-      const radiusPct = 42; // percentage from center
-      const centerX = 50;   // percentage
-      const centerY = 50;   // percentage
+      const radiusPct = 42; 
+      const centerX = 50;   
+      const centerY = 50;   
 
       for (let i = 0; i < 8; i++) {
         const angle = (i * 45 - 90) * (Math.PI / 180);
@@ -824,8 +825,8 @@
         const formattedTime = parseFloat(time.toFixed(3));
         const sensor1 = Math.floor(Math.random() * 8);
 
-        // Decide maimai note type: 'doughnut' or 'tap'
-        const isTapNote = (mode === 'maimai' && Math.random() < 0.3);
+        // Check if note should be a TAP note (blue converging square)
+        const isTapNote = (mode === 'maimai' && Math.random() < 0.25);
 
         // Primary note
         notes.push({
@@ -833,21 +834,22 @@
           lane: Math.floor(Math.random() * 7),
           sensor: sensor1,
           isDual: false,
-          type: isTapNote ? 'tap' : 'doughnut',
+          isTap: isTapNote,
           xPct: Math.floor(Math.random() * 70) + 15,
           yPct: Math.floor(Math.random() * 70) + 15,
           num: (circleCounter % 9) + 1,
-          spawned: false, hit: false, element: null
+          spawned: false, hit: false, element: null,
+          triElements: []
         });
 
-        // Two-Hand Mode Logic
-        if (mode === 'maimai' && maimaiHandMode === 'two' && Math.random() < 0.35) {
+        // Dual Note Logic
+        if (mode === 'maimai' && maimaiHandMode === 'two' && !isTapNote && Math.random() < 0.35) {
           let sensor2 = (sensor1 + Math.floor(Math.random() * 7) + 1) % 8;
           notes.push({
             time: formattedTime,
             sensor: sensor2,
             isDual: true,
-            type: 'doughnut', // Dual notes are yellow doughnuts
+            isTap: false,
             spawned: false, hit: false, element: null
           });
         }
@@ -935,64 +937,54 @@
         const targetRadiusPct = 42; 
 
         notes.forEach(note => {
-          // SPAWN AT CENTER
           if (!note.spawned && currentTime >= (note.time - travelTime)) {
             note.spawned = true;
-            
-            if (note.type === 'tap') {
-              // TAP Note (4 Triangles combining into a square)
+
+            if (note.isTap) {
+              // CREATE MAIMAI TAP NOTE (4 CONVERGING TRIANGLES)
               const el = document.createElement('div');
               el.className = 'maimai-tap-note';
-              el.innerHTML = `
-                <div class="tap-tri tap-tri-tl"></div>
-                <div class="tap-tri tap-tri-tr"></div>
-                <div class="tap-tri tap-tri-bl"></div>
-                <div class="tap-tri tap-tri-br"></div>
-              `;
-              el.style.left = `${centerPct}%`;
-              el.style.top = `${centerPct}%`;
+
+              const t1 = document.createElement('div'); t1.className = 'tap-tri tap-tri-tl';
+              const t2 = document.createElement('div'); t2.className = 'tap-tri tap-tri-tr';
+              const t3 = document.createElement('div'); t3.className = 'tap-tri tap-tri-br';
+              const t4 = document.createElement('div'); t4.className = 'tap-tri tap-tri-bl';
+
+              el.appendChild(t1); el.appendChild(t2); el.appendChild(t3); el.appendChild(t4);
               document.getElementById('maimai-field').appendChild(el);
+
               note.element = el;
-              note.triangles = {
-                tl: el.querySelector('.tap-tri-tl'),
-                tr: el.querySelector('.tap-tri-tr'),
-                bl: el.querySelector('.tap-tri-bl'),
-                br: el.querySelector('.tap-tri-br')
-              };
+              note.triElements = [t1, t2, t3, t4];
             } else {
-              // Doughnut Note (Red for single, Yellow for dual)
+              // CREATE RED / YELLOW DOUGHNUT NOTE
               const el = document.createElement('div');
               el.className = `maimai-note ${note.isDual ? 'dual-note' : ''}`;
               el.style.left = `${centerPct}%`;
               el.style.top = `${centerPct}%`;
+
               document.getElementById('maimai-field').appendChild(el);
               note.element = el;
             }
           }
 
           if (note.spawned && !note.hit) {
-            // Calculate progress strictly from 0 (Center) to 1 (Outer Sensor)
             const progress = Math.max(0, 1 - ((note.time - currentTime) / travelTime));
             const sensor = maimaiSensors[note.sensor];
             
             const currentDistPct = progress * targetRadiusPct;
-
             const currentXPct = centerPct + currentDistPct * Math.cos(sensor.angle);
             const currentYPct = centerPct + currentDistPct * Math.sin(sensor.angle);
 
             note.element.style.left = `${currentXPct}%`;
             note.element.style.top = `${currentYPct}%`;
 
-            if (note.type === 'tap' && note.triangles) {
-              // Animate 4 triangles flying inwards to lock into a square at hit time
-              const offset = (1 - Math.min(1, progress)) * 18; // offset contracts to 0
-              note.triangles.tl.style.transform = `translate(${offset}px, ${offset}px)`;
-              note.triangles.tr.style.transform = `translate(${-offset}px, ${offset}px)`;
-              note.triangles.bl.style.transform = `translate(${offset}px, ${-offset}px)`;
-              note.triangles.br.style.transform = `translate(${-offset}px, ${-offset}px)`;
-            } else {
-              // Scale up the doughnut as it approaches target
-              note.element.style.transform = `translate(-50%, -50%) scale(${0.4 + progress * 0.6})`;
+            // TAP CONVERGING MATH: 4 triangles close in as progress approaches 1.0
+            if (note.isTap) {
+              const gap = Math.max(0, (1 - progress) * 22); // Gap shrinks to zero
+              note.triElements[0].style.transform = `translate(${-gap}px, ${-gap}px)`;
+              note.triElements[1].style.transform = `translate(${gap}px, ${-gap}px)`;
+              note.triElements[2].style.transform = `translate(${gap}px, ${gap}px)`;
+              note.triElements[3].style.transform = `translate(${-gap}px, ${gap}px)`;
             }
 
             if (currentTime > note.time + 0.2) {
@@ -1032,7 +1024,6 @@
 
     function checkHitOsu() {
       if (!isPlaying || activeMode !== 'osu') return;
-      const currentTime = players.osu.getCurrentTime();
       const activeNotes = notes.filter(n => n.spawned && !n.hit);
       if (activeNotes.length === 0) return;
 
@@ -1117,7 +1108,6 @@
       mousePos.y = e.clientY;
     });
 
-    // Resize Event Adjustments
     window.addEventListener('resize', () => {
       if (activeMode === 'maimai') initMaimaiSensors();
     });
