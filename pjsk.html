@@ -92,7 +92,7 @@
             touch-action: none;
         }
 
-        /* Floating Controls */
+        /* In-game Restart Button */
         .controls {
             position: absolute;
             bottom: 6px;
@@ -118,7 +118,7 @@
             background: rgba(102, 252, 241, 0.4);
         }
 
-        /* Start Overlay */
+        /* Start Overlay (Title Page) */
         .start-overlay {
             position: absolute;
             inset: 0;
@@ -128,7 +128,7 @@
             justify-content: center;
             align-items: center;
             z-index: 20;
-            gap: 12px;
+            gap: 16px;
         }
 
         .start-overlay h1 {
@@ -144,6 +144,33 @@
             color: #aaa;
             max-width: 80%;
             text-align: center;
+        }
+
+        /* Title Screen Button Group */
+        .title-btn-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn-play {
+            padding: 10px 28px;
+            font-size: 1rem;
+            background: var(--accent-cyan);
+            color: #000;
+            border: none;
+            font-weight: 800;
+            border-radius: 20px;
+        }
+
+        .btn-fullscreen-title {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid var(--accent-cyan);
+            font-weight: 700;
+            border-radius: 20px;
         }
 
         /* Orientation Warning */
@@ -176,15 +203,20 @@
 
         <div class="game-container" id="gameContainer">
             <canvas id="gameCanvas"></canvas>
+            
+            <!-- Title Screen Overlay -->
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
                 <p>Hold phone horizontally with both thumbs. Tap the 8 bottom target zones as notes reach the judgment line.</p>
-                <button id="startBtn" style="padding: 10px 24px; font-size: 1rem; background: var(--accent-cyan); color: #000; border: none; font-weight: 800; border-radius: 20px;">PLAY GAME</button>
+                
+                <div class="title-btn-group">
+                    <button id="startBtn" class="btn-play">PLAY GAME</button>
+                    <button id="titleFullscreenBtn" class="btn-fullscreen-title">Toggle Full Screen</button>
+                </div>
             </div>
         </div>
 
         <div class="controls">
-            <button id="fullscreenBtn">Full Screen</button>
             <button id="restartBtn">Restart</button>
         </div>
     </div>
@@ -208,8 +240,8 @@
         let hitEffects = [];
 
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.32; // Note frequency
-        const NOTE_SPEED = 1.1; // Speed factor
+        const SPAWN_INTERVAL = 0.32; 
+        const NOTE_SPEED = 1.1; 
 
         function initAudio() {
             if (!audioCtx) {
@@ -223,7 +255,6 @@
             const gain = audioCtx.createGain();
             osc.type = 'triangle';
             
-            // Pitch scales across the 8 lanes
             const freq = 300 + (lane * 65);
             osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.05);
@@ -265,7 +296,6 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
                 
-                // Spawn 1 or 2 notes across 8 lanes
                 const lane1 = Math.floor(Math.random() * LANES);
                 notes.push({ lane: lane1, progress: 0, hit: false });
                 
@@ -285,7 +315,6 @@
                 if (!n.hit) {
                     n.progress += NOTE_SPEED * dt;
 
-                    // Miss detection (past judgment line at 0.85 progress)
                     if (n.progress > 0.98) {
                         n.hit = true;
                         combo = 0;
@@ -307,7 +336,6 @@
 
             for (let n of notes) {
                 if (n.lane === laneIndex && !n.hit) {
-                    // Target judgment is around progress = 0.85
                     const diff = Math.abs(n.progress - 0.85);
                     if (diff <= 0.12) {
                         n.hit = true;
@@ -347,14 +375,12 @@
             document.getElementById('combo').textContent = `${combo} COMBO`;
         }
 
-        // Perspective projection helper for CHUNITHM / Sekai 3D Track look
         function getTrackCoords(lane, progress) {
             const topY = canvas.height * 0.15;
             const bottomY = canvas.height * 0.88;
 
             const currentY = topY + (bottomY - topY) * progress;
 
-            // Track width narrows at top (0.35 width) and expands at bottom (0.95 width)
             const topTrackWidth = canvas.width * 0.35;
             const bottomTrackWidth = canvas.width * 0.95;
 
@@ -375,20 +401,16 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const topY = canvas.height * 0.15;
-            const judgeY = canvas.height * 0.88;
 
             // Draw Perspective Lane Lines
             for (let i = 0; i <= LANES; i++) {
-                const pTop = getTrackCoords(0, 0);
-                const pBottom = getTrackCoords(0, 1);
-
                 const topTrackWidth = canvas.width * 0.35;
                 const bottomTrackWidth = canvas.width * 0.95;
 
                 const xTop = ((canvas.width - topTrackWidth) / 2) + (topTrackWidth / LANES) * i;
                 const xBottom = ((canvas.width - bottomTrackWidth) / 2) + (bottomTrackWidth / LANES) * i;
 
-                ctx.strokeStyle = i === 4 ? '#ffffff' : '#1f2833'; // Center divider is bright
+                ctx.strokeStyle = i === 4 ? '#ffffff' : '#1f2833';
                 ctx.lineWidth = i === 4 ? 2 : 1;
                 ctx.beginPath();
                 ctx.moveTo(xTop, topY);
@@ -409,7 +431,7 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Draw Target Touch Zones at Bottom
+            // Draw Target Touch Zones
             for (let i = 0; i < LANES; i++) {
                 const coords = getTrackCoords(i, 0.85);
                 const bottomCoords = getTrackCoords(i, 1.0);
@@ -428,7 +450,7 @@
             for (let n of notes) {
                 if (!n.hit) {
                     const c = getTrackCoords(n.lane, n.progress);
-                    const noteHeight = 10 + n.progress * 8; // Notes grow bigger as they get closer
+                    const noteHeight = 10 + n.progress * 8;
 
                     ctx.fillStyle = LANE_COLORS[n.lane];
                     ctx.shadowColor = LANE_COLORS[n.lane];
@@ -477,7 +499,6 @@
                 const touch = touches[i];
                 const x = touch.clientX - rect.left;
                 
-                // Map screen X to the 8 perspective track zones
                 const topTrackWidth = canvas.width * 0.95;
                 const trackLeft = (canvas.width - topTrackWidth) / 2;
                 const laneWidth = topTrackWidth / LANES;
@@ -514,7 +535,7 @@
 
             document.getElementById('startBtn').addEventListener('click', startGame);
             document.getElementById('restartBtn').addEventListener('click', startGame);
-            document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+            document.getElementById('titleFullscreenBtn').addEventListener('click', toggleFullscreen);
 
             requestAnimationFrame(gameLoop);
         }
