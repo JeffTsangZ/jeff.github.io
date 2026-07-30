@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mobile Web Rhythm Game</title>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --lane-border: #1f2833;
+            --accent-cyan: #66fcf1;
+            --accent-magenta: #ff007f;
+            --text-color: #c5c6c7;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Top Bar & HUD */
+        .hud {
+            width: 100%;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 18, 26, 0.9);
+            z-index: 10;
+        }
+
+        .score-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .score-title {
+            font-size: 0.65rem;
+            letter-spacing: 1px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .score-val {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            font-family: monospace;
+        }
+
+        .combo-box {
+            text-align: right;
+        }
+
+        .combo-val {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        /* Game Canvas Container */
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 480px;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+        }
+
+        /* Bottom Controls */
+        .controls {
+            width: 100%;
+            max-width: 480px;
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            background: rgba(15, 18, 26, 0.9);
+            z-index: 10;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px 12px;
+            background: #1f2833;
+            color: #fff;
+            border: 1px solid #45a29e;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:active {
+            background: #45a29e;
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, #45a29e, #66fcf1);
+            color: #0b0c10;
+            border: none;
+        }
+
+        /* Overlay for Game Start */
+        .start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 12, 16, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            gap: 15px;
+        }
+
+        .start-overlay h1 {
+            font-size: 1.8rem;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
+        }
+
+        .start-overlay p {
+            font-size: 0.9rem;
+            color: #888;
+            max-width: 80%;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hud">
+        <div class="score-box">
+            <span class="score-title">Score</span>
+            <span id="score" class="score-val">000000</span>
+        </div>
+        <div class="combo-box">
+            <span id="combo" class="combo-val">0 COMBO</span>
+        </div>
+    </div>
+
+    <div class="game-container" id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="startOverlay" class="start-overlay">
+            <h1>BEAT RUNNER</h1>
+            <p>Tap lanes at the bottom when falling notes hit the line.</p>
+            <button id="startBtn" class="primary" style="padding: 14px 28px; font-size: 1rem;">PLAY GAME</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="fullscreenBtn">Full Screen</button>
+        <button id="restartBtn">Restart</button>
+    </div>
+
+    <script>
+        const LANES = 4;
+        const LANE_COLORS = ['#ff007f', '#00f2fe', '#00f2fe', '#ff007f'];
+        const JUDGMENT_Y_RATIO = 0.85; // 85% down the screen
+        
+        let canvas, ctx;
+        let score = 0;
+        let combo = 0;
+        let isPlaying = false;
+        let lastTime = 0;
+        let audioCtx = null;
+
+        // Note tracking
+        let notes = [];
+        let activeTouches = new Map();
+        let hitEffects = [];
+
+        // Simple Chart Generator (Song simulation)
+        let spawnTimer = 0;
+        const SPAWN_INTERVAL = 0.45; // Spawn a note roughly every 0.45s
+        const NOTE_SPEED = 0.85; // Screen height per second
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playTapSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+
+        function toggleFullscreen() {
+            const container = document.body;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        function spawnNotes(dt) {
+            spawnTimer += dt;
+            if (spawnTimer >= SPAWN_INTERVAL) {
+                spawnTimer = 0;
+                // Randomly pick 1 or 2 lanes
+                const lane1 = Math.floor(Math.random() * LANES);
+                notes.push({ lane: lane1, y: 0, hit: false });
+                
+                if (Math.random() > 0.7) {
+                    let lane2 = (lane1 + Math.floor(Math.random() * (LANES - 1)) + 1) % LANES;
+                    notes.push({ lane: lane2, y: 0, hit: false });
+                }
+            }
+        }
+
+        function update(dt) {
+            if (!isPlaying) return;
+
+            spawnNotes(dt);
+
+            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
+            const missWindow = 0.12 * canvas.height;
+
+            for (let n of notes) {
+                if (!n.hit) {
+                    n.y += NOTE_SPEED * canvas.height * dt;
+
+                    // Miss detection
+                    if (n.y > judgeY + missWindow) {
+                        n.hit = true;
+                        combo = 0;
+                        updateHUD();
+                        addHitEffect(n.lane, "MISS", "#ff3333");
+                    }
+                }
+            }
+
+            // Clean up old notes & effects
+            notes = notes.filter(n => !n.hit);
+            for (let e of hitEffects) e.life -= dt;
+            hitEffects = hitEffects.filter(e => e.life > 0);
+        }
+
+        function checkLaneHit(laneIndex) {
+            playTapSound();
+            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
+            const hitWindow = 0.1 * canvas.height;
+
+            let hitFound = false;
+
+            for (let n of notes) {
+                if (n.lane === laneIndex && !n.hit) {
+                    const diff = Math.abs(n.y - judgeY);
+                    if (diff <= hitWindow) {
+                        n.hit = true;
+                        hitFound = true;
+
+                        if (diff < hitWindow * 0.4) {
+                            score += 1000;
+                            combo++;
+                            addHitEffect(laneIndex, "PERFECT", "#66fcf1");
+                        } else {
+                            score += 500;
+                            combo++;
+                            addHitEffect(laneIndex, "GREAT", "#ff007f");
+                        }
+                        updateHUD();
+                        break;
+                    }
+                }
+            }
+
+            if (!hitFound) {
+                // Tap on empty lane registers visual touch
+                addHitEffect(laneIndex, "", "rgba(255,255,255,0.2)");
+            }
+        }
+
+        function addHitEffect(lane, text, color) {
+            hitEffects.push({
+                lane: lane,
+                text: text,
+                color: color,
+                life: 0.35
+            });
+        }
+
+        function updateHUD() {
+            document.getElementById('score').textContent = score.toString().padStart(6, '0');
+            document.getElementById('combo').textContent = `${combo} COMBO`;
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const laneWidth = canvas.width / LANES;
+            const judgeY = canvas.height * JUDGMENT_Y_RATIO;
+
+            // Draw Lanes & Perspective Lines
+            for (let i = 0; i <= LANES; i++) {
+                ctx.strokeStyle = '#1f2833';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(i * laneWidth, 0);
+                ctx.lineTo(i * laneWidth, canvas.height);
+                ctx.stroke();
+            }
+
+            // Draw Judgment Bar
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, judgeY);
+            ctx.lineTo(canvas.width, judgeY);
+            ctx.stroke();
+
+            // Draw Target Tap Buttons at Bottom
+            for (let i = 0; i < LANES; i++) {
+                ctx.fillStyle = LANE_COLORS[i] + '33';
+                ctx.fillRect(i * laneWidth + 2, judgeY, laneWidth - 4, canvas.height - judgeY);
+            }
+
+            // Draw Falling Notes
+            const noteHeight = 16;
+            for (let n of notes) {
+                if (!n.hit) {
+                    ctx.fillStyle = LANE_COLORS[n.lane];
+                    ctx.shadowColor = LANE_COLORS[n.lane];
+                    ctx.shadowBlur = 10;
+
+                    ctx.fillRect(
+                        n.lane * laneWidth + 6,
+                        n.y - noteHeight / 2,
+                        laneWidth - 12,
+                        noteHeight
+                    );
+
+                    ctx.shadowBlur = 0; // reset
+                }
+            }
+
+            // Draw Hit Effects
+            for (let e of hitEffects) {
+                const x = e.lane * laneWidth + laneWidth / 2;
+                
+                // Active lane highlight
+                ctx.fillStyle = e.color;
+                ctx.globalAlpha = e.life / 0.35 * 0.3;
+                ctx.fillRect(e.lane * laneWidth, judgeY, laneWidth, canvas.height - judgeY);
+                ctx.globalAlpha = 1.0;
+
+                if (e.text) {
+                    ctx.fillStyle = e.color;
+                    ctx.font = 'bold 20px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(e.text, x, judgeY - 30);
+                }
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            update(dt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleTouch(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touches = e.changedTouches;
+
+            for (let i = 0; i < touches.length; i++) {
+                const touch = touches[i];
+                const x = touch.clientX - rect.left;
+                const laneIndex = Math.floor(x / (canvas.width / LANES));
+
+                if (laneIndex >= 0 && laneIndex < LANES) {
+                    checkLaneHit(laneIndex);
+                }
+            }
+        }
+
+        function startGame() {
+            initAudio();
+            score = 0;
+            combo = 0;
+            notes = [];
+            hitEffects = [];
+            isPlaying = true;
+            updateHUD();
+            document.getElementById('startOverlay').style.display = 'none';
+        }
+
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Prevent double-tap zoom
+            document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
+            // Touch events on Canvas
+            canvas.addEventListener('touchstart', handleTouch, { passive: false });
+
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('restartBtn').addEventListener('click', startGame);
+            document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
