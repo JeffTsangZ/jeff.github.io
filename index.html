@@ -71,6 +71,31 @@
             display: flex;
             gap: 12px;
             align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--panel-bg);
+            border: 1px solid #2d334d;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .speed-control input[type="range"] {
+            width: 90px;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+        }
+
+        .speed-val {
+            min-width: 28px;
+            color: var(--accent-color);
         }
 
         select, button {
@@ -126,6 +151,13 @@
             <option value="5" selected>MASTER (Lv.11)</option>
             <option value="6">Re:MASTER (Lv.12+)</option>
         </select>
+
+        <div class="speed-control">
+            <span>Speed:</span>
+            <input type="range" id="speedSlider" min="1.0" max="10.0" step="0.5" value="5.0">
+            <span id="speedVal" class="speed-val">5.0</span>
+        </div>
+
         <button id="playBtn" class="primary">Play / Pause</button>
         <button id="resetBtn">Reset</button>
     </div>
@@ -482,14 +514,20 @@ E
         const CENTER = CANVAS_SIZE / 2;
         const SENSOR_RADIUS = 220;
         const INNER_RADIUS = 30;
-        const NOTE_SPEED = 1.8; // seconds from center to ring
         
+        let noteSpeedSetting = 5.0; // Standard rhythm speed value (1.0 to 10.0)
         let canvas, ctx;
         let isPlaying = false;
         let currentTime = 0;
         let lastTimestamp = 0;
         let notes = [];
         let hitFeedback = [];
+
+        // Converts speed setting (1.0 - 10.0) to travel time in seconds
+        function getTravelTime() {
+            // Speed 1.0 = ~3.0s (Slow), Speed 5.0 = ~1.2s (Default), Speed 10.0 = ~0.4s (Fast)
+            return 3.5 / noteSpeedSetting;
+        }
 
         // Parse Simai text block
         function parseMetadata(text) {
@@ -515,24 +553,21 @@ E
         function parseInote(simaiStr, defaultBpm = 143) {
             const parsedNotes = [];
             let currentBpm = defaultBpm;
-            let currentSubdivision = 4; // default quarter notes
+            let currentSubdivision = 4;
             let timeAccumulator = 0;
 
-            // Simple tokens cleaner
             const cleaned = simaiStr.replace(/[\r\n\t ]/g, '');
             const measures = cleaned.split(',');
 
             for (let m of measures) {
                 if (!m || m === 'E') continue;
 
-                // Handle Inline BPM
                 const bpmMatch = m.match(/\((\d+(\.\d+)?)\)/);
                 if (bpmMatch) {
                     currentBpm = parseFloat(bpmMatch[1]);
                     m = m.replace(bpmMatch[0], '');
                 }
 
-                // Handle Inline Subdivision {4}, {8}, {16}, etc.
                 const subMatch = m.match(/\{(\d+)\}/);
                 if (subMatch) {
                     currentSubdivision = parseInt(subMatch[1]);
@@ -543,7 +578,6 @@ E
                 const noteDuration = (4 / currentSubdivision) * beatDuration;
 
                 if (m.length > 0) {
-                    // Splits simultaneously hit notes e.g., "1/8" or "2b/7b"
                     const simultaneous = m.split('/');
                     for (let sim of simultaneous) {
                         const targetPos = parseInt(sim[0]);
@@ -566,8 +600,6 @@ E
         }
 
         function getSensorAngle(pos) {
-            // Maimai positions: 1 is top-right, rotates clockwise
-            // Convert to Standard Canvas Radians
             return ((pos - 1) * 45 - 67.5) * (Math.PI / 180);
         }
 
@@ -575,7 +607,15 @@ E
             canvas = document.getElementById("gameCanvas");
             ctx = canvas.getContext("2d");
 
-            document.getElementById("diffSelect").addEventListener("change", (e) => {
+            const speedSlider = document.getElementById("speedSlider");
+            const speedVal = document.getElementById("speedVal");
+
+            speedSlider.addEventListener("input", (e) => {
+                noteSpeedSetting = parseFloat(e.target.value);
+                speedVal.textContent = noteSpeedSetting.toFixed(1);
+            });
+
+            document.getElementById("diffSelect").addEventListener("change", () => {
                 resetGame();
             });
 
@@ -586,7 +626,6 @@ E
 
             document.getElementById("resetBtn").addEventListener("click", resetGame);
 
-            // User hit handling (Keyboard 1-8)
             window.addEventListener("keydown", (e) => {
                 const key = parseInt(e.key);
                 if (key >= 1 && key <= 8) {
@@ -594,7 +633,6 @@ E
                 }
             });
 
-            // Touch / Click on Canvas
             canvas.addEventListener("pointerdown", (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const x = (e.clientX - rect.left) * (CANVAS_SIZE / rect.width) - CENTER;
@@ -617,14 +655,13 @@ E
             const inote = chartMetadata[`inote_${diffKey}`] || "";
             const bpm = parseFloat(chartMetadata.wholebpm) || 143;
             notes = parseInote(inote, bpm);
-            currentTime = -1.0; // Give short warm-up delay
+            currentTime = -1.0;
             hitFeedback = [];
             isPlaying = false;
         }
 
         function checkHit(pos) {
-            // Find active notes near the sensor
-            const windowTime = 0.15; // 150ms hit window
+            const windowTime = 0.15;
             for (let n of notes) {
                 if (n.pos === pos && !n.hit && Math.abs(n.time - currentTime) < windowTime) {
                     n.hit = true;
@@ -642,10 +679,9 @@ E
             if (!isPlaying) return;
             currentTime += dt;
 
-            // Expire hits & Misses
             for (let n of notes) {
                 if (!n.hit && currentTime - n.time > 0.2) {
-                    n.hit = true; // Auto-clear missed notes
+                    n.hit = true;
                 }
             }
 
@@ -658,7 +694,7 @@ E
         function render() {
             ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-            // Outer Outer Ring
+            // Outer Ring
             ctx.strokeStyle = "#2a2f4a";
             ctx.lineWidth = 6;
             ctx.beginPath();
@@ -672,7 +708,7 @@ E
             ctx.arc(CENTER, CENTER, INNER_RADIUS, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Draw 8 Sensors / Targets
+            // Sensors
             for (let i = 1; i <= 8; i++) {
                 const angle = getSensorAngle(i);
                 const x = CENTER + Math.cos(angle) * SENSOR_RADIUS;
@@ -686,7 +722,6 @@ E
                 ctx.fill();
                 ctx.stroke();
 
-                // Position number text
                 ctx.fillStyle = "#8c93b0";
                 ctx.font = "bold 14px sans-serif";
                 ctx.textAlign = "center";
@@ -694,22 +729,24 @@ E
                 ctx.fillText(i.toString(), x, y);
             }
 
-            // Draw Flying Notes
+            // Calculate travel time dynamically based on speed slider
+            const travelTime = getTravelTime();
+
+            // Notes
             for (let n of notes) {
                 if (n.hit) continue;
 
                 const timeUntilHit = n.time - currentTime;
-                if (timeUntilHit <= NOTE_SPEED && timeUntilHit >= -0.1) {
-                    const progress = 1 - (timeUntilHit / NOTE_SPEED);
+                if (timeUntilHit <= travelTime && timeUntilHit >= -0.1) {
+                    const progress = 1 - (timeUntilHit / travelTime);
                     const currentRadius = INNER_RADIUS + progress * (SENSOR_RADIUS - INNER_RADIUS);
                     const angle = getSensorAngle(n.pos);
 
                     const nx = CENTER + Math.cos(angle) * currentRadius;
                     const ny = CENTER + Math.sin(angle) * currentRadius;
 
-                    // Note Style (Ring / Circle)
                     ctx.beginPath();
-                    ctx.arc(nx, ny, 16 * (0.4 + 0.6 * progress), 0, Math.PI * 2);
+                    ctx.arc(nx, ny, 16 * (0.4 + 0.6 * Math.max(0, progress)), 0, Math.PI * 2);
                     ctx.fillStyle = n.isBreak ? "#facc15" : (n.isHold ? "#22c55e" : "#ec4899");
                     ctx.fill();
                     ctx.strokeStyle = "#fff";
@@ -718,7 +755,7 @@ E
                 }
             }
 
-            // Render Hit Feedback Text
+            // Hit Feedback
             for (let f of hitFeedback) {
                 const angle = getSensorAngle(f.pos);
                 const fx = CENTER + Math.cos(angle) * (SENSOR_RADIUS - 40);
