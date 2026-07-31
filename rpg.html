@@ -265,7 +265,7 @@
         <!-- Dialogue UI -->
         <div id="dialogue-box">
             <div id="dialogue-title">Village Elder</div>
-            <div id="dialogue-text">Welcome back, Hero! Clean up those slimes. Your progress is saved!</div>
+            <div id="dialogue-text">Welcome back, Hero! Clean up those monsters. Your progress is saved!</div>
             <div id="dialogue-hint">[ Tap Attack or press Space to close ]</div>
         </div>
 
@@ -308,7 +308,7 @@
         const keys = {};
         let saveTimeout;
         let isPaused = false;
-        let npcCooldown = 0; // Cooldown timer to prevent instant re-triggering
+        let npcCooldown = 0;
 
         const player = {
             x: 180,
@@ -329,11 +329,62 @@
         };
 
         const npc = { x: 200, y: 80, width: 12, height: 12, name: 'Village Elder' };
-        
+
+        // --- ENEMY SYSTEM ---
+        const ENEMY_TYPES = [
+            { name: 'Slime',    color: '#2ecc71', hpMult: 1.0, speed: 0.5, damage: 8,  xp: 20, minLevel: 1,  weightBase: 70, weightLevelScale: -5 },
+            { name: 'Goblin',   color: '#e67e22', hpMult: 1.5, speed: 0.8, damage: 14, xp: 35, minLevel: 1,  weightBase: 30, weightLevelScale: 2 },
+            { name: 'Skeleton', color: '#ecf0f1', hpMult: 2.2, speed: 1.1, damage: 22, xp: 60, minLevel: 3,  weightBase: 0,  weightLevelScale: 5 },
+            { name: 'Demon',    color: '#9b59b6', hpMult: 3.5, speed: 0.7, damage: 32, xp: 100, minLevel: 5, weightBase: 0,  weightLevelScale: 6 }
+        ];
+
+        function getRandomEnemyType(playerLevel) {
+            // Filter candidates that meet the minimum level requirement
+            const candidates = ENEMY_TYPES.filter(type => playerLevel >= type.minLevel);
+
+            // Calculate dynamic weights based on level
+            const weights = candidates.map(type => {
+                const calculated = type.weightBase + (type.weightLevelScale * (playerLevel - type.minLevel + 1));
+                return Math.max(5, calculated); // Always ensure a tiny minimum chance once unlocked
+            });
+
+            const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+            let randomNum = Math.random() * totalWeight;
+
+            for (let i = 0; i < candidates.length; i++) {
+                if (randomNum < weights[i]) {
+                    return candidates[i];
+                }
+                randomNum -= weights[i];
+            }
+            return candidates[0];
+        }
+
+        function spawnEnemy(x, y, vx, vy) {
+            const type = getRandomEnemyType(player.level);
+            const baseHp = Math.floor((30 + (player.level * 6)) * type.hpMult);
+
+            return {
+                x: x,
+                y: y,
+                width: 10,
+                height: 10,
+                hp: baseHp,
+                maxHp: baseHp,
+                speed: type.speed,
+                damage: type.damage,
+                xpValue: type.xp,
+                color: type.color,
+                name: type.name,
+                vx: vx,
+                vy: vy
+            };
+        }
+
         let enemies = [
-            { x: 60, y: 60, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: 1, vy: 0 },
-            { x: 300, y: 200, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: 0, vy: -1 },
-            { x: 100, y: 220, width: 10, height: 10, hp: 30, maxHp: 30, speed: 0.5, vx: -1, vy: 0 }
+            spawnEnemy(60, 60, 1, 0),
+            spawnEnemy(300, 200, 0, -1),
+            spawnEnemy(100, 220, -1, 0)
         ];
 
         let particles = [];
@@ -448,7 +499,7 @@
         function closeDialogue() {
             document.getElementById('dialogue-box').style.display = 'none';
             isPaused = false;
-            npcCooldown = 60; // 1-second cooldown frame delay before NPC dialogue can reopen
+            npcCooldown = 60;
         }
 
         window.addEventListener('keydown', e => {
@@ -495,9 +546,9 @@
             enemies.forEach(e => {
                 if (rectOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h, e.x, e.y, e.width, e.height)) {
                     e.hp -= player.atk;
-                    createBurst(e.x + e.width/2, e.y + e.height/2, '#e74c3c');
+                    createBurst(e.x + e.width/2, e.y + e.height/2, e.color);
                     if (e.hp <= 0) {
-                        gainXp(25);
+                        gainXp(e.xpValue);
                     }
                 }
             });
@@ -512,7 +563,7 @@
                 player.maxHp += 20;
                 player.hp = player.maxHp;
                 player.atk += 5;
-                showDialogue('LEVEL UP!', `You reached Level ${player.level}!\nMax HP & ATK increased.`);
+                showDialogue('LEVEL UP!', `You reached Level ${player.level}!\nMax HP & ATK increased.\nStronger enemies may now appear!`);
                 createBurst(player.x, player.y, '#f1c40f');
             }
             updateHUD();
@@ -546,7 +597,6 @@
         function update() {
             if (isPaused) return;
 
-            // Tick down NPC interaction cooldown
             if (npcCooldown > 0) {
                 npcCooldown--;
             }
@@ -588,10 +638,10 @@
                 player.invulnerableTimer--;
             }
 
-            // NPC Interaction Trigger with Cooldown check
+            // NPC Interaction
             const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
             if (distToNpc < 20 && npcCooldown === 0) {
-                showDialogue(npc.name, "Hurry! Protect our village from those green slimes!");
+                showDialogue(npc.name, "Hurry! Protect our village! Be careful, tougher monsters lurk as you grow stronger!");
             }
 
             enemies = enemies.filter(e => e.hp > 0);
@@ -604,7 +654,7 @@
 
                 if (rectOverlap(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
                     if (player.invulnerableTimer === 0) {
-                        player.hp -= 10;
+                        player.hp -= e.damage;
                         player.invulnerableTimer = 45;
                         createBurst(player.x + 6, player.y + 6, '#e74c3c');
                         updateHUD();
@@ -621,13 +671,14 @@
                 }
             });
 
+            // Respawn Enemies when room is cleared
             if (enemies.length === 0) {
-                const baseHp = 30 + (player.level * 5);
                 enemies.push(
-                    { x: 50, y: 50, width: 10, height: 10, hp: baseHp, maxHp: baseHp, speed: 0.6, vx: 1, vy: 1 },
-                    { x: 320, y: 220, width: 10, height: 10, hp: baseHp, maxHp: baseHp, speed: 0.6, vx: -1, vy: 1 }
+                    spawnEnemy(50, 50, 1, 1),
+                    spawnEnemy(320, 220, -1, 1),
+                    spawnEnemy(200, 50, 1, -1)
                 );
-                showDialogue('WARNING', 'More slimes have appeared!');
+                showDialogue('WARNING', 'More enemies have appeared!');
             }
 
             particles.forEach(p => {
@@ -641,21 +692,25 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // Ground
             ctx.fillStyle = '#2d5a27';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Background accents
             ctx.fillStyle = '#1e3f1b';
             ctx.fillRect(40, 40, 4, 4);
             ctx.fillRect(320, 80, 6, 6);
             ctx.fillRect(120, 240, 4, 4);
 
+            // NPC
             ctx.fillStyle = '#3498db';
             ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
             ctx.fillStyle = '#f1c40f';
             ctx.fillRect(npc.x + 2, npc.y - 3, 8, 4);
 
+            // Enemies
             enemies.forEach(e => {
-                ctx.fillStyle = '#2ecc71';
+                ctx.fillStyle = e.color;
                 ctx.fillRect(e.x, e.y, e.width, e.height);
                 ctx.fillStyle = '#000';
                 ctx.fillRect(e.x + 2, e.y + 3, 2, 2);
@@ -676,11 +731,13 @@
                 }
             });
 
+            // Player
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
                 ctx.fillStyle = '#e67e22';
                 ctx.fillRect(player.x, player.y, player.width, player.height);
             }
 
+            // Attack Arc
             if (player.isAttacking) {
                 ctx.fillStyle = '#ecf0f1';
                 let sx = player.x, sy = player.y;
@@ -695,6 +752,7 @@
                 }
             }
 
+            // Particles
             particles.forEach(p => {
                 ctx.fillStyle = p.color;
                 ctx.fillRect(p.x, p.y, 2, 2);
