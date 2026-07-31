@@ -110,7 +110,7 @@
         }
 
         .skill-tag {
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
             border: 1px solid #3498db;
             color: #3498db;
             padding: 2px 6px;
@@ -189,6 +189,106 @@
             color: #aaa;
             margin-top: 6px;
             text-align: right;
+        }
+
+        /* Skill Selection Modal Overlay */
+        #skill-select-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 15, 0.92);
+            z-index: 30;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+        }
+
+        #skill-select-title {
+            font-size: 18px;
+            color: #f1c40f;
+            margin-bottom: 4px;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        #skill-select-subtitle {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 15px;
+        }
+
+        .skill-options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .skill-card {
+            background: #1a1d28;
+            border: 2px solid #3498db;
+            border-radius: 6px;
+            padding: 10px;
+            cursor: pointer;
+            transition: transform 0.1s ease, border-color 0.2s ease, background 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .skill-card:hover, .skill-card:active {
+            border-color: #f1c40f;
+            background: #252b3d;
+            transform: scale(1.02);
+        }
+
+        .skill-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            background: #0d0e15;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #555;
+            flex-shrink: 0;
+        }
+
+        .skill-info {
+            flex-grow: 1;
+        }
+
+        .skill-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3px;
+        }
+
+        .skill-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .skill-lvl-badge {
+            font-size: 10px;
+            background: #e74c3c;
+            color: #fff;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        .skill-desc {
+            font-size: 10px;
+            color: #bbb;
+            line-height: 1.2;
         }
 
         /* Mobile Virtual Controls */
@@ -292,6 +392,13 @@
             <div id="dialogue-hint">[ Tap Attack or press Space to close ]</div>
         </div>
 
+        <!-- Level Up Skill Selection Overlay -->
+        <div id="skill-select-overlay">
+            <div id="skill-select-title">LEVEL UP!</div>
+            <div id="skill-select-subtitle">Choose a skill to unlock or upgrade</div>
+            <div class="skill-options-container" id="skill-cards-container"></div>
+        </div>
+
         <!-- Touch Controls -->
         <div id="mobile-controls">
             <div id="joystick-base">
@@ -331,8 +438,10 @@
         const keys = {};
         let saveTimeout;
         let isPaused = false;
+        let pendingSkillChoices = 0;
         let npcCooldown = 0;
 
+        // Base player definition
         const player = {
             x: 180,
             y: 140,
@@ -341,6 +450,8 @@
             speed: 1.5,
             hp: 100,
             maxHp: 100,
+            baseAtk: 15,
+            baseReach: 22,
             atk: 15,
             reach: 22,
             level: 1,
@@ -350,23 +461,79 @@
             isAttacking: false,
             attackTimer: 0,
             invulnerableTimer: 0,
-            // Skill unlocks & stats
-            skills: {
-                autoRanged: false,    // Lvl 2
-                spinningOrbit: false, // Lvl 3
-                vampirism: false,     // Lvl 4
-                statBoost: false,     // Lvl 5
-                laserAttack: false    // Lvl 6
-            },
             autoRangedTimer: 0,
             orbitAngle: 0,
             laserTimer: 0,
             laserBeam: null
         };
 
+        // --- SKILL MASTER DEFINITIONS (Levels 0 to 5) ---
+        const SKILL_DEFINITIONS = [
+            {
+                id: 'autoRanged',
+                name: 'Magic Darts',
+                icon: '⚡',
+                getDesc: (lvl) => {
+                    if (lvl === 0) return "Fires 1 auto-targeting dart at the nearest enemy.";
+                    if (lvl === 5) return "MAX LEVEL: Fast 3-dart barrage at closest foes!";
+                    return `Lvl ${lvl+1}: Fires ${Math.min(3, lvl + 1)} darts faster and with higher damage.`;
+                }
+            },
+            {
+                id: 'spinningOrbit',
+                name: 'Orbiting Shield',
+                icon: '🌀',
+                getDesc: (lvl) => {
+                    if (lvl === 0) return "Summons 1 orb spinning around you.";
+                    if (lvl === 5) return "MAX LEVEL: 5 fast-orbiting orbs causing massive contact damage!";
+                    return `Lvl ${lvl+1}: Adds an orb (Total ${lvl+1}) and increases rotation speed.`;
+                }
+            },
+            {
+                id: 'vampirism',
+                name: 'Vampiric Soul',
+                icon: '🩸',
+                getDesc: (lvl) => {
+                    const chances = [0, 15, 22, 30, 38, 50];
+                    const heals = [0, 10, 15, 20, 25, 30];
+                    if (lvl === 0) return "15% chance to heal 10% Max HP on enemy kill.";
+                    if (lvl === 5) return "MAX LEVEL: 50% chance to heal 30% Max HP on kill!";
+                    return `Lvl ${lvl+1}: ${chances[lvl+1]}% chance to heal ${heals[lvl+1]}% Max HP on kill.`;
+                }
+            },
+            {
+                id: 'statBoost',
+                name: 'Might & Reach',
+                icon: '⚔️',
+                getDesc: (lvl) => {
+                    if (lvl === 0) return "Boosts Melee Attack Damage and Range.";
+                    if (lvl === 5) return "MAX LEVEL: +30 Attack Damage & +20 Range!";
+                    return `Lvl ${lvl+1}: Grants +${(lvl+1)*6} ATK and +${(lvl+1)*4} Range.`;
+                }
+            },
+            {
+                id: 'laserAttack',
+                name: 'Death Laser',
+                icon: '💥',
+                getDesc: (lvl) => {
+                    if (lvl === 0) return "Fires a destructive beam at the nearest enemy every 3.5s.";
+                    if (lvl === 5) return "MAX LEVEL: Devastating laser beam every 1.2s!";
+                    return `Lvl ${lvl+1}: Fires faster (cooldown reduced) with increased beam power.`;
+                }
+            }
+        ];
+
+        // Track level for each skill (0 = unlearned, 1..5 = upgrade levels)
+        let playerSkills = {
+            autoRanged: 0,
+            spinningOrbit: 0,
+            vampirism: 0,
+            statBoost: 0,
+            laserAttack: 0
+        };
+
         const npc = { x: 200, y: 80, width: 12, height: 12, name: 'Village Elder' };
 
-        // Dynamic Projectiles & Visual Lasers
         let projectiles = [];
         let particles = [];
 
@@ -471,20 +638,26 @@
             }
         });
 
+        function recalculatePlayerStats() {
+            const boostLvl = playerSkills.statBoost;
+            player.atk = player.baseAtk + (boostLvl * 6);
+            player.reach = player.baseReach + (boostLvl * 4);
+        }
+
         function saveGame() {
             const data = {
                 hp: player.hp,
                 maxHp: player.maxHp,
-                atk: player.atk,
-                reach: player.reach,
+                baseAtk: player.baseAtk,
+                baseReach: player.baseReach,
                 level: player.level,
                 xp: player.xp,
                 nextXp: player.nextXp,
                 x: player.x,
                 y: player.y,
-                skills: player.skills
+                skills: playerSkills
             };
-            localStorage.setItem('rpg_save_data_v3', JSON.stringify(data));
+            localStorage.setItem('rpg_save_data_v4', JSON.stringify(data));
 
             const status = document.getElementById('save-status');
             status.style.opacity = '1';
@@ -493,24 +666,25 @@
         }
 
         function loadGame() {
-            const data = localStorage.getItem('rpg_save_data_v3');
+            const data = localStorage.getItem('rpg_save_data_v4');
             if (data) {
                 const parsed = JSON.parse(data);
                 player.hp = parsed.hp;
                 player.maxHp = parsed.maxHp;
-                player.atk = parsed.atk || 15;
-                player.reach = parsed.reach || 22;
+                player.baseAtk = parsed.baseAtk || 15;
+                player.baseReach = parsed.baseReach || 22;
                 player.level = parsed.level;
                 player.xp = parsed.xp;
                 player.nextXp = parsed.nextXp;
                 player.x = parsed.x || 180;
                 player.y = parsed.y || 140;
-                if (parsed.skills) player.skills = parsed.skills;
+                if (parsed.skills) playerSkills = parsed.skills;
             }
+            recalculatePlayerStats();
         }
 
         function resetGame() {
-            localStorage.removeItem('rpg_save_data_v3');
+            localStorage.removeItem('rpg_save_data_v4');
             location.reload();
         }
         document.getElementById('reset-btn').addEventListener('click', resetGame);
@@ -529,6 +703,70 @@
             npcCooldown = 60;
         }
 
+        // --- SKILL SELECTION MENU LOGIC ---
+        function triggerSkillSelectionScreen() {
+            isPaused = true;
+            
+            // Available non-maxed skills
+            let availableSkills = SKILL_DEFINITIONS.filter(sk => playerSkills[sk.id] < 5);
+
+            if (availableSkills.length === 0) {
+                // All skills maxed! Just give bonus stats instead.
+                player.maxHp += 25;
+                player.hp = player.maxHp;
+                player.baseAtk += 5;
+                recalculatePlayerStats();
+                showDialogue('MAX LEVEL BONUS!', 'All skills are already MAX LEVEL!\n+25 Max HP & +5 ATK granted!');
+                updateHUD();
+                return;
+            }
+
+            // Shuffle available skills randomly
+            availableSkills.sort(() => 0.5 - Math.random());
+            
+            // Pick up to 3 random options
+            const chosenOptions = availableSkills.slice(0, 3);
+
+            const cardsContainer = document.getElementById('skill-cards-container');
+            cardsContainer.innerHTML = '';
+
+            chosenOptions.forEach(sk => {
+                const curLvl = playerSkills[sk.id];
+                const card = document.createElement('div');
+                card.className = 'skill-card';
+                card.innerHTML = `
+                    <div class="skill-icon">${sk.icon}</div>
+                    <div class="skill-info">
+                        <div class="skill-header">
+                            <span class="skill-name">${sk.name}</span>
+                            <span class="skill-lvl-badge">${curLvl === 0 ? 'NEW!' : 'LVL ' + (curLvl + 1)}</span>
+                        </div>
+                        <div class="skill-desc">${sk.getDesc(curLvl)}</div>
+                    </div>
+                `;
+                card.addEventListener('click', () => selectSkillUpgrade(sk.id));
+                cardsContainer.appendChild(card);
+            });
+
+            document.getElementById('skill-select-overlay').style.display = 'flex';
+        }
+
+        function selectSkillUpgrade(skillId) {
+            playerSkills[skillId]++;
+            document.getElementById('skill-select-overlay').style.display = 'none';
+            
+            recalculatePlayerStats();
+            updateHUD();
+            saveGame();
+
+            pendingSkillChoices--;
+            if (pendingSkillChoices > 0) {
+                triggerSkillSelectionScreen();
+            } else {
+                isPaused = false;
+            }
+        }
+
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
             if (e.code === 'Space') handleAction();
@@ -543,7 +781,9 @@
 
         function handleAction() {
             if (isPaused) {
-                closeDialogue();
+                if (document.getElementById('dialogue-box').style.display === 'block') {
+                    closeDialogue();
+                }
                 return;
             }
             attack();
@@ -597,11 +837,16 @@
             enemy.hp -= amount;
             createBurst(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color);
             if (enemy.hp <= 0) {
-                // Skill 3: Life Steal on Kill (20% chance to heal 15% Max HP)
-                if (player.skills.vampirism && Math.random() < 0.20) {
-                    const heal = Math.floor(player.maxHp * 0.15);
-                    player.hp = Math.min(player.maxHp, player.hp + heal);
-                    createBurst(player.x + 6, player.y + 6, '#2ecc71');
+                // Skill 3: Vampiric Soul Heal on Kill Scaling
+                const vampLvl = playerSkills.vampirism;
+                if (vampLvl > 0) {
+                    const chances = [0, 0.15, 0.22, 0.30, 0.38, 0.50];
+                    const heals = [0, 0.10, 0.15, 0.20, 0.25, 0.30];
+                    if (Math.random() < chances[vampLvl]) {
+                        const healAmt = Math.floor(player.maxHp * heals[vampLvl]);
+                        player.hp = Math.min(player.maxHp, player.hp + healAmt);
+                        createBurst(player.x + 6, player.y + 6, '#2ecc71');
+                    }
                 }
                 gainXp(enemy.xpValue);
             }
@@ -613,34 +858,18 @@
                 player.level++;
                 player.xp -= player.nextXp;
                 player.nextXp = Math.floor(player.nextXp * 1.5);
-                player.maxHp += 20;
+                player.maxHp += 15;
                 player.hp = player.maxHp;
-                player.atk += 3;
+                player.baseAtk += 2;
+                recalculatePlayerStats();
 
-                let skillUnlockedMsg = "";
-
-                // Skill Unlocks by Level
-                if (player.level === 2) {
-                    player.skills.autoRanged = true;
-                    skillUnlockedMsg = "\n★ UNLOCKED SKILL: Auto Magic Darts!";
-                } else if (player.level === 3) {
-                    player.skills.spinningOrbit = true;
-                    skillUnlockedMsg = "\n★ UNLOCKED SKILL: Orbiting Shields!";
-                } else if (player.level === 4) {
-                    player.skills.vampirism = true;
-                    skillUnlockedMsg = "\n★ UNLOCKED SKILL: Vampire Soul (20% heal chance on kill)!";
-                } else if (player.level === 5) {
-                    player.skills.statBoost = true;
-                    player.atk += 10;
-                    player.reach += 10;
-                    skillUnlockedMsg = "\n★ UNLOCKED SKILL: Might & Reach (+10 ATK, +10 Range)!";
-                } else if (player.level >= 6 && !player.skills.laserAttack) {
-                    player.skills.laserAttack = true;
-                    skillUnlockedMsg = "\n★ UNLOCKED SKILL: Death Beam Laser!";
-                }
-
-                showDialogue('LEVEL UP!', `You reached Level ${player.level}!\nMax HP & Base Stats increased.${skillUnlockedMsg}`);
                 createBurst(player.x, player.y, '#f1c40f');
+                pendingSkillChoices++;
+                
+                // Prompt Skill selection screen if not paused
+                if (!isPaused) {
+                    triggerSkillSelectionScreen();
+                }
             }
             updateHUD();
             saveGame();
@@ -654,14 +883,16 @@
             document.getElementById('rng-txt').innerText = player.reach;
             document.getElementById('level-txt').innerText = `LVL ${player.level}`;
 
-            // Update Active Skills Sidebar UI
+            // Render Skill status badges on HUD
             const skillsDiv = document.getElementById('skills-list');
             skillsDiv.innerHTML = '';
-            if (player.skills.autoRanged) skillsDiv.innerHTML += `<div class="skill-tag">⚡ Magic Darts</div>`;
-            if (player.skills.spinningOrbit) skillsDiv.innerHTML += `<div class="skill-tag">🌀 Orbit Shield</div>`;
-            if (player.skills.vampirism) skillsDiv.innerHTML += `<div class="skill-tag">🩸 Vampirism</div>`;
-            if (player.skills.statBoost) skillsDiv.innerHTML += `<div class="skill-tag">⚔️ Empowered</div>`;
-            if (player.skills.laserAttack) skillsDiv.innerHTML += `<div class="skill-tag">💥 Death Laser</div>`;
+            
+            SKILL_DEFINITIONS.forEach(sk => {
+                const lvl = playerSkills[sk.id];
+                if (lvl > 0) {
+                    skillsDiv.innerHTML += `<div class="skill-tag">${sk.icon} ${sk.name} ${lvl === 5 ? 'MAX' : 'LV.' + lvl}</div>`;
+                }
+            });
         }
 
         function createBurst(x, y, color) {
@@ -720,48 +951,65 @@
 
             if (player.invulnerableTimer > 0) player.invulnerableTimer--;
 
-            // --- SKILL 1: Auto Long Range Attack ---
-            if (player.skills.autoRanged) {
+            // --- SKILL 1: Auto Magic Darts (Level-scaled) ---
+            const autoLvl = playerSkills.autoRanged;
+            if (autoLvl > 0) {
                 player.autoRangedTimer++;
-                if (player.autoRangedTimer >= 75) { // Shoot roughly every 1.2s
+                const cooldowns = [0, 80, 65, 50, 40, 25];
+                if (player.autoRangedTimer >= cooldowns[autoLvl]) {
                     const target = getClosestEnemy();
                     if (target) {
                         const px = player.x + player.width / 2;
                         const py = player.y + player.height / 2;
-                        const ex = target.x + target.width / 2;
-                        const ey = target.y + target.height / 2;
-                        const angle = Math.atan2(ey - py, ex - px);
-                        projectiles.push({
-                            x: px, y: py,
-                            vx: Math.cos(angle) * 3,
-                            vy: Math.sin(angle) * 3,
-                            damage: Math.floor(player.atk * 0.75),
-                            life: 100
-                        });
+                        const numDarts = Math.min(3, autoLvl);
+
+                        for (let d = 0; d < numDarts; d++) {
+                            const ex = target.x + target.width / 2;
+                            const ey = target.y + target.height / 2;
+                            let angle = Math.atan2(ey - py, ex - px);
+                            // Spread multi-darts
+                            if (numDarts > 1) angle += (d - (numDarts - 1) / 2) * 0.25;
+
+                            projectiles.push({
+                                x: px, y: py,
+                                vx: Math.cos(angle) * (2.8 + autoLvl * 0.4),
+                                vy: Math.sin(angle) * (2.8 + autoLvl * 0.4),
+                                damage: Math.floor(player.atk * (0.5 + autoLvl * 0.15)),
+                                life: 90
+                            });
+                        }
                         player.autoRangedTimer = 0;
                     }
                 }
             }
 
-            // --- SKILL 2: Spinning Orbit Weapon ---
-            if (player.skills.spinningOrbit) {
-                player.orbitAngle += 0.06;
+            // --- SKILL 2: Orbiting Shields (Level-scaled) ---
+            const orbitLvl = playerSkills.spinningOrbit;
+            if (orbitLvl > 0) {
+                player.orbitAngle += 0.04 + (orbitLvl * 0.015);
+                const numOrbs = orbitLvl;
                 const px = player.x + player.width / 2;
                 const py = player.y + player.height / 2;
-                const orbX = px + Math.cos(player.orbitAngle) * 28;
-                const orbY = py + Math.sin(player.orbitAngle) * 28;
 
-                enemies.forEach(e => {
-                    if (rectOverlap(orbX - 4, orbY - 4, 8, 8, e.x, e.y, e.width, e.height)) {
-                        damageEnemy(e, 2); // Constant ticking contact damage
-                    }
-                });
+                for (let i = 0; i < numOrbs; i++) {
+                    const currentAngle = player.orbitAngle + (i * (Math.PI * 2 / numOrbs));
+                    const orbX = px + Math.cos(currentAngle) * (24 + orbitLvl * 2);
+                    const orbY = py + Math.sin(currentAngle) * (24 + orbitLvl * 2);
+
+                    enemies.forEach(e => {
+                        if (rectOverlap(orbX - 4, orbY - 4, 8, 8, e.x, e.y, e.width, e.height)) {
+                            damageEnemy(e, 1.5 + (orbitLvl * 0.8));
+                        }
+                    });
+                }
             }
 
-            // --- SKILL 5: Targeting Laser Beam Attack ---
-            if (player.skills.laserAttack) {
+            // --- SKILL 5: Death Laser (Level-scaled) ---
+            const laserLvl = playerSkills.laserAttack;
+            if (laserLvl > 0) {
                 player.laserTimer++;
-                if (player.laserTimer >= 180) { // Every 3 seconds
+                const laserCooldowns = [0, 210, 170, 130, 100, 70]; // Faster at higher levels
+                if (player.laserTimer >= laserCooldowns[laserLvl]) {
                     const target = getClosestEnemy();
                     if (target) {
                         const px = player.x + player.width / 2;
@@ -769,8 +1017,8 @@
                         const ex = target.x + target.width / 2;
                         const ey = target.y + target.height / 2;
 
-                        player.laserBeam = { x1: px, y1: py, x2: ex, y2: ey, life: 12 };
-                        damageEnemy(target, Math.floor(player.atk * 1.8));
+                        player.laserBeam = { x1: px, y1: py, x2: ex, y2: ey, life: 10 + laserLvl * 2, width: 2 + laserLvl };
+                        damageEnemy(target, Math.floor(player.atk * (1.5 + laserLvl * 0.5)));
                     }
                     player.laserTimer = 0;
                 }
@@ -799,7 +1047,7 @@
             // NPC Interaction
             const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
             if (distToNpc < 20 && npcCooldown === 0) {
-                showDialogue(npc.name, "Level up to unlock powerful magic skills and annihilate stronger foes!");
+                showDialogue(npc.name, "Choose your skills wisely when leveling up! Max out your favorite abilities to level 5!");
             }
 
             // Update Enemies
@@ -895,20 +1143,26 @@
                 ctx.fillRect(player.x, player.y, player.width, player.height);
             }
 
-            // Skill 2: Orbiting Weapon Visual
-            if (player.skills.spinningOrbit) {
+            // Skill 2: Orbiting Shields Drawing (Level-scaled number of orbs)
+            const orbitLvl = playerSkills.spinningOrbit;
+            if (orbitLvl > 0) {
                 const px = player.x + player.width / 2;
                 const py = player.y + player.height / 2;
-                const orbX = px + Math.cos(player.orbitAngle) * 28;
-                const orbY = py + Math.sin(player.orbitAngle) * 28;
+                const numOrbs = orbitLvl;
 
-                ctx.fillStyle = '#00ffff';
-                ctx.beginPath();
-                ctx.arc(orbX, orbY, 4, 0, Math.PI * 2);
-                ctx.fill();
+                for (let i = 0; i < numOrbs; i++) {
+                    const currentAngle = player.orbitAngle + (i * (Math.PI * 2 / numOrbs));
+                    const orbX = px + Math.cos(currentAngle) * (24 + orbitLvl * 2);
+                    const orbY = py + Math.sin(currentAngle) * (24 + orbitLvl * 2);
+
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(orbX, orbY, 3 + Math.floor(orbitLvl * 0.5), 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
 
-            // Skill 1: Auto Magic Darts Visual
+            // Skill 1: Auto Darts Drawing
             projectiles.forEach(p => {
                 ctx.fillStyle = '#f39c12';
                 ctx.beginPath();
@@ -916,17 +1170,17 @@
                 ctx.fill();
             });
 
-            // Skill 5: Laser Beam Visual
+            // Skill 5: Laser Beam Drawing
             if (player.laserBeam) {
                 ctx.strokeStyle = '#e74c3c';
-                ctx.lineWidth = 4;
+                ctx.lineWidth = player.laserBeam.width + 2;
                 ctx.beginPath();
                 ctx.moveTo(player.laserBeam.x1, player.laserBeam.y1);
                 ctx.lineTo(player.laserBeam.x2, player.laserBeam.y2);
                 ctx.stroke();
 
                 ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = Math.max(1, player.laserBeam.width - 2);
                 ctx.beginPath();
                 ctx.moveTo(player.laserBeam.x1, player.laserBeam.y1);
                 ctx.lineTo(player.laserBeam.x2, player.laserBeam.y2);
