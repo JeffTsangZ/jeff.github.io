@@ -400,7 +400,7 @@
                 <div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div>
             </div>
             <div>
-                ATK: <span id="atk-txt">15</span> | RNG: <span id="rng-txt">22</span><br>
+                ATK: <span id="atk-txt">15</span> | RNG: <span id="rng-txt">25</span><br>
                 <div id="save-status">Game Saved</div>
             </div>
             <div style="text-align: right;">
@@ -482,13 +482,13 @@
             hp: 100,
             maxHp: 100,
             baseAtk: 15,
-            baseReach: 22,
+            baseReach: 25,
             atk: 15,
-            reach: 22,
+            reach: 25,
             level: 1,
             xp: 0,
             nextXp: 50,
-            facing: 'down',
+            facingAngle: Math.PI / 2, // Default facing DOWN (radians)
             isAttacking: false,
             attackTimer: 0,
             invulnerableTimer: 0,
@@ -504,9 +504,9 @@
                 name: 'Magic Darts',
                 icon: '⚡',
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Bullet Jump Darts! Darts leap through foes and hit behind!";
-                    if (lvl === 5) return "FINAL UPGRADE: Bullet Jump Darts (Passes through enemies!)";
-                    if (lvl === 0) return "Fires 1 auto-targeting dart at the nearest enemy.";
+                    if (evolved) return "EVOLVED: Chain Darts! Darts bounce to nearby enemies up to 2 times!";
+                    if (lvl === 5) return "FINAL UPGRADE: Chain Bounce Darts (Bounces 2 times!)";
+                    if (lvl === 0) return "Fires 1 auto-targeting dart at nearest enemy.";
                     return `Lvl ${lvl+1}: Fires ${Math.min(3, lvl + 1)} darts faster and with higher damage.`;
                 }
             },
@@ -515,7 +515,7 @@
                 name: 'Orbiting Shield',
                 icon: '🌀',
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Massive Giant Barrier! Double orb radius and huge contact hitboxes.";
+                    if (evolved) return "EVOLVED: Giant Barrier! Double orb radius and huge contact hitboxes.";
                     if (lvl === 5) return "FINAL UPGRADE: Massive Barrier Expansion!";
                     if (lvl === 0) return "Summons 1 orb spinning around you.";
                     return `Lvl ${lvl+1}: Adds an orb (Total ${lvl+1}) and increases rotation speed.`;
@@ -539,9 +539,9 @@
                 name: 'Might & Reach',
                 icon: '⚔️',
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Titans Power! Massively boosts ATK and range permanently.";
-                    if (lvl === 5) return "FINAL UPGRADE: Titan's Power (+60 ATK & +40 Range)";
-                    if (lvl === 0) return "Boosts Melee Attack Damage and Range.";
+                    if (evolved) return "EVOLVED: Titan Swing! Expands normal attack swing angle to 270 degrees!";
+                    if (lvl === 5) return "FINAL UPGRADE: Titan Swing (270° Wide Cleave Arc)";
+                    if (lvl === 0) return "Boosts Melee Damage, Range, and Sector Swing Angle.";
                     return `Lvl ${lvl+1}: Grants +${(lvl+1)*6} ATK and +${(lvl+1)*4} Range.`;
                 }
             },
@@ -550,8 +550,8 @@
                 name: 'Death Laser',
                 icon: '💥',
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Hyper Penetration Beam! Cleaves completely through all enemies!";
-                    if (lvl === 5) return "FINAL UPGRADE: Penetrating Beam (Pierces all targets)";
+                    if (evolved) return "EVOLVED: Screen Penetration Beam! Pierces targeted enemy and continues off screen!";
+                    if (lvl === 5) return "FINAL UPGRADE: Screen Penetration Laser";
                     if (lvl === 0) return "Fires a destructive beam at nearest target every 3.5s.";
                     return `Lvl ${lvl+1}: Fires faster with increased beam power.`;
                 }
@@ -579,7 +579,7 @@
         let projectiles = [];
         let particles = [];
 
-        // --- 10 ENEMY TYPES SYSTEM ---
+        // --- ENEMY TYPES SYSTEM ---
         const ENEMY_TYPES = [
             { name: 'Slime',       color: '#2ecc71', hpMult: 1.0, speed: 0.5, damage: 6,   xp: 15,  minLevel: 1,  weightBase: 70 },
             { name: 'Goblin',      color: '#e67e22', hpMult: 1.4, speed: 0.8, damage: 10,  xp: 30,  minLevel: 1,  weightBase: 40 },
@@ -610,6 +610,13 @@
             return candidates[0];
         }
 
+        // --- XP MULTIPLIER SCALING (x1.2 at lvl 10, x1.4 at lvl 20, ...) ---
+        function getXpMultiplier(level) {
+            if (level < 10) return 1.0;
+            const milestone = Math.floor(level / 10);
+            return 1.0 + (milestone * 0.2);
+        }
+
         function spawnEnemy(x, y) {
             const type = getRandomEnemyType(player.level);
             const baseHp = Math.floor((25 + (player.level * 8)) * type.hpMult);
@@ -618,6 +625,7 @@
             const dir = dirs[Math.floor(Math.random() * dirs.length)];
 
             return {
+                id: Math.random().toString(36).substr(2, 9),
                 x, y,
                 width: 10,
                 height: 10,
@@ -625,7 +633,7 @@
                 maxHp: baseHp,
                 speed: type.speed,
                 damage: type.damage,
-                xpValue: type.xp,
+                xpValue: Math.floor(type.xp * getXpMultiplier(player.level)),
                 color: type.color,
                 name: type.name,
                 isBoss: false,
@@ -634,14 +642,16 @@
             };
         }
 
+        // --- HIGHER BOSS HP ---
         function spawnBoss() {
             if (activeBoss && activeBoss.hp > 0) return;
 
-            const bossHp = Math.floor((400 + (player.level * 150)));
-            // Ensure boss is strictly slower than player
+            // Increased Boss HP Formula
+            const bossHp = Math.floor(1000 + (player.level * 350));
             const bossSpeed = Math.max(0.4, player.speed * 0.65);
 
             activeBoss = {
+                id: 'boss_' + Math.random().toString(36).substr(2, 9),
                 x: 200,
                 y: 30,
                 width: 24,
@@ -649,15 +659,15 @@
                 hp: bossHp,
                 maxHp: bossHp,
                 speed: bossSpeed,
-                damage: 35 + player.level * 3,
-                xpValue: (250 + player.level * 100) * 10, // 10x XP payout
+                damage: 40 + player.level * 4,
+                xpValue: Math.floor((350 + player.level * 150) * 10 * getXpMultiplier(player.level)),
                 color: '#e74c3c',
                 name: 'DUNGEON OVERLORD (BOSS)',
                 isBoss: true,
                 vx: 0, vy: 0
             };
             enemies.push(activeBoss);
-            showDialogue("⚠️ BOSS WARNING ⚠️", "The Dungeon Overlord has arrived! Defeat him to claim legendary powers!");
+            showDialogue("⚠️ BOSS WARNING ⚠️", "The Dungeon Overlord has arrived with terrifying power! Slay him to claim legendary rewards!");
         }
 
         function spawnEnemyBatch() {
@@ -776,7 +786,7 @@
                 player.hp = parsed.hp;
                 player.maxHp = parsed.maxHp;
                 player.baseAtk = parsed.baseAtk || 15;
-                player.baseReach = parsed.baseReach || 22;
+                player.baseReach = parsed.baseReach || 25;
                 player.level = parsed.level;
                 player.xp = parsed.xp;
                 player.nextXp = parsed.nextXp;
@@ -838,7 +848,6 @@
                 subTitleEl.innerText = "Choose a skill to upgrade";
             }
 
-            // Check if all skills are maxed out & evolved
             if (checkAllMaxedAndEvolved()) {
                 applyDirectLevelBoost(5);
                 showDialogue("ULTIMATE OVERLOAD!", "All skills are FULLY EVOLVED!\n+5 Levels and stat scaling granted!");
@@ -847,13 +856,8 @@
                 return;
             }
 
-            // Available upgrades calculation
             let options = [];
-
-            // 1. Check for EVOLUTION candidates (Skill at Lvl 5, but not yet evolved)
             const evolutionCandidates = SKILL_DEFINITIONS.filter(sk => playerSkills[sk.id] >= 5 && !skillEvolutions[sk.id]);
-            
-            // 2. Regular upgrade candidates (Skill < Lvl 5)
             const normalCandidates = SKILL_DEFINITIONS.filter(sk => playerSkills[sk.id] < 5);
 
             if (evolutionCandidates.length > 0) {
@@ -942,39 +946,43 @@
         function attack() {
             if (player.isAttacking || isPaused) return;
             player.isAttacking = true;
-            player.attackTimer = 15;
+            player.attackTimer = 12;
 
-            const reach = player.reach;
-            const thickness = reach + 4;
-            let hitbox = { x: player.x, y: player.y, w: thickness, h: thickness };
-            
-            if (player.facing === 'up') {
-                hitbox.x = player.x - 7; hitbox.y = player.y - reach; hitbox.w = thickness; hitbox.h = reach;
-            } else if (player.facing === 'down') {
-                hitbox.x = player.x - 7; hitbox.y = player.y + player.height; hitbox.w = thickness; hitbox.h = reach;
-            } else if (player.facing === 'left') {
-                hitbox.x = player.x - reach; hitbox.y = player.y - 7; hitbox.w = reach; hitbox.h = thickness;
-            } else if (player.facing === 'right') {
-                hitbox.x = player.x + player.width; hitbox.y = player.y - 7; hitbox.w = reach; hitbox.h = thickness;
-            }
-
-            enemies.forEach(e => {
-                if (rectOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h, e.x, e.y, e.width, e.height)) {
-                    damageEnemy(e, player.atk);
-                }
-            });
-        }
-
-        function getClosestEnemy() {
-            let closest = null;
-            let minDist = Infinity;
             const px = player.x + player.width / 2;
             const py = player.y + player.height / 2;
+            const radius = player.reach;
+            
+            const sweepAngleDeg = skillEvolutions.statBoost ? 270 : 135;
+            const sweepAngleRad = (sweepAngleDeg * Math.PI) / 180;
 
             enemies.forEach(e => {
                 const ex = e.x + e.width / 2;
                 const ey = e.y + e.height / 2;
                 const dist = Math.hypot(ex - px, ey - py);
+
+                if (dist <= radius + Math.max(e.width, e.height) / 2) {
+                    let enemyAngle = Math.atan2(ey - py, ex - px);
+                    let diff = enemyAngle - player.facingAngle;
+                    
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+
+                    if (Math.abs(diff) <= sweepAngleRad / 2) {
+                        damageEnemy(e, player.atk);
+                    }
+                }
+            });
+        }
+
+        function getClosestEnemy(fromX, fromY, ignoreList = []) {
+            let closest = null;
+            let minDist = Infinity;
+
+            enemies.forEach(e => {
+                if (ignoreList.includes(e.id)) return;
+                const ex = e.x + e.width / 2;
+                const ey = e.y + e.height / 2;
+                const dist = Math.hypot(ex - fromX, ey - fromY);
                 if (dist < minDist) {
                     minDist = dist;
                     closest = e;
@@ -991,7 +999,6 @@
                 const vampEvol = skillEvolutions.vampirism;
 
                 if (vampEvol) {
-                    // Blood Harvest 100% Heal + Protection
                     const healAmt = Math.floor(player.maxHp * 0.35);
                     player.hp = Math.min(player.maxHp, player.hp + healAmt);
                     player.invulnerableTimer = 60;
@@ -1008,9 +1015,9 @@
 
                 if (enemy.isBoss) {
                     activeBoss = null;
-                    bossTimer = BOSS_INTERVAL; // Reset 5 min timer after boss kill
+                    bossTimer = BOSS_INTERVAL;
                     gainXp(enemy.xpValue);
-                    triggerSkillSelectionScreen(true); // Skill reward drop (no standard level up requirement)
+                    triggerSkillSelectionScreen(true);
                 } else {
                     gainXp(enemy.xpValue);
                 }
@@ -1046,7 +1053,10 @@
             document.getElementById('hp-txt').innerText = `${Math.max(0, Math.ceil(player.hp))}/${player.maxHp}`;
             document.getElementById('atk-txt').innerText = player.atk;
             document.getElementById('rng-txt').innerText = player.reach;
-            document.getElementById('level-txt').innerText = `LVL ${player.level}`;
+            
+            const xpMult = getXpMultiplier(player.level);
+            const xpMultStr = xpMult > 1.0 ? ` (${xpMult.toFixed(1)}x XP)` : '';
+            document.getElementById('level-txt').innerText = `LVL ${player.level}${xpMultStr}`;
 
             const skillsDiv = document.getElementById('skills-list');
             skillsDiv.innerHTML = '';
@@ -1061,7 +1071,6 @@
                 }
             });
 
-            // Update Boss Timer HUD
             const timerEl = document.getElementById('boss-timer-display');
             if (activeBoss && activeBoss.hp > 0) {
                 timerEl.innerText = "⚠️ BOSS ENGAGED ⚠️";
@@ -1088,10 +1097,18 @@
             return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
         }
 
+        function distToSegment(px, py, x1, y1, x2, y2) {
+            const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+            if (l2 === 0) return Math.hypot(px - x1, py - y1);
+            let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+        }
+
         function update() {
             if (isPaused) return;
 
-            // Boss Countdown Timer
+            // Boss Timer
             if (!activeBoss) {
                 bossTimer -= 1 / 60;
                 if (bossTimer <= 0) {
@@ -1103,24 +1120,22 @@
 
             let dx = 0, dy = 0;
 
-            if (keys['w'] || keys['arrowup']) { dy -= 1; player.facing = 'up'; }
-            if (keys['s'] || keys['arrowdown']) { dy += 1; player.facing = 'down'; }
-            if (keys['a'] || keys['arrowleft']) { dx -= 1; player.facing = 'left'; }
-            if (keys['d'] || keys['arrowright']) { dx += 1; player.facing = 'right'; }
+            if (keys['w'] || keys['arrowup']) { dy -= 1; }
+            if (keys['s'] || keys['arrowdown']) { dy += 1; }
+            if (keys['a'] || keys['arrowleft']) { dx -= 1; }
+            if (keys['d'] || keys['arrowright']) { dx += 1; }
 
             if (joystick.active) {
                 dx = joystick.dx;
                 dy = joystick.dy;
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    player.facing = dx > 0 ? 'right' : 'left';
-                } else if (Math.abs(dy) > 0) {
-                    player.facing = dy > 0 ? 'down' : 'up';
-                }
             }
 
-            if (dx !== 0 && dy !== 0 && !joystick.active) { 
-                dx *= 0.7071; 
-                dy *= 0.7071; 
+            if (dx !== 0 || dy !== 0) {
+                player.facingAngle = Math.atan2(dy, dx);
+                if (dx !== 0 && dy !== 0 && !joystick.active) { 
+                    dx *= 0.7071; 
+                    dy *= 0.7071; 
+                }
             }
 
             player.x += dx * player.speed;
@@ -1145,11 +1160,12 @@
                 const cd = autoEvol ? 18 : cooldowns[autoLvl];
 
                 if (player.autoRangedTimer >= cd) {
-                    const target = getClosestEnemy();
+                    const px = player.x + player.width / 2;
+                    const py = player.y + player.height / 2;
+                    const target = getClosestEnemy(px, py);
+                    
                     if (target) {
-                        const px = player.x + player.width / 2;
-                        const py = player.y + player.height / 2;
-                        const numDarts = autoEvol ? 4 : Math.min(3, autoLvl);
+                        const numDarts = autoEvol ? 3 : Math.min(3, autoLvl);
 
                         for (let d = 0; d < numDarts; d++) {
                             const ex = target.x + target.width / 2;
@@ -1162,8 +1178,9 @@
                                 vx: Math.cos(angle) * (3.0 + autoLvl * 0.4),
                                 vy: Math.sin(angle) * (3.0 + autoLvl * 0.4),
                                 damage: Math.floor(player.atk * (0.6 + autoLvl * 0.15)),
-                                pierce: autoEvol ? 3 : 1, // Bullet Jump penetrates enemies!
-                                life: 90
+                                bouncesLeft: autoEvol ? 2 : 0,
+                                hitEnemyIds: [],
+                                life: 100
                             });
                         }
                         player.autoRangedTimer = 0;
@@ -1205,25 +1222,39 @@
                 const cd = laserEvol ? 50 : laserCooldowns[laserLvl];
 
                 if (player.laserTimer >= cd) {
-                    const target = getClosestEnemy();
+                    const px = player.x + player.width / 2;
+                    const py = player.y + player.height / 2;
+                    const target = getClosestEnemy(px, py);
+
                     if (target) {
-                        const px = player.x + player.width / 2;
-                        const py = player.y + player.height / 2;
                         const ex = target.x + target.width / 2;
                         const ey = target.y + target.height / 2;
-
-                        player.laserBeam = { 
-                            x1: px, y1: py, x2: ex, y2: ey, 
-                            life: 12 + laserLvl * 2, 
-                            width: (2 + laserLvl) * (laserEvol ? 2 : 1) 
-                        };
+                        const angle = Math.atan2(ey - py, ex - px);
 
                         if (laserEvol) {
-                            // Penetrate all enemies on line
+                            const endX = px + Math.cos(angle) * 1000;
+                            const endY = py + Math.sin(angle) * 1000;
+
+                            player.laserBeam = { 
+                                x1: px, y1: py, x2: endX, y2: endY, 
+                                life: 14, 
+                                width: 6 
+                            };
+
                             enemies.forEach(e => {
-                                damageEnemy(e, Math.floor(player.atk * 2.5));
+                                const eCenterX = e.x + e.width / 2;
+                                const eCenterY = e.y + e.height / 2;
+                                const dist = distToSegment(eCenterX, eCenterY, px, py, endX, endY);
+                                if (dist <= 8 + Math.max(e.width, e.height) / 2) {
+                                    damageEnemy(e, Math.floor(player.atk * 2.5));
+                                }
                             });
                         } else {
+                            player.laserBeam = { 
+                                x1: px, y1: py, x2: ex, y2: ey, 
+                                life: 12 + laserLvl * 2, 
+                                width: 2 + laserLvl 
+                            };
                             damageEnemy(target, Math.floor(player.atk * (1.5 + laserLvl * 0.5)));
                         }
                     }
@@ -1243,10 +1274,27 @@
                 p.life--;
 
                 enemies.forEach(e => {
-                    if (rectOverlap(p.x - 3, p.y - 3, 6, 6, e.x, e.y, e.width, e.height)) {
+                    if (!p.hitEnemyIds.includes(e.id) && rectOverlap(p.x - 3, p.y - 3, 6, 6, e.x, e.y, e.width, e.height)) {
                         damageEnemy(e, p.damage);
-                        p.pierce--;
-                        if (p.pierce <= 0) p.life = 0;
+                        p.hitEnemyIds.push(e.id);
+
+                        if (p.bouncesLeft > 0) {
+                            p.bouncesLeft--;
+                            const nextTarget = getClosestEnemy(p.x, p.y, p.hitEnemyIds);
+                            if (nextTarget) {
+                                const nex = nextTarget.x + nextTarget.width / 2;
+                                const ney = nextTarget.y + nextTarget.height / 2;
+                                const newAngle = Math.atan2(ney - p.y, nex - p.x);
+                                const speed = Math.hypot(p.vx, p.vy);
+                                p.vx = Math.cos(newAngle) * speed;
+                                p.vy = Math.sin(newAngle) * speed;
+                                createBurst(p.x, p.y, '#f1c40f');
+                            } else {
+                                p.life = 0;
+                            }
+                        } else {
+                            p.life = 0;
+                        }
                     }
                 });
             });
@@ -1258,11 +1306,10 @@
                 showDialogue(npc.name, "Beware! Every 5 minutes, a terrifying Boss spawns!\nSlay him to earn special skill drops!");
             }
 
-            // Update Enemies & Boss chasing logic
+            // Update Enemies
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
                 if (e.isBoss) {
-                    // Boss actively chases player (Boss speed < Player speed)
                     const px = player.x + player.width / 2;
                     const py = player.y + player.height / 2;
                     const bx = e.x + e.width / 2;
@@ -1298,7 +1345,6 @@
                 }
             });
 
-            // Automatically spawn new waves up to 10 max enemies
             if (enemies.length < Math.min(10, Math.max(3, Math.floor(player.level * 0.8)))) {
                 spawnEnemyBatch();
             }
@@ -1414,20 +1460,27 @@
                 ctx.stroke();
             }
 
-            // Melee Attack Arc
+            // Sector Swing Attack
             if (player.isAttacking) {
-                ctx.fillStyle = '#ecf0f1';
-                let sx = player.x, sy = player.y;
-                let r = player.reach;
-                if (player.facing === 'up') {
-                    ctx.fillRect(sx - 7, sy - r, r + 4, r);
-                } else if (player.facing === 'down') {
-                    ctx.fillRect(sx - 7, sy + player.height + 2, r + 4, r);
-                } else if (player.facing === 'left') {
-                    ctx.fillRect(sx - r, sy - 7, r, r + 4);
-                } else if (player.facing === 'right') {
-                    ctx.fillRect(sx + player.width + 2, sy - 7, r, r + 4);
-                }
+                const px = player.x + player.width / 2;
+                const py = player.y + player.height / 2;
+                const radius = player.reach;
+                const sweepAngleDeg = skillEvolutions.statBoost ? 270 : 135;
+                const sweepAngleRad = (sweepAngleDeg * Math.PI) / 180;
+
+                const startAngle = player.facingAngle - (sweepAngleRad / 2);
+                const endAngle = player.facingAngle + (sweepAngleRad / 2);
+
+                ctx.fillStyle = skillEvolutions.statBoost ? 'rgba(241, 196, 15, 0.45)' : 'rgba(236, 240, 241, 0.35)';
+                ctx.strokeStyle = skillEvolutions.statBoost ? '#f1c40f' : '#ffffff';
+                ctx.lineWidth = 2;
+
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.arc(px, py, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
             }
 
             // Particles
