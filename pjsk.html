@@ -217,7 +217,7 @@
     <script>
         const LANES = 8;
         
-        // Defined color themes according to specification
+        // Defined color themes
         const TAP_COLOR = '#00f2fe';    // Light Blue
         const HOLD_COLOR = '#2ecc71';   // Green
         const FLICK_COLOR = '#ff00ff';  // Pink
@@ -225,7 +225,7 @@
         
         const NOTE_SPEED_PX = 380;
         const HIT_WINDOW_PX = 65;
-        const FLICK_THRESHOLD_PX = 25; // Distance swipe required to count as a flick
+        const FLICK_THRESHOLD_PX = 25;
         
         let canvas, ctx;
         let score = 0;
@@ -236,6 +236,7 @@
 
         let notes = [];
         let hitEffects = [];
+        let particles = [];
 
         let activeTouches = new Map();
         let laneHoldStatus = new Array(LANES).fill(false);
@@ -313,24 +314,22 @@
                 const randType = Math.random();
 
                 if (randType < 0.35) {
-                    // HOLD NOTE
                     const holdLengthPx = 220 + Math.random() * 140;
-                    const endIsFlick = Math.random() < 0.4; // 40% chance the tail is a flick note
+                    const endIsFlick = Math.random() < 0.4;
 
                     notes.push({
                         type: 'hold',
                         lane: lane1,
-                        y: -holdLengthPx,       // Tail / End Note Y
-                        headY: 0,               // Head / Start Note Y
+                        y: -holdLengthPx,
+                        headY: 0,
                         length: holdLengthPx,
                         holding: false,
                         headHit: false,
                         missed: false,
-                        endIsFlick: endIsFlick  // Hold tail can be a flick!
+                        endIsFlick: endIsFlick
                     });
                     laneOccupiedUntil[lane1] = now + ((holdLengthPx + 200) / NOTE_SPEED_PX) * 1000;
                 } else if (randType < 0.65) {
-                    // FLICK NOTE (Standalone)
                     notes.push({
                         type: 'flick',
                         lane: lane1,
@@ -339,7 +338,6 @@
                     });
                     laneOccupiedUntil[lane1] = now + (150 / NOTE_SPEED_PX) * 1000;
                 } else {
-                    // STANDARD TAP NOTE
                     notes.push({
                         type: 'tap',
                         lane: lane1,
@@ -379,10 +377,9 @@
                         addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
-                    n.y += NOTE_SPEED_PX * dt;      // Tail moves down
-                    n.headY += NOTE_SPEED_PX * dt;  // Head moves down
+                    n.y += NOTE_SPEED_PX * dt;
+                    n.headY += NOTE_SPEED_PX * dt;
 
-                    // 1. Head Start Note Missed
                     if (!n.headHit && n.headY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
@@ -391,12 +388,10 @@
                         continue;
                     }
 
-                    // 2. Active Holding Process
                     if (n.holding) {
                         score += Math.round(150 * dt);
                         updateHUD();
 
-                        // Released early before tail reached release window
                         if (!laneHoldStatus[n.lane] && n.y < judgeY - HIT_WINDOW_PX) {
                             n.holding = false;
                             n.missed = true;
@@ -406,7 +401,6 @@
                         }
                     }
 
-                    // 3. Held too long past tail end
                     if (n.headHit && n.holding && n.y > judgeY + HIT_WINDOW_PX) {
                         n.holding = false;
                         n.missed = true;
@@ -418,11 +412,23 @@
             }
 
             notes = notes.filter(n => !n.missed);
-            for (let e of hitEffects) e.life -= dt;
+            
+            // Update hit shockwaves & effects
+            for (let e of hitEffects) {
+                e.life -= dt;
+            }
             hitEffects = hitEffects.filter(e => e.life > 0);
+
+            // Update particles
+            for (let p of particles) {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += p.gravity * dt;
+                p.life -= dt;
+            }
+            particles = particles.filter(p => p.life > 0);
         }
 
-        // Triggered on Touch Start
         function handlePressLane(laneIndex, touchData) {
             const judgeY = canvas.height * 0.85;
             let hitFound = false;
@@ -449,7 +455,6 @@
                             break;
                         }
                     } else if (n.type === 'hold' && !n.headHit) {
-                        // Standard Hold Start Note (Never flick)
                         const diff = Math.abs(n.headY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.headHit = true;
@@ -471,13 +476,11 @@
             }
         }
 
-        // Triggered on Touch Move / Swipe (Flick Detection)
         function handleFlickLane(laneIndex, flickDistance) {
             const judgeY = canvas.height * 0.85;
 
             for (let n of notes) {
                 if (n.lane === laneIndex && !n.missed) {
-                    // Standalone Flick Note
                     if (n.type === 'flick') {
                         const diff = Math.abs(n.y - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
@@ -497,7 +500,6 @@
                             break;
                         }
                     } 
-                    // Hold End Note that is a Flick
                     else if (n.type === 'hold' && n.headHit && n.holding && n.endIsFlick) {
                         const diff = Math.abs(n.y - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
@@ -516,13 +518,11 @@
             }
         }
 
-        // Triggered on Touch Release (End Note Standard Release)
         function handleReleaseLane(laneIndex) {
             const judgeY = canvas.height * 0.85;
 
             for (let n of notes) {
                 if (n.lane === laneIndex && n.type === 'hold' && n.headHit && n.holding && !n.missed) {
-                    // If end note was supposed to be flicked, releasing without flicking causes a miss
                     if (n.endIsFlick) continue;
 
                     const diff = Math.abs(n.y - judgeY);
@@ -540,14 +540,40 @@
             }
         }
 
+        // Expanded Hit Effect Generator (Spawns Particles & Shockwave)
         function addHitEffect(lane, y, text, color) {
+            const maxLife = 0.35;
             hitEffects.push({
                 lane: lane,
                 y: y,
                 text: text,
                 color: color,
-                life: 0.3
+                life: maxLife,
+                maxLife: maxLife
             });
+
+            // Spawn Particles for Successful Hits (Non-MISS and non-empty)
+            if (text && text !== "MISS" && text !== "EARLY RELEASE" && text !== "LATE RELEASE") {
+                const coords = getTrackCoords(lane, y);
+                const cx = coords.x + coords.width / 2;
+                const particleCount = 12 + Math.floor(Math.random() * 8);
+
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 120 + Math.random() * 260;
+                    particles.push({
+                        x: cx,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - 60,
+                        size: 3 + Math.random() * 5,
+                        color: color,
+                        life: 0.25 + Math.random() * 0.2,
+                        maxLife: 0.45,
+                        gravity: 300
+                    });
+                }
+            }
         }
 
         function updateHUD() {
@@ -676,16 +702,13 @@
                     drawFlickArrow(n.lane, n.y, '#ffffff');
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    // Hold Body Strip
                     drawTrapezoid(n.y, n.headY, n.lane, HOLD_COLOR + '77', 4);
 
-                    // Start Head Note Bar (Always Green Standard Hold Head)
                     ctx.shadowColor = HOLD_COLOR;
                     ctx.shadowBlur = 8;
                     drawTrapezoid(n.headY - 8, n.headY + 8, n.lane, HOLD_COLOR, 2);
                     ctx.shadowBlur = 0;
                     
-                    // End Tail Release Bar (Pink if Flick End, White if Regular Release)
                     const tailColor = n.endIsFlick ? FLICK_COLOR : '#ffffff';
                     ctx.shadowColor = tailColor;
                     ctx.shadowBlur = n.endIsFlick ? 10 : 0;
@@ -697,22 +720,74 @@
                 }
             }
 
-            // Visual Effects
+            // Visual Effects (Lane Beams, Shockwaves & Judgment Text)
             for (let e of hitEffects) {
                 const c = getTrackCoords(e.lane, e.y);
+                const progress = 1 - (e.life / e.maxLife); // 0 to 1
+                const cx = c.x + c.width / 2;
 
+                // 1. Full-Lane Laser Beam Highlight on Hit
+                if (e.text && e.text !== "MISS") {
+                    const beamAlpha = (1 - progress) * 0.35;
+                    drawTrapezoid(topY, canvas.height, e.lane, e.color.slice(0, 7) + Math.floor(beamAlpha * 255).toString(16).padStart(2, '0'), 0);
+                }
+
+                // 2. Expanding Pulse Rings (Shockwave)
+                const rx = (c.width / 2 + progress * 45);
+                const ry = (12 + progress * 20);
+
+                ctx.save();
+                ctx.translate(cx, e.y);
+                
+                // Expanding Ring Outer Outline
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 4 * (1 - progress);
+                ctx.globalAlpha = (1 - progress);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Expanding Inner Solid Halo
                 ctx.fillStyle = e.color;
-                ctx.globalAlpha = (e.life / 0.3) * 0.5;
-                ctx.fillRect(c.x, c.y - 8, c.width, 16);
-                ctx.globalAlpha = 1.0;
+                ctx.globalAlpha = (1 - progress) * 0.25;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, rx * 0.7, ry * 0.7, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
 
+                // 3. Floating Animated Text
                 if (e.text) {
+                    const textY = e.y - 15 - (progress * 25);
+                    const scale = 1 + Math.sin(progress * Math.PI) * 0.3;
+
+                    ctx.save();
+                    ctx.translate(cx, textY);
+                    ctx.scale(scale, scale);
                     ctx.fillStyle = e.color;
-                    ctx.font = 'bold 15px sans-serif';
+                    ctx.globalAlpha = (1 - progress);
+                    ctx.font = '900 16px sans-serif';
                     ctx.textAlign = 'center';
-                    ctx.fillText(e.text, c.x + c.width / 2, c.y - 18);
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = e.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fillText(e.text, 0, 0);
+                    ctx.restore();
                 }
             }
+
+            // 4. Render Burst Particles
+            for (let p of particles) {
+                const alpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = alpha;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1.0;
         }
 
         function gameLoop(timestamp) {
@@ -772,7 +847,6 @@
                     const dy = y - tData.startY;
                     const dist = Math.hypot(dx, dy);
 
-                    // If user moved finger sufficiently, trigger flick
                     if (dist > FLICK_THRESHOLD_PX && !tData.flicked) {
                         tData.flicked = true;
                         handleFlickLane(tData.lane, dist);
@@ -807,6 +881,7 @@
             combo = 0;
             notes = [];
             hitEffects = [];
+            particles = [];
             activeTouches.clear();
             laneOccupiedUntil.fill(0);
             isPlaying = true;
