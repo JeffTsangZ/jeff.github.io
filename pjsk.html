@@ -215,10 +215,11 @@
 
     <script>
         const LANES = 8;
-        const LANE_COLORS = [
-            '#00f2fe', '#00c3ff', '#0099ff', '#0066ff',
-            '#ff00aa', '#ff007f', '#ff0055', '#ff2a2a'
-        ];
+        
+        // Defined color themes according to specification
+        const TAP_COLOR = '#00f2fe';    // Light Blue
+        const HOLD_COLOR = '#2ecc71';   // Green
+        const MISS_COLOR = '#aaaaaa';   // Light Gray
         
         const NOTE_SPEED_PX = 380;
         const HIT_WINDOW_PX = 65;
@@ -358,7 +359,7 @@
                         n.missed = true;
                         combo = 0;
                         updateHUD();
-                        addHitEffect(n.lane, judgeY, "MISS", "#ff3333");
+                        addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
                     n.y += NOTE_SPEED_PX * dt;      // Tail moves down
@@ -369,7 +370,7 @@
                         n.missed = true;
                         combo = 0;
                         updateHUD();
-                        addHitEffect(n.lane, judgeY, "MISS", "#ff3333");
+                        addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                         continue;
                     }
 
@@ -384,7 +385,7 @@
                             n.missed = true;
                             combo = 0;
                             updateHUD();
-                            addHitEffect(n.lane, judgeY, "EARLY RELEASE", "#ffaa00");
+                            addHitEffect(n.lane, judgeY, "EARLY RELEASE", MISS_COLOR);
                         }
                     }
 
@@ -394,7 +395,7 @@
                         n.missed = true;
                         combo = 0;
                         updateHUD();
-                        addHitEffect(n.lane, judgeY, "LATE RELEASE", "#ff3333");
+                        addHitEffect(n.lane, judgeY, "LATE RELEASE", MISS_COLOR);
                     }
                 }
             }
@@ -421,7 +422,7 @@
                             if (diff < HIT_WINDOW_PX * 0.4) {
                                 score += 1000;
                                 combo++;
-                                addHitEffect(laneIndex, n.y, "PERFECT", "#00f2fe");
+                                addHitEffect(laneIndex, n.y, "PERFECT", TAP_COLOR);
                             } else {
                                 score += 500;
                                 combo++;
@@ -439,7 +440,7 @@
                             playTapSound(laneIndex, 100);
 
                             combo++;
-                            addHitEffect(laneIndex, n.headY, "HOLD!", "#00f2fe");
+                            addHitEffect(laneIndex, n.headY, "HOLD!", HOLD_COLOR);
                             updateHUD();
                             break;
                         }
@@ -469,7 +470,7 @@
                         score += 1000;
                         combo++;
                         updateHUD();
-                        addHitEffect(laneIndex, judgeY, "PERFECT RELEASE!", "#00f2fe");
+                        addHitEffect(laneIndex, judgeY, "PERFECT RELEASE!", HOLD_COLOR);
                     }
                 }
             }
@@ -565,10 +566,10 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Lane Touch Highlights
+            // Lane Touch Highlights (White track overlay when held)
             for (let i = 0; i < LANES; i++) {
                 if (laneHoldStatus[i]) {
-                    drawTrapezoid(topY, canvas.height, i, LANE_COLORS[i] + '33', 0);
+                    drawTrapezoid(topY, canvas.height, i, 'rgba(255, 255, 255, 0.2)', 0);
                 }
             }
 
@@ -578,18 +579,21 @@
 
                 if (n.type === 'tap') {
                     const noteHeight = 16;
-                    ctx.shadowColor = LANE_COLORS[n.lane];
+                    ctx.shadowColor = TAP_COLOR;
                     ctx.shadowBlur = 8;
-                    drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, LANE_COLORS[n.lane], 2);
+                    drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, TAP_COLOR, 2);
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
                     // Hold Body Strip
-                    drawTrapezoid(n.y, n.headY, n.lane, LANE_COLORS[n.lane] + '77', 4);
+                    drawTrapezoid(n.y, n.headY, n.lane, HOLD_COLOR + '77', 4);
 
                     // Start Head Note Bar
-                    drawTrapezoid(n.headY - 8, n.headY + 8, n.lane, LANE_COLORS[n.lane], 2);
+                    ctx.shadowColor = HOLD_COLOR;
+                    ctx.shadowBlur = 8;
+                    drawTrapezoid(n.headY - 8, n.headY + 8, n.lane, HOLD_COLOR, 2);
+                    ctx.shadowBlur = 0;
                     
-                    // End Tail Release Bar (White edge accent to signal release)
+                    // End Tail Release Bar
                     drawTrapezoid(n.y - 8, n.y + 8, n.lane, '#ffffff', 2);
                 }
             }
