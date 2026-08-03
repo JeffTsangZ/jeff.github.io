@@ -244,7 +244,7 @@
         let laneHoldStatus = new Array(LANES).fill(false);
 
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.8; // Decreased spawn frequency (was 0.4)
+        const SPAWN_INTERVAL = 0.8; 
         
         let laneOccupiedUntil = new Array(LANES).fill(0);
 
@@ -296,7 +296,7 @@
             }
         }
 
-        // Returns Normalized Y screen pixel coordinate given progress p (0 = top horizon, 1 = judgment line)
+        // Perspective mapping function
         function progressToY(p) {
             const topY = canvas.height * 0.15;
             const judgeY = canvas.height * 0.85;
@@ -310,7 +310,6 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
                 
-                // 1. Find available lanes that aren't on cooldown
                 let availableLanes = [];
                 for (let i = 0; i < LANES; i++) {
                     if (now > laneOccupiedUntil[i]) {
@@ -320,37 +319,33 @@
 
                 if (availableLanes.length === 0) return;
 
-                // 2. Count active concurrent beats currently at the top horizon spawn point (progress < 0.15)
                 const activeSpawnsAtHorizon = notes.filter(n => {
                     const headP = n.type === 'hold' ? n.headProgress : n.progress;
                     return headP < 0.15 && !n.missed;
                 }).length;
 
-                // Determine max allowable notes to spawn right now (at most 2 total simultaneous)
                 let allowedToSpawn = Math.min(
                     MAX_SIMULTANEOUS_NOTES - activeSpawnsAtHorizon,
-                    Math.random() < 0.2 ? 2 : 1 // 20% chance to attempt double note spawn
+                    Math.random() < 0.2 ? 2 : 1
                 );
 
                 if (allowedToSpawn <= 0) return;
 
-                // Pick random lanes and spawn
                 for (let s = 0; s < allowedToSpawn && availableLanes.length > 0; s++) {
                     const laneIndex = Math.floor(Math.random() * availableLanes.length);
                     const lane1 = availableLanes.splice(laneIndex, 1)[0];
                     const randType = Math.random();
 
                     if (randType < 0.35) {
-                        // FIXED HOLD LENGTH: progress length (0.35 of total track)
                         const holdProgressLen = 0.35; 
                         const endIsFlick = Math.random() < 0.4;
 
                         notes.push({
                             type: 'hold',
                             lane: lane1,
-                            progress: -holdProgressLen,  // Tail progress starts behind head
-                            headProgress: 0,             // Head progress starts at 0
-                            length: holdProgressLen,     // Fixed length
+                            progress: -holdProgressLen,  
+                            headProgress: 0,             
+                            duration: holdProgressLen / NOTE_SPEED_FACTOR, // Duration time units
                             holding: false,
                             headHit: false,
                             missed: false,
@@ -385,7 +380,6 @@
 
             const judgeY = canvas.height * 0.85;
 
-            // Sync active lane holds from touch state
             laneHoldStatus.fill(false);
             for (let t of activeTouches.values()) {
                 if (t.lane >= 0 && t.lane < LANES) {
@@ -407,14 +401,14 @@
                         addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
-                    // BEFORE head is hit: head and tail move in locked step maintaining exact length
                     if (!n.headHit) {
                         n.headProgress += NOTE_SPEED_FACTOR * dt;
-                        n.progress = n.headProgress - n.length; 
+                        // Tail position tracks head linearly in progress space
+                        n.progress = n.headProgress - (n.duration * NOTE_SPEED_FACTOR);
                     } else {
-                        // WHILE holding: tail advances towards judgment line
+                        // Advance tail while held
                         n.progress += NOTE_SPEED_FACTOR * dt;
-                        n.headProgress = Math.min(1.0, n.headProgress); // Anchor head at judgment line
+                        n.headProgress = Math.min(1.0, n.headProgress);
                     }
 
                     const headY = progressToY(n.headProgress);
@@ -745,7 +739,6 @@
                     drawFlickArrow(n.lane, curY, '#ffffff');
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    // Only render visible portion above horizon (progress > 0)
                     const renderTailProgress = Math.max(0, n.progress);
                     const renderHeadProgress = Math.max(0, n.headProgress);
 
