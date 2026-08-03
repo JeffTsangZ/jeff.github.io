@@ -244,7 +244,7 @@
         let laneHoldStatus = new Array(LANES).fill(false);
 
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.4; 
+        const SPAWN_INTERVAL = 0.8; // Decreased spawn frequency (was 0.4)
         
         let laneOccupiedUntil = new Array(LANES).fill(0);
 
@@ -329,7 +329,7 @@
                 // Determine max allowable notes to spawn right now (at most 2 total simultaneous)
                 let allowedToSpawn = Math.min(
                     MAX_SIMULTANEOUS_NOTES - activeSpawnsAtHorizon,
-                    Math.random() < 0.3 ? 2 : 1 // 30% chance to attempt double note spawn
+                    Math.random() < 0.2 ? 2 : 1 // 20% chance to attempt double note spawn
                 );
 
                 if (allowedToSpawn <= 0) return;
