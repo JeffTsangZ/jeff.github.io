@@ -200,7 +200,7 @@
             
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
-                <p>Tap Blue, Flick Pink, and Hold Green notes! Consistent track velocity enabled.</p>
+                <p>Tap Blue, Flick Pink, and Hold Green notes! Fixed-length hold tabs enabled.</p>
                 
                 <div class="title-btn-group">
                     <button id="startBtn" class="btn-play">PLAY GAME</button>
@@ -224,7 +224,7 @@
         const MISS_COLOR = '#aaaaaa';   // Light Gray
         
         // Unified Speed Constant (Tracks traversed per second)
-        const NOTE_SPEED_FACTOR = 0.85; // Adjust this to speed up or slow down all notes uniformly
+        const NOTE_SPEED_FACTOR = 0.85; 
         const HIT_WINDOW_PX = 65;
         const FLICK_THRESHOLD_PX = 25;
         
@@ -302,7 +302,6 @@
             return topY + p * (judgeY - topY);
         }
 
-        // Returns normalized progress p (0..1) given screen pixel y
         function yToProgress(y) {
             const topY = canvas.height * 0.15;
             const judgeY = canvas.height * 0.85;
@@ -329,15 +328,14 @@
                 const randType = Math.random();
 
                 if (randType < 0.35) {
-                    // Hold length expressed in track progress distance
+                    // Fixed hold length in track unit ratio
                     const holdProgressLen = 0.35 + Math.random() * 0.25;
                     const endIsFlick = Math.random() < 0.4;
 
                     notes.push({
                         type: 'hold',
                         lane: lane1,
-                        progress: -holdProgressLen,  // Tail progress
-                        headProgress: 0,             // Head progress
+                        headProgress: 0,
                         length: holdProgressLen,
                         holding: false,
                         headHit: false,
@@ -384,7 +382,6 @@
                 if (n.missed) continue;
 
                 if (n.type === 'tap' || n.type === 'flick') {
-                    // Constant progress advancement across all lanes
                     n.progress += NOTE_SPEED_FACTOR * dt;
                     const curY = progressToY(n.progress);
 
@@ -395,11 +392,14 @@
                         addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
-                    n.progress += NOTE_SPEED_FACTOR * dt;      // Tail advancement
-                    n.headProgress += NOTE_SPEED_FACTOR * dt;  // Head advancement
+                    if (!n.headHit) {
+                        // While falling, head moves down, tail follows at exact fixed length offset
+                        n.headProgress += NOTE_SPEED_FACTOR * dt;
+                    }
 
                     const headY = progressToY(n.headProgress);
-                    const tailY = progressToY(n.progress);
+                    const tailProgress = n.headProgress - n.length;
+                    const tailY = progressToY(tailProgress);
 
                     if (!n.headHit && headY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
@@ -412,6 +412,9 @@
                     if (n.holding) {
                         score += Math.round(150 * dt);
                         updateHUD();
+
+                        // Advance the tail forward towards the judgment line while held
+                        n.length = Math.max(0, n.length - NOTE_SPEED_FACTOR * dt);
 
                         if (!laneHoldStatus[n.lane] && tailY < judgeY - HIT_WINDOW_PX) {
                             n.holding = false;
@@ -479,12 +482,13 @@
                         const diff = Math.abs(headY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.headHit = true;
+                            n.headProgress = 1.0; // Lock head exactly to judgment line
                             n.holding = true;
                             hitFound = true;
                             playTapSound(laneIndex, 100);
 
                             combo++;
-                            addHitEffect(laneIndex, headY, "HOLD!", HOLD_COLOR);
+                            addHitEffect(laneIndex, judgeY, "HOLD!", HOLD_COLOR);
                             updateHUD();
                             break;
                         }
@@ -523,7 +527,8 @@
                         }
                     } 
                     else if (n.type === 'hold' && n.headHit && n.holding && n.endIsFlick) {
-                        const tailY = progressToY(n.progress);
+                        const tailProgress = n.headProgress - n.length;
+                        const tailY = progressToY(tailProgress);
                         const diff = Math.abs(tailY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.holding = false;
@@ -548,7 +553,8 @@
                 if (n.lane === laneIndex && n.type === 'hold' && n.headHit && n.holding && !n.missed) {
                     if (n.endIsFlick) continue;
 
-                    const tailY = progressToY(n.progress);
+                    const tailProgress = n.headProgress - n.length;
+                    const tailY = progressToY(tailProgress);
                     const diff = Math.abs(tailY - judgeY);
                     if (diff <= HIT_WINDOW_PX) {
                         n.holding = false;
@@ -726,8 +732,9 @@
                     drawFlickArrow(n.lane, curY, '#ffffff');
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    const tailY = progressToY(n.progress);
                     const headY = progressToY(n.headProgress);
+                    const tailProgress = n.headProgress - n.length;
+                    const tailY = progressToY(tailProgress);
 
                     drawTrapezoid(tailY, headY, n.lane, HOLD_COLOR + '77', 4);
 
