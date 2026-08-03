@@ -170,7 +170,7 @@
             background: rgba(231, 76, 60, 0.85);
         }
 
-        /* Floating Text Notification Requirement #4 */
+        /* Toast Notification Text */
         #floating-text {
             position: absolute;
             top: 80px;
@@ -185,7 +185,6 @@
             opacity: 0;
             transition: opacity 0.4s ease-out;
             white-space: pre-wrap;
-            /* Black border around red text */
             text-shadow: 
                 -2px -2px 0 #000,  
                  2px -2px 0 #000,
@@ -394,7 +393,7 @@
 
         <div id="skills-list"></div>
 
-        <!-- Requirement #4: Dynamic Floating Red Text with Black Border -->
+        <!-- Floating Red Text Notification -->
         <div id="floating-text"></div>
 
         <!-- Level Up / Boss Reward Overlay -->
@@ -466,6 +465,7 @@
             baseReach: 25,
             atk: 15,
             reach: 25,
+            pickupRadius: 32,
             level: 1,
             xp: 0,
             nextXp: 50,
@@ -476,7 +476,8 @@
             autoRangedTimer: 0,
             orbitAngle: 0,
             laserTimer: 0,
-            laserBeam: null
+            laserBeam: null,
+            itemSpawnTimer: 0
         };
 
         const SKILL_DEFINITIONS = [
@@ -550,7 +551,20 @@
                 getDesc: (lvl) => {
                     const mults = [1, 1.5, 2, 4, 5, 8];
                     if (lvl === 5) return "MAX LEVEL: Gain 8x EXP from all killed enemies!";
-                    return `Lvl ${lvl+1}: Increases earned EXP by ${mults[lvl+1]}x per kill!`;
+                    return `Lvl ${lvl+1}: Increases earned EXP by ${mults[lvl+1]}x per orb!`;
+                }
+            },
+            // Requirement #3: Passive Item Spawner Skill
+            {
+                id: 'itemSpawner',
+                name: 'Scavenger',
+                icon: '🧲',
+                noEvolution: false,
+                getDesc: (lvl, evolved) => {
+                    if (evolved) return "EVOLVED: Super Magnetism! Doubles item drop frequency and pickup radius!";
+                    if (lvl === 5) return "FINAL UPGRADE: Super Magnetism!";
+                    if (lvl === 0) return "Spawns Hearts (30% HP) and Magnets randomly over time.";
+                    return `Lvl ${lvl+1}: High item spawn rate & +${(lvl+1)*10} Pickup Range.`;
                 }
             }
         ];
@@ -561,7 +575,8 @@
             vampirism: 0,
             statBoost: 0,
             laserAttack: 0,
-            xpMultiplier: 0
+            xpMultiplier: 0,
+            itemSpawner: 0
         };
 
         let skillEvolutions = {
@@ -569,14 +584,19 @@
             spinningOrbit: false,
             vampirism: false,
             statBoost: false,
-            laserAttack: false
+            laserAttack: false,
+            itemSpawner: false
         };
 
         let playerProjectiles = [];
-        let enemyBullets = []; // Requirement #1: Enemy bullet tracking array
+        let enemyBullets = [];
         let particles = [];
+        
+        // Dynamic World Drops Arrays (Requirements #1, #2, #3)
+        let expOrbs = [];
+        let mapChests = [];
+        let mapItems = [];
 
-        // --- ENEMY TYPES SYSTEM (Requirement #1: Shooter type added) ---
         const ENEMY_TYPES = [
             { name: 'Slime',       color: '#2ecc71', hpMult: 1.0, speed: 0.5, damage: 6,   xp: 15,  isRanged: false, minLevel: 1,  weightBase: 60 },
             { name: 'Archer',      color: '#9b59b6', hpMult: 1.2, speed: 0.6, damage: 8,   xp: 35,  isRanged: true,  minLevel: 1,  weightBase: 55 },
@@ -737,6 +757,10 @@
 
             player.atk = player.baseAtk + extraAtk;
             player.reach = player.baseReach + extraReach;
+
+            // Pickup radius calculation (Scavenger)
+            let scavLvl = playerSkills.itemSpawner;
+            player.pickupRadius = 32 + (scavLvl * 12) + (skillEvolutions.itemSpawner ? 40 : 0);
         }
 
         function saveGame() {
@@ -754,7 +778,7 @@
                 evolutions: skillEvolutions,
                 bossTimer: bossTimer
             };
-            localStorage.setItem('rpg_save_data_v8', JSON.stringify(data));
+            localStorage.setItem('rpg_save_data_v9', JSON.stringify(data));
 
             const status = document.getElementById('save-status');
             status.style.opacity = '1';
@@ -763,7 +787,7 @@
         }
 
         function loadGame() {
-            const data = localStorage.getItem('rpg_save_data_v8');
+            const data = localStorage.getItem('rpg_save_data_v9');
             if (data) {
                 const parsed = JSON.parse(data);
                 player.hp = parsed.hp;
@@ -783,12 +807,11 @@
         }
 
         function resetGame() {
-            localStorage.removeItem('rpg_save_data_v8');
+            localStorage.removeItem('rpg_save_data_v9');
             location.reload();
         }
         document.getElementById('reset-btn').addEventListener('click', resetGame);
 
-        // Requirement #4: Display line of text fading after 3s (No dialog box)
         function showNotification(text) {
             const el = document.getElementById('floating-text');
             el.innerText = text;
@@ -825,7 +848,7 @@
             const subTitleEl = document.getElementById('skill-select-subtitle');
 
             if (isBossDrop) {
-                titleEl.innerText = "BOSS VANQUISHED!";
+                titleEl.innerText = "TREASURE CHEST OPENED!";
                 subTitleEl.innerText = "Choose your bonus skill reward";
             } else {
                 titleEl.innerText = "LEVEL UP!";
@@ -965,6 +988,32 @@
             return closest;
         }
 
+        // Requirement #1: Drop EXP Gem based on amount
+        function spawnExpOrb(x, y, rawXp) {
+            const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
+            const xpLvl = playerSkills.xpMultiplier || 0;
+            const finalXp = Math.floor(rawXp * xpMultipliers[xpLvl]);
+
+            let color = '#2ecc71'; // Green (Small)
+            let radius = 3;
+
+            if (finalXp >= 100) {
+                color = '#f1c40f'; // Gold (Large)
+                radius = 5;
+            } else if (finalXp >= 30) {
+                color = '#3498db'; // Blue (Medium)
+                radius = 4;
+            }
+
+            expOrbs.push({
+                x, y,
+                xp: finalXp,
+                color,
+                radius,
+                beingMagnetized: false
+            });
+        }
+
         function damageEnemy(enemy, amount) {
             enemy.hp -= amount;
             createBurst(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color);
@@ -987,17 +1036,24 @@
                     }
                 }
 
-                const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
-                const xpLvl = playerSkills.xpMultiplier || 0;
-                const finalXpGain = Math.floor(enemy.xpValue * xpMultipliers[xpLvl]);
-
                 if (enemy.isBoss) {
+                    // Requirement #2: Drop Chest instead of direct reward
+                    mapChests.push({
+                        x: enemy.x + enemy.width / 2,
+                        y: enemy.y + enemy.height / 2,
+                        width: 14,
+                        height: 12,
+                        beingMagnetized: false
+                    });
+                    // Boss drops massive gold EXP orb too
+                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
+                    
                     activeBoss = null;
                     bossTimer = BOSS_INTERVAL;
-                    gainXp(finalXpGain);
-                    triggerSkillSelectionScreen(true);
+                    showNotification("BOSS DEFEATED!\nA Treasure Chest has dropped!");
                 } else {
-                    gainXp(finalXpGain);
+                    // Requirement #1: Drop EXP orb
+                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
                 }
             }
         }
@@ -1068,6 +1124,13 @@
             }
         }
 
+        function triggerFullMapMagnet() {
+            showNotification("🧲 MAGNET ACTIVATED!\nCollected all items & EXP!");
+            expOrbs.forEach(o => o.beingMagnetized = true);
+            mapChests.forEach(c => c.beingMagnetized = true);
+            mapItems.forEach(item => item.beingMagnetized = true);
+        }
+
         function rectOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
             return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
         }
@@ -1088,6 +1151,32 @@
                 if (bossTimer <= 0) {
                     spawnBoss();
                 }
+            }
+
+            // Requirement #3: Map Item Spawner Timer Logic
+            const scavLvl = playerSkills.itemSpawner;
+            const scavEvol = skillEvolutions.itemSpawner;
+            
+            // Base chance spawns items periodically; higher level speeds up spawn timer
+            player.itemSpawnTimer++;
+            const spawnInterval = scavEvol ? 180 : Math.max(240, 600 - (scavLvl * 75)); // 3s to 10s intervals
+
+            if (player.itemSpawnTimer >= spawnInterval) {
+                const maxAllowedItems = 3 + scavLvl * 2;
+                if (mapItems.length < maxAllowedItems) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 60 + Math.random() * 160;
+                    const itemType = Math.random() < 0.65 ? 'heart' : 'magnet';
+                    
+                    mapItems.push({
+                        x: player.x + Math.cos(angle) * dist,
+                        y: player.y + Math.sin(angle) * dist,
+                        type: itemType,
+                        radius: 6,
+                        beingMagnetized: false
+                    });
+                }
+                player.itemSpawnTimer = 0;
             }
 
             let dx = 0, dy = 0;
@@ -1113,6 +1202,69 @@
             player.x += dx * player.speed;
             player.y += dy * player.speed;
 
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+
+            // --- UPDATE EXP ORBS PICKUP LOGIC ---
+            expOrbs.forEach(orb => {
+                const dist = Math.hypot(orb.x - px, orb.y - py);
+                if (dist < player.pickupRadius || orb.beingMagnetized) {
+                    orb.beingMagnetized = true;
+                    const angle = Math.atan2(py - orb.y, px - orb.x);
+                    const flySpeed = 4.5;
+                    orb.x += Math.cos(angle) * flySpeed;
+                    orb.y += Math.sin(angle) * flySpeed;
+                }
+
+                if (dist < 8) {
+                    gainXp(orb.xp);
+                    createBurst(orb.x, orb.y, orb.color);
+                    orb.collected = true;
+                }
+            });
+            expOrbs = expOrbs.filter(o => !o.collected);
+
+            // --- UPDATE CHEST PICKUP LOGIC (Requirement #2) ---
+            mapChests.forEach(chest => {
+                const dist = Math.hypot(chest.x - px, chest.y - py);
+                if (chest.beingMagnetized) {
+                    const angle = Math.atan2(py - chest.y, px - chest.x);
+                    chest.x += Math.cos(angle) * 4;
+                    chest.y += Math.sin(angle) * 4;
+                }
+
+                if (dist < 12 || rectOverlap(player.x, player.y, player.width, player.height, chest.x - 7, chest.y - 6, chest.width, chest.height)) {
+                    createBurst(chest.x, chest.y, '#f1c40f');
+                    chest.collected = true;
+                    triggerSkillSelectionScreen(true);
+                }
+            });
+            mapChests = mapChests.filter(c => !c.collected);
+
+            // --- UPDATE MAP ITEMS PICKUP LOGIC (Requirement #3) ---
+            mapItems.forEach(item => {
+                const dist = Math.hypot(item.x - px, item.y - py);
+                if (dist < player.pickupRadius || item.beingMagnetized) {
+                    item.beingMagnetized = true;
+                    const angle = Math.atan2(py - item.y, px - item.x);
+                    item.x += Math.cos(angle) * 4.0;
+                    item.y += Math.sin(angle) * 4.0;
+                }
+
+                if (dist < 10) {
+                    item.collected = true;
+                    if (item.type === 'heart') {
+                        const healAmt = Math.floor(player.maxHp * 0.30);
+                        player.hp = Math.min(player.maxHp, player.hp + healAmt);
+                        createBurst(px, py, '#e74c3c');
+                        showNotification(`HEALED +${healAmt} HP!`);
+                    } else if (item.type === 'magnet') {
+                        triggerFullMapMagnet();
+                    }
+                }
+            });
+            mapItems = mapItems.filter(i => !i.collected);
+
             if (player.isAttacking) {
                 player.attackTimer--;
                 if (player.attackTimer <= 0) player.isAttacking = false;
@@ -1129,8 +1281,6 @@
                 const cd = autoEvol ? 18 : cooldowns[autoLvl];
 
                 if (player.autoRangedTimer >= cd) {
-                    const px = player.x + player.width / 2;
-                    const py = player.y + player.height / 2;
                     const target = getClosestEnemy(px, py);
                     
                     if (target) {
@@ -1166,9 +1316,6 @@
                 const radius = orbitEvol ? 42 : (24 + orbitLvl * 2);
                 const orbSize = orbitEvol ? 7 : 3;
 
-                const px = player.x + player.width / 2;
-                const py = player.y + player.height / 2;
-
                 for (let i = 0; i < numOrbs; i++) {
                     const currentAngle = player.orbitAngle + (i * (Math.PI * 2 / numOrbs));
                     const orbX = px + Math.cos(currentAngle) * radius;
@@ -1191,8 +1338,6 @@
                 const cd = laserEvol ? 50 : laserCooldowns[laserLvl];
 
                 if (player.laserTimer >= cd) {
-                    const px = player.x + player.width / 2;
-                    const py = player.y + player.height / 2;
                     const target = getClosestEnemy(px, py);
 
                     if (target) {
@@ -1269,7 +1414,7 @@
             });
             playerProjectiles = playerProjectiles.filter(p => p.life > 0);
 
-            // Requirement #1: Update Enemy Bullets (Slow, red ball, straight trajectory)
+            // Update Enemy Bullets
             enemyBullets.forEach(b => {
                 b.x += b.vx;
                 b.y += b.vy;
@@ -1296,11 +1441,9 @@
             });
             enemyBullets = enemyBullets.filter(b => b.life > 0);
 
-            // Update Enemies AI & Ranged Attack Logic
+            // Update Enemies
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
-                const px = player.x + player.width / 2;
-                const py = player.y + player.height / 2;
                 const ex = e.x + e.width / 2;
                 const ey = e.y + e.height / 2;
 
@@ -1308,18 +1451,17 @@
                 e.x += Math.cos(angle) * e.speed;
                 e.y += Math.sin(angle) * e.speed;
 
-                // Requirement #1: Enemy Shooting Mechanism
                 if (e.isRanged) {
                     e.shootTimer++;
                     const shootCD = e.isBoss ? 70 : 130;
                     if (e.shootTimer >= shootCD) {
-                        const bulletSpeed = 1.2; // Slow speed
+                        const bulletSpeed = 1.2;
                         enemyBullets.push({
                             x: ex,
                             y: ey,
                             vx: Math.cos(angle) * bulletSpeed,
                             vy: Math.sin(angle) * bulletSpeed,
-                            radius: 3.5, // Ball shape
+                            radius: 3.5,
                             damage: e.damage,
                             life: 250
                         });
@@ -1366,7 +1508,7 @@
             const camX = player.x + player.width / 2 - canvas.width / 2;
             const camY = player.y + player.height / 2 - canvas.height / 2;
 
-            // Render Repeating Infinite Map Grid
+            // Render Map Grid
             const minTileX = Math.floor(camX / MAP_WIDTH) - 1;
             const maxTileX = Math.floor((camX + canvas.width) / MAP_WIDTH) + 1;
             const minTileY = Math.floor(camY / MAP_HEIGHT) - 1;
@@ -1389,6 +1531,64 @@
                     ctx.strokeRect(screenTileX, screenTileY, MAP_WIDTH, MAP_HEIGHT);
                 }
             }
+
+            // Requirement #1: Draw EXP Orbs
+            expOrbs.forEach(orb => {
+                const ox = orb.x - camX;
+                const oy = orb.y - camY;
+
+                ctx.fillStyle = orb.color;
+                ctx.beginPath();
+                ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner diamond highlight
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(ox - 1, oy - 1, 2, 2);
+            });
+
+            // Requirement #2: Draw Treasure Chests
+            mapChests.forEach(chest => {
+                const cx = chest.x - camX - chest.width / 2;
+                const cy = chest.y - camY - chest.height / 2;
+
+                // Glowing outline
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(cx - 1, cy - 1, chest.width + 2, chest.height + 2);
+
+                // Main Wooden Chest Body
+                ctx.fillStyle = '#8e44ad';
+                ctx.fillRect(cx, cy, chest.width, chest.height);
+
+                // Gold Trimmings
+                ctx.fillStyle = '#f39c12';
+                ctx.fillRect(cx + 2, cy + 2, chest.width - 4, 2);
+                ctx.fillRect(cx + (chest.width / 2) - 1, cy + 4, 3, 4);
+            });
+
+            // Requirement #3: Draw Hearts and Magnets
+            mapItems.forEach(item => {
+                const ix = item.x - camX;
+                const iy = item.y - camY;
+
+                if (item.type === 'heart') {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.beginPath();
+                    ctx.arc(ix - 2, iy - 2, 3, Math.PI, 0, false);
+                    ctx.arc(ix + 2, iy - 2, 3, Math.PI, 0, false);
+                    ctx.lineTo(ix, iy + 4);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (item.type === 'magnet') {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillRect(ix - 5, iy - 4, 3, 7);
+                    ctx.fillRect(ix + 2, iy - 4, 3, 7);
+                    ctx.fillRect(ix - 5, iy + 3, 10, 2);
+                    ctx.fillStyle = '#ecf0f1';
+                    ctx.fillRect(ix - 5, iy - 4, 3, 2);
+                    ctx.fillRect(ix + 2, iy - 4, 3, 2);
+                }
+            });
 
             // Enemies & Boss
             enemies.forEach(e => {
@@ -1422,7 +1622,7 @@
                 }
             });
 
-            // Requirement #1: Draw Slow Red Ball Enemy Bullets
+            // Enemy Bullets
             enemyBullets.forEach(b => {
                 const bx = b.x - camX;
                 const by = b.y - camY;
@@ -1432,25 +1632,33 @@
                 ctx.arc(bx, by, b.radius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Inner glow accent
                 ctx.fillStyle = '#ff9999';
                 ctx.beginPath();
                 ctx.arc(bx - 1, by - 1, b.radius * 0.4, 0, Math.PI * 2);
                 ctx.fill();
             });
 
-            // Requirement #2: Enhanced Player Sprite Graphics (Detailed Pixel Knight)
+            // Player Sprite Graphics
             const pScrX = player.x - camX;
             const pScrY = player.y - camY;
 
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
+                // Pickup Range Magnet Ring Indicator
+                if (playerSkills.itemSpawner > 0) {
+                    ctx.strokeStyle = 'rgba(52, 152, 219, 0.15)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(pScrX + 7, pScrY + 8, player.pickupRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
                 // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.beginPath();
                 ctx.ellipse(pScrX + 7, pScrY + 15, 6, 3, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Body Armor (Blue / Steel)
+                // Body Armor
                 ctx.fillStyle = '#2980b9';
                 ctx.fillRect(pScrX + 3, pScrY + 6, 8, 7);
 
@@ -1462,7 +1670,7 @@
                 ctx.fillStyle = '#bdc3c7';
                 ctx.fillRect(pScrX + 2, pScrY + 0, 10, 6);
 
-                // Helmet Visor (Dark Gold/Black)
+                // Helmet Visor
                 ctx.fillStyle = '#2c3e50';
                 ctx.fillRect(pScrX + 3, pScrY + 3, 8, 2);
 
@@ -1475,7 +1683,7 @@
                 ctx.fillRect(pScrX + 3, pScrY + 13, 3, 3);
                 ctx.fillRect(pScrX + 8, pScrY + 13, 3, 3);
 
-                // Sword / Weapon Sheath Directional Overlay
+                // Sword Directional Overlay
                 const px = pScrX + player.width / 2;
                 const py = pScrY + player.height / 2;
                 const hx = px + Math.cos(player.facingAngle) * 8;
@@ -1488,7 +1696,6 @@
                 ctx.lineTo(hx, hy);
                 ctx.stroke();
 
-                // Sword Hilt Accent
                 ctx.fillStyle = '#f1c40f';
                 ctx.fillRect(hx - 1, hy - 1, 3, 3);
             }
