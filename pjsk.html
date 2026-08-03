@@ -200,7 +200,7 @@
             
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
-                <p>Tap Blue, Flick Pink, and Hold Green notes! Fixed hold lengths & clean line clearing enabled.</p>
+                <p>Tap Blue, Flick Pink, and Hold Green notes! Max 2 simultaneous notes.</p>
                 
                 <div class="title-btn-group">
                     <button id="startBtn" class="btn-play">PLAY GAME</button>
@@ -223,11 +223,11 @@
         const FLICK_COLOR = '#ff00ff';  // Pink
         const MISS_COLOR = '#aaaaaa';   // Light Gray
         
-        // Unified Speed Constant (Tracks traversed per second)
-        const NOTE_SPEED_FACTOR = 0.85; 
-        const FIXED_HOLD_LENGTH = 0.30; // Fixed visual span for hold notes in progress units
+        // Settings
+        const NOTE_SPEED_FACTOR = 0.85; // Velocity per second
         const HIT_WINDOW_PX = 65;
         const FLICK_THRESHOLD_PX = 25;
+        const MAX_SIMULTANEOUS_NOTES = 2; // Strict limit: max 2 simultaneous notes
         
         let canvas, ctx;
         let score = 0;
@@ -244,7 +244,7 @@
         let laneHoldStatus = new Array(LANES).fill(false);
 
         let spawnTimer = 0;
-        const SPAWN_INTERVAL = 0.45; 
+        const SPAWN_INTERVAL = 0.4; 
         
         let laneOccupiedUntil = new Array(LANES).fill(0);
 
@@ -296,6 +296,7 @@
             }
         }
 
+        // Returns Normalized Y screen pixel coordinate given progress p (0 = top horizon, 1 = judgment line)
         function progressToY(p) {
             const topY = canvas.height * 0.15;
             const judgeY = canvas.height * 0.85;
@@ -309,6 +310,7 @@
             if (spawnTimer >= SPAWN_INTERVAL) {
                 spawnTimer = 0;
                 
+                // 1. Find available lanes that aren't on cooldown
                 let availableLanes = [];
                 for (let i = 0; i < LANES; i++) {
                     if (now > laneOccupiedUntil[i]) {
@@ -318,39 +320,60 @@
 
                 if (availableLanes.length === 0) return;
 
-                const lane1 = availableLanes[Math.floor(Math.random() * availableLanes.length)];
-                const randType = Math.random();
+                // 2. Count active concurrent beats currently at the top horizon spawn point (progress < 0.15)
+                const activeSpawnsAtHorizon = notes.filter(n => {
+                    const headP = n.type === 'hold' ? n.headProgress : n.progress;
+                    return headP < 0.15 && !n.missed;
+                }).length;
 
-                if (randType < 0.35) {
-                    const endIsFlick = Math.random() < 0.4;
+                // Determine max allowable notes to spawn right now (at most 2 total simultaneous)
+                let allowedToSpawn = Math.min(
+                    MAX_SIMULTANEOUS_NOTES - activeSpawnsAtHorizon,
+                    Math.random() < 0.3 ? 2 : 1 // 30% chance to attempt double note spawn
+                );
 
-                    notes.push({
-                        type: 'hold',
-                        lane: lane1,
-                        progress: -FIXED_HOLD_LENGTH, // Tail starts behind head by fixed length
-                        headProgress: 0,             // Head starts at horizon (progress 0)
-                        holding: false,
-                        headHit: false,
-                        missed: false,
-                        endIsFlick: endIsFlick
-                    });
-                    laneOccupiedUntil[lane1] = now + ((FIXED_HOLD_LENGTH + 1.0) / NOTE_SPEED_FACTOR) * 1000;
-                } else if (randType < 0.65) {
-                    notes.push({
-                        type: 'flick',
-                        lane: lane1,
-                        progress: 0,
-                        missed: false
-                    });
-                    laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
-                } else {
-                    notes.push({
-                        type: 'tap',
-                        lane: lane1,
-                        progress: 0,
-                        missed: false
-                    });
-                    laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
+                if (allowedToSpawn <= 0) return;
+
+                // Pick random lanes and spawn
+                for (let s = 0; s < allowedToSpawn && availableLanes.length > 0; s++) {
+                    const laneIndex = Math.floor(Math.random() * availableLanes.length);
+                    const lane1 = availableLanes.splice(laneIndex, 1)[0];
+                    const randType = Math.random();
+
+                    if (randType < 0.35) {
+                        // FIXED HOLD LENGTH: progress length (0.35 of total track)
+                        const holdProgressLen = 0.35; 
+                        const endIsFlick = Math.random() < 0.4;
+
+                        notes.push({
+                            type: 'hold',
+                            lane: lane1,
+                            progress: -holdProgressLen,  // Tail progress starts behind head
+                            headProgress: 0,             // Head progress starts at 0
+                            length: holdProgressLen,     // Fixed length
+                            holding: false,
+                            headHit: false,
+                            missed: false,
+                            endIsFlick: endIsFlick
+                        });
+                        laneOccupiedUntil[lane1] = now + ((holdProgressLen + 0.8) / NOTE_SPEED_FACTOR) * 1000;
+                    } else if (randType < 0.65) {
+                        notes.push({
+                            type: 'flick',
+                            lane: lane1,
+                            progress: 0,
+                            missed: false
+                        });
+                        laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
+                    } else {
+                        notes.push({
+                            type: 'tap',
+                            lane: lane1,
+                            progress: 0,
+                            missed: false
+                        });
+                        laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
+                    }
                 }
             }
         }
@@ -377,7 +400,6 @@
                     n.progress += NOTE_SPEED_FACTOR * dt;
                     const curY = progressToY(n.progress);
 
-                    // Flag as missed when passing judgment line
                     if (curY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
@@ -385,17 +407,31 @@
                         addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
-                    if (n.holding) {
-                        // While being held, head stays locked at judgment line while tail moves forward
+                    // BEFORE head is hit: head and tail move in locked step maintaining exact length
+                    if (!n.headHit) {
+                        n.headProgress += NOTE_SPEED_FACTOR * dt;
+                        n.progress = n.headProgress - n.length; 
+                    } else {
+                        // WHILE holding: tail advances towards judgment line
                         n.progress += NOTE_SPEED_FACTOR * dt;
-                        n.headProgress = 1.0; 
+                        n.headProgress = Math.min(1.0, n.headProgress); // Anchor head at judgment line
+                    }
 
+                    const headY = progressToY(n.headProgress);
+                    const tailY = progressToY(n.progress);
+
+                    if (!n.headHit && headY > judgeY + HIT_WINDOW_PX) {
+                        n.missed = true;
+                        combo = 0;
+                        updateHUD();
+                        addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
+                        continue;
+                    }
+
+                    if (n.holding) {
                         score += Math.round(150 * dt);
                         updateHUD();
 
-                        const tailY = progressToY(n.progress);
-
-                        // Early release check
                         if (!laneHoldStatus[n.lane] && tailY < judgeY - HIT_WINDOW_PX) {
                             n.holding = false;
                             n.missed = true;
@@ -403,38 +439,18 @@
                             updateHUD();
                             addHitEffect(n.lane, judgeY, "EARLY RELEASE", MISS_COLOR);
                         }
+                    }
 
-                        // Passed release window without completing release/flick
-                        if (tailY > judgeY + HIT_WINDOW_PX) {
-                            n.holding = false;
-                            n.missed = true;
-                            combo = 0;
-                            updateHUD();
-                            addHitEffect(n.lane, judgeY, n.endIsFlick ? "MISS FLICK" : "LATE RELEASE", MISS_COLOR);
-                        }
-                    } else {
-                        // Unheld falling movement (both head and tail move at identical speed)
-                        n.progress += NOTE_SPEED_FACTOR * dt;
-                        n.headProgress += NOTE_SPEED_FACTOR * dt;
-
-                        const headY = progressToY(n.headProgress);
-                        const tailY = progressToY(n.progress);
-
-                        // If unheld head passes judgment line without tap
-                        if (!n.headHit && headY > judgeY + HIT_WINDOW_PX) {
-                            n.missed = true;
-                            combo = 0;
-                            updateHUD();
-                            addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
-                        } else if (n.headHit && tailY > judgeY + HIT_WINDOW_PX) {
-                            // Clear fully passed unheld holds
-                            n.missed = true;
-                        }
+                    if (n.headHit && n.holding && tailY > judgeY + HIT_WINDOW_PX) {
+                        n.holding = false;
+                        n.missed = true;
+                        combo = 0;
+                        updateHUD();
+                        addHitEffect(n.lane, judgeY, n.endIsFlick ? "MISS FLICK" : "LATE RELEASE", MISS_COLOR);
                     }
                 }
             }
 
-            // Immediately clear out missed/completed notes so they never remain stuck on screen
             notes = notes.filter(n => !n.missed);
             
             for (let e of hitEffects) {
@@ -487,7 +503,7 @@
                             playTapSound(laneIndex, 100);
 
                             combo++;
-                            addHitEffect(laneIndex, judgeY, "HOLD!", HOLD_COLOR);
+                            addHitEffect(laneIndex, headY, "HOLD!", HOLD_COLOR);
                             updateHUD();
                             break;
                         }
@@ -578,7 +594,7 @@
                 maxLife: maxLife
             });
 
-            if (text && text !== "MISS" && text !== "EARLY RELEASE" && text !== "LATE RELEASE" && text !== "MISS FLICK") {
+            if (text && text !== "MISS" && text !== "EARLY RELEASE" && text !== "LATE RELEASE") {
                 const coords = getTrackCoords(lane, y);
                 const cx = coords.x + coords.width / 2;
                 const particleCount = 12 + Math.floor(Math.random() * 8);
@@ -729,27 +745,22 @@
                     drawFlickArrow(n.lane, curY, '#ffffff');
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    // Restrict rendered progress to visible bounds
-                    const clampedTailProgress = Math.max(0, n.progress);
-                    const clampedHeadProgress = Math.min(1.0, n.headProgress);
+                    // Only render visible portion above horizon (progress > 0)
+                    const renderTailProgress = Math.max(0, n.progress);
+                    const renderHeadProgress = Math.max(0, n.headProgress);
 
-                    if (clampedHeadProgress > 0 && clampedTailProgress < 1.0) {
-                        const tailY = progressToY(clampedTailProgress);
-                        const headY = progressToY(clampedHeadProgress);
+                    if (renderHeadProgress > 0) {
+                        const tailY = progressToY(renderTailProgress);
+                        const headY = progressToY(renderHeadProgress);
 
-                        // Draw hold trail body
                         drawTrapezoid(tailY, headY, n.lane, HOLD_COLOR + '77', 4);
 
-                        // Draw head marker if head hasn't reached judgment line
-                        if (!n.headHit && n.headProgress <= 1.0) {
-                            ctx.shadowColor = HOLD_COLOR;
-                            ctx.shadowBlur = 8;
-                            drawTrapezoid(headY - 8, headY + 8, n.lane, HOLD_COLOR, 2);
-                            ctx.shadowBlur = 0;
-                        }
-
-                        // Draw tail marker
-                        if (n.progress >= 0) {
+                        ctx.shadowColor = HOLD_COLOR;
+                        ctx.shadowBlur = 8;
+                        drawTrapezoid(headY - 8, headY + 8, n.lane, HOLD_COLOR, 2);
+                        ctx.shadowBlur = 0;
+                        
+                        if (renderTailProgress > 0) {
                             const tailColor = n.endIsFlick ? FLICK_COLOR : '#ffffff';
                             ctx.shadowColor = tailColor;
                             ctx.shadowBlur = n.endIsFlick ? 10 : 0;
@@ -763,13 +774,13 @@
                 }
             }
 
-            // Visual Effects (Lane Beams, Shockwaves & Judgment Text)
+            // Visual Effects
             for (let e of hitEffects) {
                 const c = getTrackCoords(e.lane, e.y);
                 const progress = 1 - (e.life / e.maxLife);
                 const cx = c.x + c.width / 2;
 
-                if (e.text && e.text !== "MISS" && e.text !== "EARLY RELEASE" && e.text !== "LATE RELEASE") {
+                if (e.text && e.text !== "MISS") {
                     const beamAlpha = (1 - progress) * 0.35;
                     drawTrapezoid(topY, canvas.height, e.lane, e.color.slice(0, 7) + Math.floor(beamAlpha * 255).toString(16).padStart(2, '0'), 0);
                 }
