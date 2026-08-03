@@ -217,10 +217,6 @@
     <script>
         const LANES = 8;
         
-        // Track visual proportions (Decreased track width)
-        const TOP_TRACK_WIDTH_RATIO = 0.25;   // Decreased top width
-        const BOTTOM_TRACK_WIDTH_RATIO = 0.75; // Decreased bottom width
-        
         // Color definitions
         const TAP_COLOR = '#00f2fe';    // Light Blue
         const HOLD_COLOR = '#2ecc71';   // Green
@@ -232,6 +228,10 @@
         const HIT_WINDOW_PX = 65;
         const FLICK_THRESHOLD_PX = 25;
         const MAX_SIMULTANEOUS_NOTES = 2; // Strict limit: max 2 simultaneous notes
+
+        // Reduced Track Width Constants (Relative to Canvas Width)
+        const TOP_TRACK_RATIO = 0.25;    // Reduced top width
+        const BOTTOM_TRACK_RATIO = 0.70; // Reduced bottom width
         
         let canvas, ctx;
         let score = 0;
@@ -300,34 +300,22 @@
             }
         }
 
-        // Helper to query which lane a given screen point (x, y) collides with
-        function getLaneFromPoint(x, y) {
-            const topY = canvas.height * 0.15;
-            const bottomY = canvas.height * 0.95;
-
-            if (y < topY || y > bottomY) return -1;
-
-            const progress = (y - topY) / (bottomY - topY);
-
-            const topTrackWidth = canvas.width * TOP_TRACK_WIDTH_RATIO;
-            const bottomTrackWidth = canvas.width * BOTTOM_TRACK_WIDTH_RATIO;
-
-            const currentTrackWidth = topTrackWidth + (bottomTrackWidth - topTrackWidth) * progress;
-            const trackLeft = (canvas.width - currentTrackWidth) / 2;
-
-            if (x < trackLeft || x > trackLeft + currentTrackWidth) return -1;
-
-            const laneWidth = currentTrackWidth / LANES;
-            const laneIndex = Math.floor((x - trackLeft) / laneWidth);
-
-            return (laneIndex >= 0 && laneIndex < LANES) ? laneIndex : -1;
-        }
-
         // Perspective mapping function
         function progressToY(p) {
             const topY = canvas.height * 0.15;
             const judgeY = canvas.height * 0.85;
             return topY + p * (judgeY - topY);
+        }
+
+        function getLaneFromX(x) {
+            const topTrackWidth = canvas.width * BOTTOM_TRACK_RATIO;
+            const trackLeft = (canvas.width - topTrackWidth) / 2;
+            const laneWidth = topTrackWidth / LANES;
+            const laneIndex = Math.floor((x - trackLeft) / laneWidth);
+            if (laneIndex >= 0 && laneIndex < LANES) {
+                return laneIndex;
+            }
+            return -1;
         }
 
         function spawnNotes(dt) {
@@ -407,11 +395,12 @@
 
             const judgeY = canvas.height * 0.85;
 
-            // Continually evaluate active lane collisions based on current finger positions
+            // Update lane visual highlights dynamically based on current touch positions (Finger Collision)
             laneHoldStatus.fill(false);
             for (let t of activeTouches.values()) {
-                if (t.lane >= 0 && t.lane < LANES) {
-                    laneHoldStatus[t.lane] = true;
+                const currentLane = getLaneFromX(t.currentX);
+                if (currentLane >= 0 && currentLane < LANES) {
+                    laneHoldStatus[currentLane] = true;
                 }
             }
 
@@ -487,7 +476,7 @@
             particles = particles.filter(p => p.life > 0);
         }
 
-        function handlePressLane(laneIndex) {
+        function handlePressLane(laneIndex, touchData) {
             const judgeY = canvas.height * 0.85;
             let hitFound = false;
 
@@ -648,8 +637,8 @@
 
             const progress = (currentY - topY) / (bottomY - topY);
 
-            const topTrackWidth = canvas.width * TOP_TRACK_WIDTH_RATIO;
-            const bottomTrackWidth = canvas.width * BOTTOM_TRACK_WIDTH_RATIO;
+            const topTrackWidth = canvas.width * TOP_TRACK_RATIO;
+            const bottomTrackWidth = canvas.width * BOTTOM_TRACK_RATIO;
 
             const currentTrackWidth = topTrackWidth + (bottomTrackWidth - topTrackWidth) * progress;
             const trackLeft = (canvas.width - currentTrackWidth) / 2;
@@ -707,8 +696,8 @@
 
             // Perspective Lane Dividers
             for (let i = 0; i <= LANES; i++) {
-                const topTrackWidth = canvas.width * TOP_TRACK_WIDTH_RATIO;
-                const bottomTrackWidth = canvas.width * BOTTOM_TRACK_WIDTH_RATIO;
+                const topTrackWidth = canvas.width * TOP_TRACK_RATIO;
+                const bottomTrackWidth = canvas.width * BOTTOM_TRACK_RATIO;
 
                 const xTop = ((canvas.width - topTrackWidth) / 2) + (topTrackWidth / LANES) * i;
                 const xBottom = ((canvas.width - bottomTrackWidth) / 2) + (bottomTrackWidth / LANES) * i;
@@ -738,7 +727,7 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Lane Touch Highlights (Triggered on collision)
+            // Lane Touch Highlights (Triggers on finger position collision)
             for (let i = 0; i < LANES; i++) {
                 if (laneHoldStatus[i]) {
                     drawTrapezoid(topY, canvas.height, i, 'rgba(255, 255, 255, 0.2)', 0);
@@ -878,7 +867,7 @@
                 const x = touch.clientX - rect.left;
                 const y = touch.clientY - rect.top;
                 
-                const laneIndex = getLaneFromPoint(x, y);
+                const laneIndex = getLaneFromX(x);
 
                 activeTouches.set(touch.identifier, {
                     lane: laneIndex,
@@ -889,8 +878,8 @@
                     flicked: false
                 });
 
-                if (laneIndex >= 0) {
-                    handlePressLane(laneIndex);
+                if (laneIndex >= 0 && laneIndex < LANES) {
+                    handlePressLane(laneIndex, activeTouches.get(touch.identifier));
                 }
             }
         }
@@ -908,20 +897,17 @@
                     const x = touch.clientX - rect.left;
                     const y = touch.clientY - rect.top;
 
-                    // Dynamically calculate finger collision with track
-                    const currentLane = getLaneFromPoint(x, y);
-
-                    // Continuous collision toggle check as finger moves over lanes
-                    if (currentLane !== tData.lane) {
-                        tData.lane = currentLane;
-                        if (currentLane >= 0) {
-                            handlePressLane(currentLane);
-                        }
-                    }
-
                     const dx = x - tData.startX;
                     const dy = y - tData.startY;
                     const dist = Math.hypot(dx, dy);
+
+                    tData.currentX = x;
+                    tData.currentY = y;
+
+                    const currentLane = getLaneFromX(x);
+                    if (currentLane >= 0 && currentLane < LANES) {
+                        tData.lane = currentLane;
+                    }
 
                     if (dist > FLICK_THRESHOLD_PX && !tData.flicked) {
                         tData.flicked = true;
@@ -929,9 +915,6 @@
                             handleFlickLane(tData.lane, dist);
                         }
                     }
-
-                    tData.currentX = x;
-                    tData.currentY = y;
                 }
             }
         }
