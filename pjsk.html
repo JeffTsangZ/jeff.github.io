@@ -200,7 +200,7 @@
             
             <div id="startOverlay" class="start-overlay">
                 <h1>BEAT STRIKE (8-LANES)</h1>
-                <p>Tap Blue, Flick Pink, and Hold Green notes! Flick notes can also end hold trails!</p>
+                <p>Tap Blue, Flick Pink, and Hold Green notes! Consistent track velocity enabled.</p>
                 
                 <div class="title-btn-group">
                     <button id="startBtn" class="btn-play">PLAY GAME</button>
@@ -217,13 +217,14 @@
     <script>
         const LANES = 8;
         
-        // Defined color themes
+        // Color definitions
         const TAP_COLOR = '#00f2fe';    // Light Blue
         const HOLD_COLOR = '#2ecc71';   // Green
         const FLICK_COLOR = '#ff00ff';  // Pink
         const MISS_COLOR = '#aaaaaa';   // Light Gray
         
-        const NOTE_SPEED_PX = 380;
+        // Unified Speed Constant (Tracks traversed per second)
+        const NOTE_SPEED_FACTOR = 0.85; // Adjust this to speed up or slow down all notes uniformly
         const HIT_WINDOW_PX = 65;
         const FLICK_THRESHOLD_PX = 25;
         
@@ -294,6 +295,20 @@
             }
         }
 
+        // Returns Normalized Y screen pixel coordinate given progress p (0 = top horizon, 1 = judgment line)
+        function progressToY(p) {
+            const topY = canvas.height * 0.15;
+            const judgeY = canvas.height * 0.85;
+            return topY + p * (judgeY - topY);
+        }
+
+        // Returns normalized progress p (0..1) given screen pixel y
+        function yToProgress(y) {
+            const topY = canvas.height * 0.15;
+            const judgeY = canvas.height * 0.85;
+            return (y - topY) / (judgeY - topY);
+        }
+
         function spawnNotes(dt) {
             spawnTimer += dt;
             const now = performance.now();
@@ -314,37 +329,38 @@
                 const randType = Math.random();
 
                 if (randType < 0.35) {
-                    const holdLengthPx = 220 + Math.random() * 140;
+                    // Hold length expressed in track progress distance
+                    const holdProgressLen = 0.35 + Math.random() * 0.25;
                     const endIsFlick = Math.random() < 0.4;
 
                     notes.push({
                         type: 'hold',
                         lane: lane1,
-                        y: -holdLengthPx,
-                        headY: 0,
-                        length: holdLengthPx,
+                        progress: -holdProgressLen,  // Tail progress
+                        headProgress: 0,             // Head progress
+                        length: holdProgressLen,
                         holding: false,
                         headHit: false,
                         missed: false,
                         endIsFlick: endIsFlick
                     });
-                    laneOccupiedUntil[lane1] = now + ((holdLengthPx + 200) / NOTE_SPEED_PX) * 1000;
+                    laneOccupiedUntil[lane1] = now + ((holdProgressLen + 1.0) / NOTE_SPEED_FACTOR) * 1000;
                 } else if (randType < 0.65) {
                     notes.push({
                         type: 'flick',
                         lane: lane1,
-                        y: 0,
+                        progress: 0,
                         missed: false
                     });
-                    laneOccupiedUntil[lane1] = now + (150 / NOTE_SPEED_PX) * 1000;
+                    laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
                 } else {
                     notes.push({
                         type: 'tap',
                         lane: lane1,
-                        y: 0,
+                        progress: 0,
                         missed: false
                     });
-                    laneOccupiedUntil[lane1] = now + (150 / NOTE_SPEED_PX) * 1000;
+                    laneOccupiedUntil[lane1] = now + (0.4 / NOTE_SPEED_FACTOR) * 1000;
                 }
             }
         }
@@ -368,19 +384,24 @@
                 if (n.missed) continue;
 
                 if (n.type === 'tap' || n.type === 'flick') {
-                    n.y += NOTE_SPEED_PX * dt;
+                    // Constant progress advancement across all lanes
+                    n.progress += NOTE_SPEED_FACTOR * dt;
+                    const curY = progressToY(n.progress);
 
-                    if (n.y > judgeY + HIT_WINDOW_PX) {
+                    if (curY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
                         updateHUD();
                         addHitEffect(n.lane, judgeY, "MISS", MISS_COLOR);
                     }
                 } else if (n.type === 'hold') {
-                    n.y += NOTE_SPEED_PX * dt;
-                    n.headY += NOTE_SPEED_PX * dt;
+                    n.progress += NOTE_SPEED_FACTOR * dt;      // Tail advancement
+                    n.headProgress += NOTE_SPEED_FACTOR * dt;  // Head advancement
 
-                    if (!n.headHit && n.headY > judgeY + HIT_WINDOW_PX) {
+                    const headY = progressToY(n.headProgress);
+                    const tailY = progressToY(n.progress);
+
+                    if (!n.headHit && headY > judgeY + HIT_WINDOW_PX) {
                         n.missed = true;
                         combo = 0;
                         updateHUD();
@@ -392,7 +413,7 @@
                         score += Math.round(150 * dt);
                         updateHUD();
 
-                        if (!laneHoldStatus[n.lane] && n.y < judgeY - HIT_WINDOW_PX) {
+                        if (!laneHoldStatus[n.lane] && tailY < judgeY - HIT_WINDOW_PX) {
                             n.holding = false;
                             n.missed = true;
                             combo = 0;
@@ -401,7 +422,7 @@
                         }
                     }
 
-                    if (n.headHit && n.holding && n.y > judgeY + HIT_WINDOW_PX) {
+                    if (n.headHit && n.holding && tailY > judgeY + HIT_WINDOW_PX) {
                         n.holding = false;
                         n.missed = true;
                         combo = 0;
@@ -413,13 +434,11 @@
 
             notes = notes.filter(n => !n.missed);
             
-            // Update hit shockwaves & effects
             for (let e of hitEffects) {
                 e.life -= dt;
             }
             hitEffects = hitEffects.filter(e => e.life > 0);
 
-            // Update particles
             for (let p of particles) {
                 p.x += p.vx * dt;
                 p.y += p.vy * dt;
@@ -436,7 +455,8 @@
             for (let n of notes) {
                 if (n.lane === laneIndex && !n.missed) {
                     if (n.type === 'tap') {
-                        const diff = Math.abs(n.y - judgeY);
+                        const curY = progressToY(n.progress);
+                        const diff = Math.abs(curY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.missed = true;
                             hitFound = true;
@@ -445,17 +465,18 @@
                             if (diff < HIT_WINDOW_PX * 0.4) {
                                 score += 1000;
                                 combo++;
-                                addHitEffect(laneIndex, n.y, "PERFECT", TAP_COLOR);
+                                addHitEffect(laneIndex, curY, "PERFECT", TAP_COLOR);
                             } else {
                                 score += 500;
                                 combo++;
-                                addHitEffect(laneIndex, n.y, "GREAT", "#ff007f");
+                                addHitEffect(laneIndex, curY, "GREAT", "#ff007f");
                             }
                             updateHUD();
                             break;
                         }
                     } else if (n.type === 'hold' && !n.headHit) {
-                        const diff = Math.abs(n.headY - judgeY);
+                        const headY = progressToY(n.headProgress);
+                        const diff = Math.abs(headY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.headHit = true;
                             n.holding = true;
@@ -463,7 +484,7 @@
                             playTapSound(laneIndex, 100);
 
                             combo++;
-                            addHitEffect(laneIndex, n.headY, "HOLD!", HOLD_COLOR);
+                            addHitEffect(laneIndex, headY, "HOLD!", HOLD_COLOR);
                             updateHUD();
                             break;
                         }
@@ -482,7 +503,8 @@
             for (let n of notes) {
                 if (n.lane === laneIndex && !n.missed) {
                     if (n.type === 'flick') {
-                        const diff = Math.abs(n.y - judgeY);
+                        const curY = progressToY(n.progress);
+                        const diff = Math.abs(curY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.missed = true;
                             playTapSound(laneIndex, 250);
@@ -490,18 +512,19 @@
                             if (diff < HIT_WINDOW_PX * 0.4) {
                                 score += 1200;
                                 combo++;
-                                addHitEffect(laneIndex, n.y, "FLICK PERFECT!", FLICK_COLOR);
+                                addHitEffect(laneIndex, curY, "FLICK PERFECT!", FLICK_COLOR);
                             } else {
                                 score += 700;
                                 combo++;
-                                addHitEffect(laneIndex, n.y, "FLICK GREAT!", FLICK_COLOR);
+                                addHitEffect(laneIndex, curY, "FLICK GREAT!", FLICK_COLOR);
                             }
                             updateHUD();
                             break;
                         }
                     } 
                     else if (n.type === 'hold' && n.headHit && n.holding && n.endIsFlick) {
-                        const diff = Math.abs(n.y - judgeY);
+                        const tailY = progressToY(n.progress);
+                        const diff = Math.abs(tailY - judgeY);
                         if (diff <= HIT_WINDOW_PX) {
                             n.holding = false;
                             n.missed = true;
@@ -525,7 +548,8 @@
                 if (n.lane === laneIndex && n.type === 'hold' && n.headHit && n.holding && !n.missed) {
                     if (n.endIsFlick) continue;
 
-                    const diff = Math.abs(n.y - judgeY);
+                    const tailY = progressToY(n.progress);
+                    const diff = Math.abs(tailY - judgeY);
                     if (diff <= HIT_WINDOW_PX) {
                         n.holding = false;
                         n.missed = true;
@@ -540,7 +564,6 @@
             }
         }
 
-        // Expanded Hit Effect Generator (Spawns Particles & Shockwave)
         function addHitEffect(lane, y, text, color) {
             const maxLife = 0.35;
             hitEffects.push({
@@ -552,7 +575,6 @@
                 maxLife: maxLife
             });
 
-            // Spawn Particles for Successful Hits (Non-MISS and non-empty)
             if (text && text !== "MISS" && text !== "EARLY RELEASE" && text !== "LATE RELEASE") {
                 const coords = getTrackCoords(lane, y);
                 const cx = coords.x + coords.width / 2;
@@ -677,7 +699,7 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Lane Touch Highlights (White track overlay when held)
+            // Lane Touch Highlights
             for (let i = 0; i < LANES; i++) {
                 if (laneHoldStatus[i]) {
                     drawTrapezoid(topY, canvas.height, i, 'rgba(255, 255, 255, 0.2)', 0);
@@ -689,32 +711,37 @@
                 if (n.missed) continue;
 
                 if (n.type === 'tap') {
+                    const curY = progressToY(n.progress);
                     const noteHeight = 16;
                     ctx.shadowColor = TAP_COLOR;
                     ctx.shadowBlur = 8;
-                    drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, TAP_COLOR, 2);
+                    drawTrapezoid(curY - noteHeight / 2, curY + noteHeight / 2, n.lane, TAP_COLOR, 2);
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'flick') {
+                    const curY = progressToY(n.progress);
                     const noteHeight = 18;
                     ctx.shadowColor = FLICK_COLOR;
                     ctx.shadowBlur = 10;
-                    drawTrapezoid(n.y - noteHeight / 2, n.y + noteHeight / 2, n.lane, FLICK_COLOR, 2);
-                    drawFlickArrow(n.lane, n.y, '#ffffff');
+                    drawTrapezoid(curY - noteHeight / 2, curY + noteHeight / 2, n.lane, FLICK_COLOR, 2);
+                    drawFlickArrow(n.lane, curY, '#ffffff');
                     ctx.shadowBlur = 0;
                 } else if (n.type === 'hold') {
-                    drawTrapezoid(n.y, n.headY, n.lane, HOLD_COLOR + '77', 4);
+                    const tailY = progressToY(n.progress);
+                    const headY = progressToY(n.headProgress);
+
+                    drawTrapezoid(tailY, headY, n.lane, HOLD_COLOR + '77', 4);
 
                     ctx.shadowColor = HOLD_COLOR;
                     ctx.shadowBlur = 8;
-                    drawTrapezoid(n.headY - 8, n.headY + 8, n.lane, HOLD_COLOR, 2);
+                    drawTrapezoid(headY - 8, headY + 8, n.lane, HOLD_COLOR, 2);
                     ctx.shadowBlur = 0;
                     
                     const tailColor = n.endIsFlick ? FLICK_COLOR : '#ffffff';
                     ctx.shadowColor = tailColor;
                     ctx.shadowBlur = n.endIsFlick ? 10 : 0;
-                    drawTrapezoid(n.y - 8, n.y + 8, n.lane, tailColor, 2);
+                    drawTrapezoid(tailY - 8, tailY + 8, n.lane, tailColor, 2);
                     if (n.endIsFlick) {
-                        drawFlickArrow(n.lane, n.y, '#ffffff');
+                        drawFlickArrow(n.lane, tailY, '#ffffff');
                     }
                     ctx.shadowBlur = 0;
                 }
@@ -723,23 +750,20 @@
             // Visual Effects (Lane Beams, Shockwaves & Judgment Text)
             for (let e of hitEffects) {
                 const c = getTrackCoords(e.lane, e.y);
-                const progress = 1 - (e.life / e.maxLife); // 0 to 1
+                const progress = 1 - (e.life / e.maxLife);
                 const cx = c.x + c.width / 2;
 
-                // 1. Full-Lane Laser Beam Highlight on Hit
                 if (e.text && e.text !== "MISS") {
                     const beamAlpha = (1 - progress) * 0.35;
                     drawTrapezoid(topY, canvas.height, e.lane, e.color.slice(0, 7) + Math.floor(beamAlpha * 255).toString(16).padStart(2, '0'), 0);
                 }
 
-                // 2. Expanding Pulse Rings (Shockwave)
                 const rx = (c.width / 2 + progress * 45);
                 const ry = (12 + progress * 20);
 
                 ctx.save();
                 ctx.translate(cx, e.y);
                 
-                // Expanding Ring Outer Outline
                 ctx.strokeStyle = e.color;
                 ctx.lineWidth = 4 * (1 - progress);
                 ctx.globalAlpha = (1 - progress);
@@ -747,7 +771,6 @@
                 ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
                 ctx.stroke();
 
-                // Expanding Inner Solid Halo
                 ctx.fillStyle = e.color;
                 ctx.globalAlpha = (1 - progress) * 0.25;
                 ctx.beginPath();
@@ -755,7 +778,6 @@
                 ctx.fill();
                 ctx.restore();
 
-                // 3. Floating Animated Text
                 if (e.text) {
                     const textY = e.y - 15 - (progress * 25);
                     const scale = 1 + Math.sin(progress * Math.PI) * 0.3;
@@ -775,7 +797,6 @@
                 }
             }
 
-            // 4. Render Burst Particles
             for (let p of particles) {
                 const alpha = p.life / p.maxLife;
                 ctx.fillStyle = p.color;
