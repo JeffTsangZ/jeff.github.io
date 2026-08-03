@@ -54,7 +54,7 @@
             image-rendering: pixelated;
         }
 
-        /* UI Overlays */
+        /* HUD */
         #hud {
             position: absolute;
             top: 10px;
@@ -170,39 +170,28 @@
             background: rgba(231, 76, 60, 0.85);
         }
 
-        /* Dialogue UI */
-        #dialogue-box {
+        /* Floating Text Notification Requirement #4 */
+        #floating-text {
             position: absolute;
-            top: 90px;
+            top: 80px;
             left: 50%;
             transform: translateX(-50%);
-            width: 85%;
-            max-width: 500px;
-            max-height: 150px;
-            background: rgba(16, 18, 27, 0.95);
-            border: 3px solid #f1c40f;
-            border-radius: 4px;
-            padding: 10px 14px;
-            font-size: 12px;
-            line-height: 1.3;
-            display: none;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            z-index: 20;
-            overflow-y: auto;
+            color: #ff3333;
+            font-size: 16px;
+            font-weight: 900;
+            text-align: center;
+            pointer-events: none;
+            z-index: 25;
+            opacity: 0;
+            transition: opacity 0.4s ease-out;
             white-space: pre-wrap;
-        }
-
-        #dialogue-title {
-            color: #f1c40f;
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
-
-        #dialogue-hint {
-            font-size: 10px;
-            color: #aaa;
-            margin-top: 6px;
-            text-align: right;
+            /* Black border around red text */
+            text-shadow: 
+                -2px -2px 0 #000,  
+                 2px -2px 0 #000,
+                -2px  2px 0 #000,
+                 2px  2px 0 #000,
+                 0px  3px 4px rgba(0,0,0,0.8);
         }
 
         /* Skill Selection Modal Overlay */
@@ -315,7 +304,7 @@
             line-height: 1.2;
         }
 
-        /* Mobile Virtual Controls */
+        /* Mobile Controls */
         #mobile-controls {
             position: absolute;
             bottom: 20px;
@@ -372,12 +361,6 @@
 
         @media (pointer: coarse), (max-width: 600px) {
             #mobile-controls { display: flex; }
-            #dialogue-box {
-                top: 15px;
-                width: 90%;
-                max-height: 120px;
-                font-size: 11px;
-            }
         }
     </style>
 </head>
@@ -411,12 +394,8 @@
 
         <div id="skills-list"></div>
 
-        <!-- Dialogue UI -->
-        <div id="dialogue-box">
-            <div id="dialogue-title">Village Elder</div>
-            <div id="dialogue-text">Welcome back, Hero! Clean up those monsters. Your progress is saved!</div>
-            <div id="dialogue-hint">[ Tap Attack or press Space to close ]</div>
-        </div>
+        <!-- Requirement #4: Dynamic Floating Red Text with Black Border -->
+        <div id="floating-text"></div>
 
         <!-- Level Up / Boss Reward Overlay -->
         <div id="skill-select-overlay">
@@ -440,7 +419,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Map Tiling Config
         const MAP_WIDTH = 400;
         const MAP_HEIGHT = 300;
 
@@ -470,9 +448,8 @@
         let isPaused = false;
         let pendingSkillChoices = 0;
         let isBossReward = false;
-        let npcCooldown = 0;
+        let toastTimeoutTimer = null;
 
-        // Boss Timer Variables (5 minutes = 300 seconds)
         const BOSS_INTERVAL = 300;
         let bossTimer = BOSS_INTERVAL;
         let activeBoss = null;
@@ -480,8 +457,8 @@
         const player = {
             x: 200,
             y: 150,
-            width: 12,
-            height: 12,
+            width: 14,
+            height: 16,
             speed: 1.5,
             hp: 100,
             maxHp: 100,
@@ -492,7 +469,7 @@
             level: 1,
             xp: 0,
             nextXp: 50,
-            facingAngle: Math.PI / 2, // Default facing DOWN
+            facingAngle: Math.PI / 2,
             isAttacking: false,
             attackTimer: 0,
             invulnerableTimer: 0,
@@ -569,7 +546,7 @@
                 id: 'xpMultiplier',
                 name: "Scholar's Tome",
                 icon: '📚',
-                noEvolution: true, // Passive skill: max lvl 5, no evolution
+                noEvolution: true,
                 getDesc: (lvl) => {
                     const mults = [1, 1.5, 2, 4, 5, 8];
                     if (lvl === 5) return "MAX LEVEL: Gain 8x EXP from all killed enemies!";
@@ -595,23 +572,23 @@
             laserAttack: false
         };
 
-        const npc = { x: 200, y: 80, width: 12, height: 12, name: 'Village Elder' };
-
-        let projectiles = [];
+        let playerProjectiles = [];
+        let enemyBullets = []; // Requirement #1: Enemy bullet tracking array
         let particles = [];
 
-        // --- ENEMY TYPES SYSTEM ---
+        // --- ENEMY TYPES SYSTEM (Requirement #1: Shooter type added) ---
         const ENEMY_TYPES = [
-            { name: 'Slime',       color: '#2ecc71', hpMult: 1.0, speed: 0.5, damage: 6,   xp: 15,  minLevel: 1,  weightBase: 70 },
-            { name: 'Goblin',      color: '#e67e22', hpMult: 1.4, speed: 0.8, damage: 10,  xp: 30,  minLevel: 1,  weightBase: 40 },
-            { name: 'Skeleton',    color: '#ecf0f1', hpMult: 2.0, speed: 1.0, damage: 16,  xp: 55,  minLevel: 2,  weightBase: 35 },
-            { name: 'Zombie',      color: '#16a085', hpMult: 2.8, speed: 0.4, damage: 22,  xp: 85,  minLevel: 3,  weightBase: 30 },
-            { name: 'Orc',         color: '#27ae60', hpMult: 3.5, speed: 0.7, damage: 28,  xp: 125, minLevel: 4,  weightBase: 25 },
-            { name: 'Demon',       color: '#9b59b6', hpMult: 4.5, speed: 0.9, damage: 36,  xp: 180, minLevel: 5,  weightBase: 20 },
-            { name: 'Wraith',      color: '#8e44ad', hpMult: 5.5, speed: 1.2, damage: 45,  xp: 250, minLevel: 6,  weightBase: 15 },
-            { name: 'Golem',       color: '#7f8c8d', hpMult: 7.5, speed: 0.3, damage: 58,  xp: 350, minLevel: 7,  weightBase: 12 },
-            { name: 'Vampire',     color: '#c0392b', hpMult: 9.0, speed: 1.3, damage: 72,  xp: 500, minLevel: 8,  weightBase: 8  },
-            { name: 'Shadow Lord', color: '#f39c12', hpMult: 12.0, speed: 0.8, damage: 95, xp: 750, minLevel: 10, weightBase: 5  }
+            { name: 'Slime',       color: '#2ecc71', hpMult: 1.0, speed: 0.5, damage: 6,   xp: 15,  isRanged: false, minLevel: 1,  weightBase: 60 },
+            { name: 'Archer',      color: '#9b59b6', hpMult: 1.2, speed: 0.6, damage: 8,   xp: 35,  isRanged: true,  minLevel: 1,  weightBase: 55 },
+            { name: 'Goblin',      color: '#e67e22', hpMult: 1.4, speed: 0.8, damage: 10,  xp: 30,  isRanged: false, minLevel: 1,  weightBase: 40 },
+            { name: 'Skeleton',    color: '#ecf0f1', hpMult: 2.0, speed: 1.0, damage: 16,  xp: 55,  isRanged: false, minLevel: 2,  weightBase: 35 },
+            { name: 'Zombie',      color: '#16a085', hpMult: 2.8, speed: 0.4, damage: 22,  xp: 85,  isRanged: false, minLevel: 3,  weightBase: 30 },
+            { name: 'Orc',         color: '#27ae60', hpMult: 3.5, speed: 0.7, damage: 28,  xp: 125, isRanged: false, minLevel: 4,  weightBase: 25 },
+            { name: 'Demon',       color: '#d35400', hpMult: 4.5, speed: 0.9, damage: 36,  xp: 180, isRanged: true,  minLevel: 5,  weightBase: 20 },
+            { name: 'Wraith',      color: '#8e44ad', hpMult: 5.5, speed: 1.2, damage: 45,  xp: 250, isRanged: false, minLevel: 6,  weightBase: 15 },
+            { name: 'Golem',       color: '#7f8c8d', hpMult: 7.5, speed: 0.3, damage: 58,  xp: 350, isRanged: false, minLevel: 7,  weightBase: 12 },
+            { name: 'Vampire',     color: '#c0392b', hpMult: 9.0, speed: 1.3, damage: 72,  xp: 500, isRanged: true,  minLevel: 8,  weightBase: 8  },
+            { name: 'Shadow Lord', color: '#f39c12', hpMult: 12.0, speed: 0.8, damage: 95, xp: 750, isRanged: true,  minLevel: 10, weightBase: 5  }
         ];
 
         function getRandomEnemyType(playerLevel) {
@@ -638,8 +615,8 @@
             return {
                 id: Math.random().toString(36).substr(2, 9),
                 x, y,
-                width: 10,
-                height: 10,
+                width: 12,
+                height: 12,
                 hp: baseHp,
                 maxHp: baseHp,
                 speed: type.speed,
@@ -647,6 +624,8 @@
                 xpValue: type.xp,
                 color: type.color,
                 name: type.name,
+                isRanged: type.isRanged || false,
+                shootTimer: Math.floor(Math.random() * 60),
                 isBoss: false
             };
         }
@@ -654,7 +633,6 @@
         function spawnBoss() {
             if (activeBoss && activeBoss.hp > 0) return;
 
-            // Buffed Boss HP drastically (Requirement #2)
             const bossHp = Math.floor(1200 + (player.level * 400));
             const bossSpeed = Math.max(0.5, player.speed * 0.65);
 
@@ -671,10 +649,12 @@
                 xpValue: (250 + player.level * 100) * 10,
                 color: '#e74c3c',
                 name: 'DUNGEON OVERLORD (BOSS)',
+                isRanged: true,
+                shootTimer: 0,
                 isBoss: true
             };
             enemies.push(activeBoss);
-            showDialogue("⚠️ BOSS WARNING ⚠️", "The Dungeon Overlord has arrived with massive HP! Slay him for legendary power!");
+            showNotification("⚠️ BOSS WARNING ⚠️\nThe Dungeon Overlord has arrived!");
         }
 
         function spawnEnemyBatch() {
@@ -774,7 +754,7 @@
                 evolutions: skillEvolutions,
                 bossTimer: bossTimer
             };
-            localStorage.setItem('rpg_save_data_v7', JSON.stringify(data));
+            localStorage.setItem('rpg_save_data_v8', JSON.stringify(data));
 
             const status = document.getElementById('save-status');
             status.style.opacity = '1';
@@ -783,7 +763,7 @@
         }
 
         function loadGame() {
-            const data = localStorage.getItem('rpg_save_data_v7');
+            const data = localStorage.getItem('rpg_save_data_v8');
             if (data) {
                 const parsed = JSON.parse(data);
                 player.hp = parsed.hp;
@@ -803,23 +783,21 @@
         }
 
         function resetGame() {
-            localStorage.removeItem('rpg_save_data_v7');
+            localStorage.removeItem('rpg_save_data_v8');
             location.reload();
         }
         document.getElementById('reset-btn').addEventListener('click', resetGame);
 
-        function showDialogue(title, text) {
-            isPaused = true;
-            const box = document.getElementById('dialogue-box');
-            document.getElementById('dialogue-title').innerText = title;
-            document.getElementById('dialogue-text').innerText = text;
-            box.style.display = 'block';
-        }
+        // Requirement #4: Display line of text fading after 3s (No dialog box)
+        function showNotification(text) {
+            const el = document.getElementById('floating-text');
+            el.innerText = text;
+            el.style.opacity = '1';
 
-        function closeDialogue() {
-            document.getElementById('dialogue-box').style.display = 'none';
-            isPaused = false;
-            npcCooldown = 60;
+            if (toastTimeoutTimer) clearTimeout(toastTimeoutTimer);
+            toastTimeoutTimer = setTimeout(() => {
+                el.style.opacity = '0';
+            }, 3000);
         }
 
         function checkAllMaxedAndEvolved() {
@@ -856,7 +834,7 @@
 
             if (checkAllMaxedAndEvolved()) {
                 applyDirectLevelBoost(5);
-                showDialogue("ULTIMATE OVERLOAD!", "All skills are FULLY MAXED!\n+5 Levels and stat scaling granted!");
+                showNotification("ULTIMATE OVERLOAD!\nAll skills MAXED! +5 Levels Granted!");
                 isPaused = false;
                 document.getElementById('skill-select-overlay').style.display = 'none';
                 return;
@@ -929,27 +907,16 @@
 
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
-            if (e.code === 'Space') handleAction();
+            if (e.code === 'Space') attack();
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
         document.getElementById('btn-attack').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            handleAction();
-        });
-        document.getElementById('btn-attack').addEventListener('click', () => handleAction());
-
-        function handleAction() {
-            if (isPaused) {
-                if (document.getElementById('dialogue-box').style.display === 'block') {
-                    closeDialogue();
-                }
-                return;
-            }
             attack();
-        }
+        });
+        document.getElementById('btn-attack').addEventListener('click', () => attack());
 
-        // --- SECTOR SWING ATTACK (135° -> 270°) ---
         function attack() {
             if (player.isAttacking || isPaused) return;
             player.isAttacking = true;
@@ -1020,7 +987,6 @@
                     }
                 }
 
-                // Passive Skill #1: Scholar's Tome XP Multiplier
                 const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
                 const xpLvl = playerSkills.xpMultiplier || 0;
                 const finalXpGain = Math.floor(enemy.xpValue * xpMultipliers[xpLvl]);
@@ -1117,15 +1083,12 @@
         function update() {
             if (isPaused) return;
 
-            // Boss Timer
             if (!activeBoss) {
                 bossTimer -= 1 / 60;
                 if (bossTimer <= 0) {
                     spawnBoss();
                 }
             }
-
-            if (npcCooldown > 0) npcCooldown--;
 
             let dx = 0, dy = 0;
 
@@ -1147,7 +1110,6 @@
                 }
             }
 
-            // Infinite Movement (Requirement #4)
             player.x += dx * player.speed;
             player.y += dy * player.speed;
 
@@ -1180,7 +1142,7 @@
                             let angle = Math.atan2(ey - py, ex - px);
                             if (numDarts > 1) angle += (d - (numDarts - 1) / 2) * 0.25;
 
-                            projectiles.push({
+                            playerProjectiles.push({
                                 x: px, y: py,
                                 vx: Math.cos(angle) * (3.0 + autoLvl * 0.4),
                                 vy: Math.sin(angle) * (3.0 + autoLvl * 0.4),
@@ -1274,8 +1236,8 @@
                 if (player.laserBeam.life <= 0) player.laserBeam = null;
             }
 
-            // Update Projectiles
-            projectiles.forEach(p => {
+            // Update Player Projectiles
+            playerProjectiles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
                 p.life--;
@@ -1305,15 +1267,36 @@
                     }
                 });
             });
-            projectiles = projectiles.filter(p => p.life > 0);
+            playerProjectiles = playerProjectiles.filter(p => p.life > 0);
 
-            // NPC Interaction
-            const distToNpc = Math.hypot((player.x - npc.x), (player.y - npc.y));
-            if (distToNpc < 20 && npcCooldown === 0) {
-                showDialogue(npc.name, "Beware! Every 5 minutes, a terrifying Boss spawns!\nSlay him to earn special skill drops!");
-            }
+            // Requirement #1: Update Enemy Bullets (Slow, red ball, straight trajectory)
+            enemyBullets.forEach(b => {
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
 
-            // ALL Enemies Chase Player (Requirement #3)
+                if (rectOverlap(player.x, player.y, player.width, player.height, b.x - b.radius, b.y - b.radius, b.radius * 2, b.radius * 2)) {
+                    if (player.invulnerableTimer === 0) {
+                        player.hp -= b.damage;
+                        player.invulnerableTimer = 45;
+                        createBurst(player.x + 6, player.y + 6, '#e74c3c');
+                        updateHUD();
+
+                        if (player.hp <= 0) {
+                            player.hp = player.maxHp;
+                            player.x = 200;
+                            player.y = 150;
+                            showNotification('DEFEATED!\nReturned to spawn area');
+                            updateHUD();
+                            saveGame();
+                        }
+                    }
+                    b.life = 0;
+                }
+            });
+            enemyBullets = enemyBullets.filter(b => b.life > 0);
+
+            // Update Enemies AI & Ranged Attack Logic
             enemies = enemies.filter(e => e.hp > 0);
             enemies.forEach(e => {
                 const px = player.x + player.width / 2;
@@ -1324,6 +1307,25 @@
                 const angle = Math.atan2(py - ey, px - ex);
                 e.x += Math.cos(angle) * e.speed;
                 e.y += Math.sin(angle) * e.speed;
+
+                // Requirement #1: Enemy Shooting Mechanism
+                if (e.isRanged) {
+                    e.shootTimer++;
+                    const shootCD = e.isBoss ? 70 : 130;
+                    if (e.shootTimer >= shootCD) {
+                        const bulletSpeed = 1.2; // Slow speed
+                        enemyBullets.push({
+                            x: ex,
+                            y: ey,
+                            vx: Math.cos(angle) * bulletSpeed,
+                            vy: Math.sin(angle) * bulletSpeed,
+                            radius: 3.5, // Ball shape
+                            damage: e.damage,
+                            life: 250
+                        });
+                        e.shootTimer = 0;
+                    }
+                }
 
                 if (rectOverlap(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
                     if (player.invulnerableTimer === 0) {
@@ -1336,7 +1338,7 @@
                             player.hp = player.maxHp;
                             player.x = 200;
                             player.y = 150;
-                            showDialogue('DEFEATED', 'You were defeated! Rest up at the village.');
+                            showNotification('DEFEATED!\nReturned to spawn area');
                             updateHUD();
                             saveGame();
                         }
@@ -1361,11 +1363,10 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Camera offset to keep player centered in infinity map
             const camX = player.x + player.width / 2 - canvas.width / 2;
             const camY = player.y + player.height / 2 - canvas.height / 2;
 
-            // Render Repeating Infinite Map Grid Tiles (Requirement #4)
+            // Render Repeating Infinite Map Grid
             const minTileX = Math.floor(camX / MAP_WIDTH) - 1;
             const maxTileX = Math.floor((camX + canvas.width) / MAP_WIDTH) + 1;
             const minTileY = Math.floor(camY / MAP_HEIGHT) - 1;
@@ -1376,29 +1377,18 @@
                     const screenTileX = (tx * MAP_WIDTH) - camX;
                     const screenTileY = (ty * MAP_HEIGHT) - camY;
 
-                    // Tile Ground
                     ctx.fillStyle = (Math.abs(tx + ty) % 2 === 0) ? '#2d5a27' : '#275222';
                     ctx.fillRect(screenTileX, screenTileY, MAP_WIDTH, MAP_HEIGHT);
 
-                    // Tile Accents
                     ctx.fillStyle = '#1e3f1b';
                     ctx.fillRect(screenTileX + 40, screenTileY + 40, 4, 4);
                     ctx.fillRect(screenTileX + 320, screenTileY + 80, 6, 6);
                     ctx.fillRect(screenTileX + 120, screenTileY + 240, 4, 4);
                     
-                    // Grid Borders
                     ctx.strokeStyle = 'rgba(0,0,0,0.08)';
                     ctx.strokeRect(screenTileX, screenTileY, MAP_WIDTH, MAP_HEIGHT);
                 }
             }
-
-            // NPC Screen Position
-            const npcScrX = npc.x - camX;
-            const npcScrY = npc.y - camY;
-            ctx.fillStyle = '#3498db';
-            ctx.fillRect(npcScrX, npcScrY, npc.width, npc.height);
-            ctx.fillStyle = '#f1c40f';
-            ctx.fillRect(npcScrX + 2, npcScrY - 3, 8, 4);
 
             // Enemies & Boss
             enemies.forEach(e => {
@@ -1432,13 +1422,75 @@
                 }
             });
 
-            // Player Screen Position
+            // Requirement #1: Draw Slow Red Ball Enemy Bullets
+            enemyBullets.forEach(b => {
+                const bx = b.x - camX;
+                const by = b.y - camY;
+
+                ctx.fillStyle = '#ff0033';
+                ctx.beginPath();
+                ctx.arc(bx, by, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner glow accent
+                ctx.fillStyle = '#ff9999';
+                ctx.beginPath();
+                ctx.arc(bx - 1, by - 1, b.radius * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Requirement #2: Enhanced Player Sprite Graphics (Detailed Pixel Knight)
             const pScrX = player.x - camX;
             const pScrY = player.y - camY;
 
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
-                ctx.fillStyle = '#e67e22';
-                ctx.fillRect(pScrX, pScrY, player.width, player.height);
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(pScrX + 7, pScrY + 15, 6, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body Armor (Blue / Steel)
+                ctx.fillStyle = '#2980b9';
+                ctx.fillRect(pScrX + 3, pScrY + 6, 8, 7);
+
+                // Belt & Strap
+                ctx.fillStyle = '#7f8c8d';
+                ctx.fillRect(pScrX + 3, pScrY + 10, 8, 2);
+
+                // Knight Helmet
+                ctx.fillStyle = '#bdc3c7';
+                ctx.fillRect(pScrX + 2, pScrY + 0, 10, 6);
+
+                // Helmet Visor (Dark Gold/Black)
+                ctx.fillStyle = '#2c3e50';
+                ctx.fillRect(pScrX + 3, pScrY + 3, 8, 2);
+
+                // Helmet Plume / Crest
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillRect(pScrX + 5, pScrY - 2, 4, 2);
+
+                // Boots
+                ctx.fillStyle = '#34495e';
+                ctx.fillRect(pScrX + 3, pScrY + 13, 3, 3);
+                ctx.fillRect(pScrX + 8, pScrY + 13, 3, 3);
+
+                // Sword / Weapon Sheath Directional Overlay
+                const px = pScrX + player.width / 2;
+                const py = pScrY + player.height / 2;
+                const hx = px + Math.cos(player.facingAngle) * 8;
+                const hy = py + Math.sin(player.facingAngle) * 8;
+
+                ctx.strokeStyle = '#ecf0f1';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.lineTo(hx, hy);
+                ctx.stroke();
+
+                // Sword Hilt Accent
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(hx - 1, hy - 1, 3, 3);
             }
 
             // Skill 2: Orbiting Shields
@@ -1464,7 +1516,7 @@
             }
 
             // Skill 1: Auto Darts
-            projectiles.forEach(p => {
+            playerProjectiles.forEach(p => {
                 ctx.fillStyle = skillEvolutions.autoRanged ? '#f1c40f' : '#f39c12';
                 ctx.beginPath();
                 ctx.arc(p.x - camX, p.y - camY, skillEvolutions.autoRanged ? 4 : 3, 0, Math.PI * 2);
