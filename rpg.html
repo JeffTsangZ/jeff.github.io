@@ -554,16 +554,16 @@
                     return `Lvl ${lvl+1}: Increases earned EXP by ${mults[lvl+1]}x per orb!`;
                 }
             },
-            // Scavenger (no Evolution as requested)
+            // Requirement #1: Scavenger now has noEvolution set to TRUE
             {
                 id: 'itemSpawner',
                 name: 'Scavenger',
                 icon: '🧲',
                 noEvolution: true,
                 getDesc: (lvl) => {
-                    if (lvl === 5) return "MAX LEVEL: Max item drop frequency and +60 Pickup Radius!";
+                    if (lvl === 5) return "MAX LEVEL: Maximum Item Spawn Speed & Pickup Radius!";
                     if (lvl === 0) return "Spawns Hearts (30% HP) and Magnets randomly over time.";
-                    return `Lvl ${lvl+1}: Higher item spawn rate & +${(lvl+1)*12} Pickup Range.`;
+                    return `Lvl ${lvl+1}: Faster item spawn rate & +${(lvl+1)*12} Pickup Range.`;
                 }
             }
         ];
@@ -591,6 +591,7 @@
         let enemyBullets = [];
         let particles = [];
         
+        // World Drops
         let expOrbs = [];
         let mapChests = [];
         let mapItems = [];
@@ -756,6 +757,7 @@
             player.atk = player.baseAtk + extraAtk;
             player.reach = player.baseReach + extraReach;
 
+            // Pickup radius calculation (Scavenger)
             let scavLvl = playerSkills.itemSpawner;
             player.pickupRadius = 32 + (scavLvl * 12);
         }
@@ -985,27 +987,24 @@
             return closest;
         }
 
-        // Requirement #2: Added 500 EXP (Red) and 20% Level Requirement (Purple) EXP Orbs
+        // Requirement #2: Added 500 EXP Orb & 20% Level-Up EXP Orb
         function spawnExpOrb(x, y, rawXp) {
             const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
             const xpLvl = playerSkills.xpMultiplier || 0;
-            let finalXp = Math.floor(rawXp * xpMultipliers[xpLvl]);
+            const finalXp = Math.floor(rawXp * xpMultipliers[xpLvl]);
 
             let color = '#2ecc71'; // Green (Small)
             let radius = 3;
 
-            // Roll rare special EXP drops
-            const randRoll = Math.random();
-            if (randRoll < 0.05) { 
-                // 5% Chance: Purple Orb (20% of current level's total EXP requirement)
-                finalXp = Math.floor(player.nextXp * 0.20);
-                color = '#9b59b6'; // Purple
+            // Roll for rare special 20% Level EXP Orb drop (5% chance)
+            const isPercentOrb = Math.random() < 0.05;
+
+            if (isPercentOrb) {
+                color = '#ff69b4'; // Hot Pink (20% Current LV EXP Requirement)
                 radius = 6;
-            } else if (randRoll < 0.12 || finalXp >= 500) { 
-                // Extreme Large: Red Gem (500 EXP)
-                finalXp = Math.max(finalXp, 500);
-                color = '#e74c3c'; // Red
-                radius = 6;
+            } else if (finalXp >= 500) {
+                color = '#9b59b6'; // Purple (Extreme Large - 500+ EXP)
+                radius = 7;
             } else if (finalXp >= 100) {
                 color = '#f1c40f'; // Gold (Large)
                 radius = 5;
@@ -1017,6 +1016,7 @@
             expOrbs.push({
                 x, y,
                 xp: finalXp,
+                isPercentOrb: isPercentOrb,
                 color,
                 radius,
                 beingMagnetized: false
@@ -1053,7 +1053,8 @@
                         height: 12,
                         beingMagnetized: false
                     });
-                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
+                    // Boss drops extreme large EXP orb
+                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 500);
                     
                     activeBoss = null;
                     bossTimer = BOSS_INTERVAL;
@@ -1159,10 +1160,10 @@
                 }
             }
 
+            // Map Item Spawner Logic
             const scavLvl = playerSkills.itemSpawner;
-            
             player.itemSpawnTimer++;
-            const spawnInterval = Math.max(180, 600 - (scavLvl * 75)); 
+            const spawnInterval = Math.max(200, 600 - (scavLvl * 80));
 
             if (player.itemSpawnTimer >= spawnInterval) {
                 const maxAllowedItems = 3 + scavLvl * 2;
@@ -1220,7 +1221,14 @@
                 }
 
                 if (dist < 8) {
-                    gainXp(orb.xp);
+                    // Requirement #2: Calculate 20% Level EXP vs raw EXP
+                    let earnedXp = orb.xp;
+                    if (orb.isPercentOrb) {
+                        earnedXp = Math.floor(player.nextXp * 0.20);
+                        showNotification(`BOOST! +20% LEVEL EXP! (+${earnedXp})`);
+                    }
+
+                    gainXp(earnedXp);
                     createBurst(orb.x, orb.y, orb.color);
                     orb.collected = true;
                 }
@@ -1535,7 +1543,7 @@
                 }
             }
 
-            // Draw EXP Orbs (Green, Blue, Gold, Red, Purple)
+            // Draw EXP Orbs
             expOrbs.forEach(orb => {
                 const ox = orb.x - camX;
                 const oy = orb.y - camY;
@@ -1545,7 +1553,7 @@
                 ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Inner diamond highlight
+                // Highlight core
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(ox - 1, oy - 1, 2, 2);
             });
@@ -1638,11 +1646,12 @@
                 ctx.fill();
             });
 
-            // Player Sprite Graphics
+            // Player Sprite
             const pScrX = player.x - camX;
             const pScrY = player.y - camY;
 
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
+                // Pickup Range Magnet Ring
                 if (playerSkills.itemSpawner > 0) {
                     ctx.strokeStyle = 'rgba(52, 152, 219, 0.15)';
                     ctx.lineWidth = 1;
@@ -1651,30 +1660,38 @@
                     ctx.stroke();
                 }
 
+                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.beginPath();
                 ctx.ellipse(pScrX + 7, pScrY + 15, 6, 3, 0, 0, Math.PI * 2);
                 ctx.fill();
 
+                // Body Armor
                 ctx.fillStyle = '#2980b9';
                 ctx.fillRect(pScrX + 3, pScrY + 6, 8, 7);
 
+                // Belt & Strap
                 ctx.fillStyle = '#7f8c8d';
                 ctx.fillRect(pScrX + 3, pScrY + 10, 8, 2);
 
+                // Knight Helmet
                 ctx.fillStyle = '#bdc3c7';
                 ctx.fillRect(pScrX + 2, pScrY + 0, 10, 6);
 
+                // Visor
                 ctx.fillStyle = '#2c3e50';
                 ctx.fillRect(pScrX + 3, pScrY + 3, 8, 2);
 
+                // Plume
                 ctx.fillStyle = '#e74c3c';
                 ctx.fillRect(pScrX + 5, pScrY - 2, 4, 2);
 
+                // Boots
                 ctx.fillStyle = '#34495e';
                 ctx.fillRect(pScrX + 3, pScrY + 13, 3, 3);
                 ctx.fillRect(pScrX + 8, pScrY + 13, 3, 3);
 
+                // Sword Directional Overlay
                 const px = pScrX + player.width / 2;
                 const py = pScrY + player.height / 2;
                 const hx = px + Math.cos(player.facingAngle) * 8;
