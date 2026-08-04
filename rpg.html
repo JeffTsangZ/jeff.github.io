@@ -309,7 +309,7 @@
             bottom: 20px;
             left: 20px;
             right: 20px;
-            display: flex;
+            display: none;
             justify-content: space-between;
             align-items: flex-end;
             pointer-events: none;
@@ -339,28 +339,28 @@
             pointer-events: none;
         }
 
-        #btn-boost {
+        #btn-attack {
             width: 65px;
             height: 65px;
             border-radius: 50%;
-            background: rgba(46, 204, 113, 0.85);
+            background: rgba(231, 76, 60, 0.85);
             border: 2px solid #fff;
             pointer-events: auto;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             color: white;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
             touch-action: manipulation;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            cursor: pointer;
         }
 
-        #btn-boost:active { background: rgba(46, 204, 113, 1); }
-        #btn-boost.cooling { background: rgba(127, 140, 141, 0.7); opacity: 0.8; }
-        #btn-boost.boosting { background: rgba(241, 196, 15, 0.9); }
+        #btn-attack:active { background: rgba(231, 76, 60, 1); }
+
+        @media (pointer: coarse), (max-width: 600px) {
+            #mobile-controls { display: flex; }
+        }
     </style>
 </head>
 <body>
@@ -382,7 +382,7 @@
                 <div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div>
             </div>
             <div>
-                ATK: <span id="atk-txt">15</span> | SPD: <span id="spd-txt">1.5</span><br>
+                ATK: <span id="atk-txt">15</span> | RNG: <span id="rng-txt">25</span><br>
                 <div id="save-status">Game Saved</div>
             </div>
             <div style="text-align: right;">
@@ -403,15 +403,12 @@
             <div class="skill-options-container" id="skill-cards-container"></div>
         </div>
 
-        <!-- Mobile Controls -->
+        <!-- Touch Controls -->
         <div id="mobile-controls">
             <div id="joystick-base">
                 <div id="joystick-stick"></div>
             </div>
-            <button id="btn-boost">
-                <span>BOOST</span>
-                <span id="boost-status" style="font-size: 8px;">READY</span>
-            </button>
+            <button id="btn-attack">ATTACK</button>
         </div>
     </div>
 
@@ -461,26 +458,26 @@
             y: 150,
             width: 14,
             height: 16,
-            baseSpeed: 1.5,
             speed: 1.5,
             hp: 100,
             maxHp: 100,
+            baseAtk: 15,
+            baseReach: 25,
             atk: 15,
+            reach: 25,
             pickupRadius: 32,
             level: 1,
             xp: 0,
             nextXp: 50,
             facingAngle: Math.PI / 2,
+            isAttacking: false,
+            attackTimer: 0,
             invulnerableTimer: 0,
             autoRangedTimer: 0,
             orbitAngle: 0,
             laserTimer: 0,
             laserBeam: null,
-            itemSpawnTimer: 0,
-            
-            // Requirement #4 & #5: Boost Timers
-            boostActiveTimer: 0,
-            boostCooldownTimer: 0
+            itemSpawnTimer: 0
         };
 
         const SKILL_DEFINITIONS = [
@@ -522,17 +519,16 @@
                     return `Lvl ${lvl+1}: ${chances[lvl+1]}% chance to heal ${heals[lvl+1]}% Max HP on kill.`;
                 }
             },
-            // Requirement #5: Overdrive (Boost Upgrade) replacing Might & Reach
             {
-                id: 'boostEnhancer',
-                name: 'Overdrive',
-                icon: '🚀',
+                id: 'statBoost',
+                name: 'Might & Reach',
+                icon: '⚔️',
                 noEvolution: false,
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Warp Speed! +100% Boost Duration, -60% CD, & +50% Speed!";
-                    if (lvl === 5) return "FINAL UPGRADE: Maximum Speed & Rapid Cooldown!";
-                    if (lvl === 0) return "+0.5s Boost duration & -1.5s Cooldown per level.";
-                    return `Lvl ${lvl+1}: Duration: +${(lvl+1)*0.5}s | Cooldown: -${(lvl+1)*1.5}s`;
+                    if (evolved) return "EVOLVED: Titan Swing! Expands normal attack swing angle to 270 degrees!";
+                    if (lvl === 5) return "FINAL UPGRADE: Titan Swing (270° Wide Cleave Arc)";
+                    if (lvl === 0) return "Boosts Melee Damage, Range, and Sector Swing Angle.";
+                    return `Lvl ${lvl+1}: Grants +${(lvl+1)*6} ATK and +${(lvl+1)*4} Range.`;
                 }
             },
             {
@@ -558,26 +554,26 @@
                     return `Lvl ${lvl+1}: Increases earned EXP by ${mults[lvl+1]}x per orb!`;
                 }
             },
-            // Requirement #1: Scavenger now has NO final upgrade evolution
+            // Scavenger (no Evolution as requested)
             {
                 id: 'itemSpawner',
                 name: 'Scavenger',
                 icon: '🧲',
                 noEvolution: true,
                 getDesc: (lvl) => {
-                    if (lvl === 5) return "MAX LEVEL: Spawns items rapidly & maximum pickup radius!";
+                    if (lvl === 5) return "MAX LEVEL: Max item drop frequency and +60 Pickup Radius!";
                     if (lvl === 0) return "Spawns Hearts (30% HP) and Magnets randomly over time.";
-                    return `Lvl ${lvl+1}: Higher item spawn frequency & +${(lvl+1)*12} Pickup Radius.`;
+                    return `Lvl ${lvl+1}: Higher item spawn rate & +${(lvl+1)*12} Pickup Range.`;
                 }
             }
         ];
 
-        // Requirement #3: Player starts with Magic Darts LV 1
+        // Requirement #3: Player starts with Magic Darts Level 1
         let playerSkills = {
             autoRanged: 1,
             spinningOrbit: 0,
             vampirism: 0,
-            boostEnhancer: 0,
+            statBoost: 0,
             laserAttack: 0,
             xpMultiplier: 0,
             itemSpawner: 0
@@ -587,13 +583,14 @@
             autoRanged: false,
             spinningOrbit: false,
             vampirism: false,
-            boostEnhancer: false,
+            statBoost: false,
             laserAttack: false
         };
 
         let playerProjectiles = [];
         let enemyBullets = [];
         let particles = [];
+        
         let expOrbs = [];
         let mapChests = [];
         let mapItems = [];
@@ -655,7 +652,7 @@
             if (activeBoss && activeBoss.hp > 0) return;
 
             const bossHp = Math.floor(1200 + (player.level * 400));
-            const bossSpeed = Math.max(0.5, player.baseSpeed * 0.65);
+            const bossSpeed = Math.max(0.5, player.speed * 0.65);
 
             activeBoss = {
                 id: 'boss_' + Math.random().toString(36).substr(2, 9),
@@ -747,6 +744,18 @@
         });
 
         function recalculatePlayerStats() {
+            let boostLvl = playerSkills.statBoost;
+            let extraAtk = boostLvl * 6;
+            let extraReach = boostLvl * 4;
+
+            if (skillEvolutions.statBoost) {
+                extraAtk += 30;
+                extraReach += 20;
+            }
+
+            player.atk = player.baseAtk + extraAtk;
+            player.reach = player.baseReach + extraReach;
+
             let scavLvl = playerSkills.itemSpawner;
             player.pickupRadius = 32 + (scavLvl * 12);
         }
@@ -755,6 +764,8 @@
             const data = {
                 hp: player.hp,
                 maxHp: player.maxHp,
+                baseAtk: player.baseAtk,
+                baseReach: player.baseReach,
                 level: player.level,
                 xp: player.xp,
                 nextXp: player.nextXp,
@@ -778,6 +789,8 @@
                 const parsed = JSON.parse(data);
                 player.hp = parsed.hp;
                 player.maxHp = parsed.maxHp;
+                player.baseAtk = parsed.baseAtk || 15;
+                player.baseReach = parsed.baseReach || 25;
                 player.level = parsed.level;
                 player.xp = parsed.xp;
                 player.nextXp = parsed.nextXp;
@@ -818,7 +831,7 @@
             player.level += levels;
             player.maxHp += 15 * levels;
             player.hp = player.maxHp;
-            player.atk += 2 * levels;
+            player.baseAtk += 2 * levels;
             recalculatePlayerStats();
             updateHUD();
             saveGame();
@@ -912,41 +925,48 @@
             }
         }
 
-        // Requirement #4: Boost Action Trigger Function
-        function triggerBoost() {
-            if (isPaused) return;
-            if (player.boostCooldownTimer > 0) return;
-
-            const boostLvl = playerSkills.boostEnhancer;
-            const boostEvol = skillEvolutions.boostEnhancer;
-
-            // Base duration = 2.0s (120 frames). Each Level adds 0.5s.
-            let durationSeconds = 2.0 + (boostLvl * 0.5);
-            if (boostEvol) durationSeconds += 1.0;
-
-            player.boostActiveTimer = Math.floor(durationSeconds * 60);
-
-            // Base Cooldown = 15.0s (900 frames). Each Level reduces 1.5s.
-            let cooldownSeconds = Math.max(5.0, 15.0 - (boostLvl * 1.5));
-            if (boostEvol) cooldownSeconds = Math.max(3.0, cooldownSeconds - 3.0);
-
-            player.boostCooldownTimer = Math.floor(cooldownSeconds * 60);
-
-            createBurst(player.x + player.width / 2, player.y + player.height / 2, '#2ecc71');
-        }
-
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
-            if (e.code === 'Space') triggerBoost();
+            if (e.code === 'Space') attack();
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        const boostBtn = document.getElementById('btn-boost');
-        boostBtn.addEventListener('touchstart', (e) => {
+        document.getElementById('btn-attack').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            triggerBoost();
+            attack();
         });
-        boostBtn.addEventListener('click', () => triggerBoost());
+        document.getElementById('btn-attack').addEventListener('click', () => attack());
+
+        function attack() {
+            if (player.isAttacking || isPaused) return;
+            player.isAttacking = true;
+            player.attackTimer = 12;
+
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+            const radius = player.reach;
+            
+            const sweepAngleDeg = skillEvolutions.statBoost ? 270 : 135;
+            const sweepAngleRad = (sweepAngleDeg * Math.PI) / 180;
+
+            enemies.forEach(e => {
+                const ex = e.x + e.width / 2;
+                const ey = e.y + e.height / 2;
+                const dist = Math.hypot(ex - px, ey - py);
+
+                if (dist <= radius + Math.max(e.width, e.height) / 2) {
+                    let enemyAngle = Math.atan2(ey - py, ex - px);
+                    let diff = enemyAngle - player.facingAngle;
+                    
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+
+                    if (Math.abs(diff) <= sweepAngleRad / 2) {
+                        damageEnemy(e, player.atk);
+                    }
+                }
+            });
+        }
 
         function getClosestEnemy(fromX, fromY, ignoreList = []) {
             let closest = null;
@@ -965,43 +985,40 @@
             return closest;
         }
 
-        // Requirement #2: Expanded EXP Orbs System
+        // Requirement #2: Added 500 EXP (Red) and 20% Level Requirement (Purple) EXP Orbs
         function spawnExpOrb(x, y, rawXp) {
             const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
             const xpLvl = playerSkills.xpMultiplier || 0;
-            const finalXp = Math.floor(rawXp * xpMultipliers[xpLvl]);
+            let finalXp = Math.floor(rawXp * xpMultipliers[xpLvl]);
 
             let color = '#2ecc71'; // Green (Small)
             let radius = 3;
-            let type = 'normal';
 
-            // Special percentage calculation: 20% of player current level requirement
-            const isPercentOrb = Math.random() < 0.08; // 8% chance on drop to spawn 20% LV orb
-            const isExtremeOrb = !isPercentOrb && finalXp >= 500;
-
-            if (isPercentOrb) {
-                color = '#e056fd'; // Pulsing Cyan/Pink Percent Orb
-                radius = 5.5;
-                type = 'percent';
-            } else if (isExtremeOrb) {
-                color = '#9b59b6'; // Purple Orb (500 EXP)
+            // Roll rare special EXP drops
+            const randRoll = Math.random();
+            if (randRoll < 0.05) { 
+                // 5% Chance: Purple Orb (20% of current level's total EXP requirement)
+                finalXp = Math.floor(player.nextXp * 0.20);
+                color = '#9b59b6'; // Purple
                 radius = 6;
-                type = 'extreme';
+            } else if (randRoll < 0.12 || finalXp >= 500) { 
+                // Extreme Large: Red Gem (500 EXP)
+                finalXp = Math.max(finalXp, 500);
+                color = '#e74c3c'; // Red
+                radius = 6;
             } else if (finalXp >= 100) {
-                color = '#f1c40f'; // Gold Orb
-                radius = 4.5;
+                color = '#f1c40f'; // Gold (Large)
+                radius = 5;
             } else if (finalXp >= 30) {
-                color = '#3498db'; // Blue Orb
-                radius = 3.5;
+                color = '#3498db'; // Blue (Medium)
+                radius = 4;
             }
 
             expOrbs.push({
                 x, y,
                 xp: finalXp,
-                type,
                 color,
                 radius,
-                pulse: 0,
                 beingMagnetized: false
             });
         }
@@ -1036,18 +1053,10 @@
                         height: 12,
                         beingMagnetized: false
                     });
-                    
-                    // Drops special extreme purple orb & percent orb
-                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 500);
+                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
                     
                     activeBoss = null;
                     bossTimer = BOSS_INTERVAL;
-                    
-                    // Overdrive Evolution resets boost CD on boss kill
-                    if (skillEvolutions.boostEnhancer) {
-                        player.boostCooldownTimer = 0;
-                    }
-
                     showNotification("BOSS DEFEATED!\nA Treasure Chest has dropped!");
                 } else {
                     spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
@@ -1063,7 +1072,7 @@
                 player.nextXp = Math.floor(player.nextXp * 1.5);
                 player.maxHp += 15;
                 player.hp = player.maxHp;
-                player.atk += 2;
+                player.baseAtk += 2;
                 recalculatePlayerStats();
 
                 createBurst(player.x, player.y, '#f1c40f');
@@ -1083,25 +1092,8 @@
             document.getElementById('xp-fill').style.width = ((player.xp / player.nextXp) * 100) + '%';
             document.getElementById('hp-txt').innerText = `${Math.max(0, Math.ceil(player.hp))}/${player.maxHp}`;
             document.getElementById('atk-txt').innerText = player.atk;
-            document.getElementById('spd-txt').innerText = player.speed.toFixed(1);
+            document.getElementById('rng-txt').innerText = player.reach;
             document.getElementById('level-txt').innerText = `LVL ${player.level}`;
-
-            // Boost Button HUD text update
-            const boostStatusTxt = document.getElementById('boost-status');
-            const boostBtn = document.getElementById('btn-boost');
-
-            if (player.boostActiveTimer > 0) {
-                const secs = (player.boostActiveTimer / 60).toFixed(1);
-                boostStatusTxt.innerText = `FAST (${secs}s)`;
-                boostBtn.className = 'boosting';
-            } else if (player.boostCooldownTimer > 0) {
-                const secs = Math.ceil(player.boostCooldownTimer / 60);
-                boostStatusTxt.innerText = `CD (${secs}s)`;
-                boostBtn.className = 'cooling';
-            } else {
-                boostStatusTxt.innerText = 'READY';
-                boostBtn.className = '';
-            }
 
             const skillsDiv = document.getElementById('skills-list');
             skillsDiv.innerHTML = '';
@@ -1167,24 +1159,12 @@
                 }
             }
 
-            // Requirement #4 & #5: Boost Timers & Movement Speed calculation
-            if (player.boostCooldownTimer > 0) {
-                player.boostCooldownTimer--;
-            }
-
-            let speedMultiplier = 1.0;
-            if (player.boostActiveTimer > 0) {
-                player.boostActiveTimer--;
-                speedMultiplier = skillEvolutions.boostEnhancer ? 2.5 : 2.0; // Boost speed increases player speed by +100% or +150%
-            }
-            player.speed = player.baseSpeed * speedMultiplier;
-
-            // Map Item Spawner Timer Logic
             const scavLvl = playerSkills.itemSpawner;
+            
             player.itemSpawnTimer++;
-            const spawnInterval = Math.max(200, 600 - (scavLvl * 80));
+            const spawnInterval = Math.max(180, 600 - (scavLvl * 75)); 
 
-            if (player.itemSpawnTimer >= spawnInterval && scavLvl > 0) {
+            if (player.itemSpawnTimer >= spawnInterval) {
                 const maxAllowedItems = 3 + scavLvl * 2;
                 if (mapItems.length < maxAllowedItems) {
                     const angle = Math.random() * Math.PI * 2;
@@ -1230,26 +1210,17 @@
 
             // --- UPDATE EXP ORBS PICKUP LOGIC ---
             expOrbs.forEach(orb => {
-                orb.pulse = (orb.pulse || 0) + 0.1;
                 const dist = Math.hypot(orb.x - px, orb.y - py);
-
                 if (dist < player.pickupRadius || orb.beingMagnetized) {
                     orb.beingMagnetized = true;
                     const angle = Math.atan2(py - orb.y, px - orb.x);
-                    const flySpeed = 5.0;
+                    const flySpeed = 4.5;
                     orb.x += Math.cos(angle) * flySpeed;
                     orb.y += Math.sin(angle) * flySpeed;
                 }
 
                 if (dist < 8) {
-                    let earnedXp = orb.xp;
-                    if (orb.type === 'percent') {
-                        earnedXp = Math.floor(player.nextXp * 0.20); // Requirement #2: 20% of current LV max EXP
-                    } else if (orb.type === 'extreme') {
-                        earnedXp = 500; // Requirement #2: 500 EXP
-                    }
-
-                    gainXp(earnedXp);
+                    gainXp(orb.xp);
                     createBurst(orb.x, orb.y, orb.color);
                     orb.collected = true;
                 }
@@ -1297,6 +1268,11 @@
             });
             mapItems = mapItems.filter(i => !i.collected);
 
+            if (player.isAttacking) {
+                player.attackTimer--;
+                if (player.attackTimer <= 0) player.isAttacking = false;
+            }
+
             if (player.invulnerableTimer > 0) player.invulnerableTimer--;
 
             // Skill 1: Auto Magic Darts
@@ -1304,8 +1280,8 @@
             const autoEvol = skillEvolutions.autoRanged;
             if (autoLvl > 0 || autoEvol) {
                 player.autoRangedTimer++;
-                const cooldowns = [0, 75, 60, 48, 36, 24];
-                const cd = autoEvol ? 16 : cooldowns[autoLvl];
+                const cooldowns = [0, 80, 65, 50, 40, 25];
+                const cd = autoEvol ? 18 : cooldowns[autoLvl];
 
                 if (player.autoRangedTimer >= cd) {
                     const target = getClosestEnemy(px, py);
@@ -1559,32 +1535,19 @@
                 }
             }
 
-            // Requirement #2: Draw EXP Orbs
+            // Draw EXP Orbs (Green, Blue, Gold, Red, Purple)
             expOrbs.forEach(orb => {
                 const ox = orb.x - camX;
                 const oy = orb.y - camY;
 
-                if (orb.type === 'percent') {
-                    // Pulsing Cyan/Pink ring for 20% level up orb
-                    const pulseRadius = orb.radius + Math.sin(orb.pulse) * 1.5;
-                    ctx.fillStyle = '#00ffff';
-                    ctx.beginPath();
-                    ctx.arc(ox, oy, pulseRadius, 0, Math.PI * 2);
-                    ctx.fill();
+                ctx.fillStyle = orb.color;
+                ctx.beginPath();
+                ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
+                ctx.fill();
 
-                    ctx.fillStyle = '#ff007f';
-                    ctx.beginPath();
-                    ctx.arc(ox, oy, pulseRadius * 0.5, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.fillStyle = orb.color;
-                    ctx.beginPath();
-                    ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(ox - 1, oy - 1, 2, 2);
-                }
+                // Inner diamond highlight
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(ox - 1, oy - 1, 2, 2);
             });
 
             // Draw Treasure Chests
@@ -1680,7 +1643,6 @@
             const pScrY = player.y - camY;
 
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
-                // Pickup Range Magnet Ring Indicator
                 if (playerSkills.itemSpawner > 0) {
                     ctx.strokeStyle = 'rgba(52, 152, 219, 0.15)';
                     ctx.lineWidth = 1;
@@ -1689,44 +1651,44 @@
                     ctx.stroke();
                 }
 
-                // Speed Trail / Boost Aura Graphic
-                if (player.boostActiveTimer > 0) {
-                    ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
-                    ctx.beginPath();
-                    ctx.arc(pScrX + 7, pScrY + 8, 14, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.beginPath();
                 ctx.ellipse(pScrX + 7, pScrY + 15, 6, 3, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Body Armor
-                ctx.fillStyle = player.boostActiveTimer > 0 ? '#2ecc71' : '#2980b9';
+                ctx.fillStyle = '#2980b9';
                 ctx.fillRect(pScrX + 3, pScrY + 6, 8, 7);
 
-                // Belt & Strap
                 ctx.fillStyle = '#7f8c8d';
                 ctx.fillRect(pScrX + 3, pScrY + 10, 8, 2);
 
-                // Knight Helmet
                 ctx.fillStyle = '#bdc3c7';
                 ctx.fillRect(pScrX + 2, pScrY + 0, 10, 6);
 
-                // Helmet Visor
                 ctx.fillStyle = '#2c3e50';
                 ctx.fillRect(pScrX + 3, pScrY + 3, 8, 2);
 
-                // Helmet Plume / Crest
                 ctx.fillStyle = '#e74c3c';
                 ctx.fillRect(pScrX + 5, pScrY - 2, 4, 2);
 
-                // Boots
                 ctx.fillStyle = '#34495e';
                 ctx.fillRect(pScrX + 3, pScrY + 13, 3, 3);
                 ctx.fillRect(pScrX + 8, pScrY + 13, 3, 3);
+
+                const px = pScrX + player.width / 2;
+                const py = pScrY + player.height / 2;
+                const hx = px + Math.cos(player.facingAngle) * 8;
+                const hy = py + Math.sin(player.facingAngle) * 8;
+
+                ctx.strokeStyle = '#ecf0f1';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.lineTo(hx, hy);
+                ctx.stroke();
+
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(hx - 1, hy - 1, 3, 3);
             }
 
             // Skill 2: Orbiting Shields
@@ -1773,6 +1735,29 @@
                 ctx.beginPath();
                 ctx.moveTo(player.laserBeam.x1 - camX, player.laserBeam.y1 - camY);
                 ctx.lineTo(player.laserBeam.x2 - camX, player.laserBeam.y2 - camY);
+                ctx.stroke();
+            }
+
+            // Sector Swing Arc
+            if (player.isAttacking) {
+                const px = pScrX + player.width / 2;
+                const py = pScrY + player.height / 2;
+                const radius = player.reach;
+                const sweepAngleDeg = skillEvolutions.statBoost ? 270 : 135;
+                const sweepAngleRad = (sweepAngleDeg * Math.PI) / 180;
+
+                const startAngle = player.facingAngle - (sweepAngleRad / 2);
+                const endAngle = player.facingAngle + (sweepAngleRad / 2);
+
+                ctx.fillStyle = skillEvolutions.statBoost ? 'rgba(241, 196, 15, 0.45)' : 'rgba(236, 240, 241, 0.35)';
+                ctx.strokeStyle = skillEvolutions.statBoost ? '#f1c40f' : '#ffffff';
+                ctx.lineWidth = 2;
+
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.arc(px, py, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fill();
                 ctx.stroke();
             }
 
