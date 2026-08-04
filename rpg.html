@@ -339,15 +339,14 @@
             pointer-events: none;
         }
 
-        /* Requirement #4: Boost Button */
         #btn-boost {
             width: 65px;
             height: 65px;
             border-radius: 50%;
-            background: #2980b9;
+            background: rgba(46, 204, 113, 0.85);
             border: 2px solid #fff;
             pointer-events: auto;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: bold;
             color: white;
             display: flex;
@@ -359,23 +358,9 @@
             cursor: pointer;
         }
 
-        #btn-boost.ready {
-            background: #2ecc71;
-            box-shadow: 0 0 12px #2ecc71;
-        }
-
-        #btn-boost.active {
-            background: #f1c40f;
-            color: #000;
-            box-shadow: 0 0 15px #f1c40f;
-        }
-
-        #btn-boost:active { transform: scale(0.95); }
-
-        @media (min-width: 601px) {
-            #mobile-controls { display: flex; }
-            #joystick-base { display: none; }
-        }
+        #btn-boost:active { background: rgba(46, 204, 113, 1); }
+        #btn-boost.cooling { background: rgba(127, 140, 141, 0.7); opacity: 0.8; }
+        #btn-boost.boosting { background: rgba(241, 196, 15, 0.9); }
     </style>
 </head>
 <body>
@@ -418,14 +403,14 @@
             <div class="skill-options-container" id="skill-cards-container"></div>
         </div>
 
-        <!-- Touch / Action Controls -->
+        <!-- Mobile Controls -->
         <div id="mobile-controls">
             <div id="joystick-base">
                 <div id="joystick-stick"></div>
             </div>
-            <button id="btn-boost" class="ready">
+            <button id="btn-boost">
                 <span>BOOST</span>
-                <span id="boost-timer-txt">READY</span>
+                <span id="boost-status" style="font-size: 8px;">READY</span>
             </button>
         </div>
     </div>
@@ -480,7 +465,6 @@
             speed: 1.5,
             hp: 100,
             maxHp: 100,
-            baseAtk: 15,
             atk: 15,
             pickupRadius: 32,
             level: 1,
@@ -493,7 +477,8 @@
             laserTimer: 0,
             laserBeam: null,
             itemSpawnTimer: 0,
-            // Requirement #4: Boost Mechanics
+            
+            // Requirement #4 & #5: Boost Timers
             boostActiveTimer: 0,
             boostCooldownTimer: 0
         };
@@ -508,7 +493,7 @@
                     if (evolved) return "EVOLVED: Chain Darts! Darts bounce to nearby enemies up to 2 times!";
                     if (lvl === 5) return "FINAL UPGRADE: Chain Bounce Darts (Bounces 2 times!)";
                     if (lvl === 0) return "Fires 1 auto-targeting dart at nearest enemy.";
-                    return `Lvl ${lvl+1}: Fires ${Math.min(3, lvl + 1)} darts faster with increased damage.`;
+                    return `Lvl ${lvl+1}: Fires ${Math.min(3, lvl + 1)} darts faster and with higher damage.`;
                 }
             },
             {
@@ -537,17 +522,17 @@
                     return `Lvl ${lvl+1}: ${chances[lvl+1]}% chance to heal ${heals[lvl+1]}% Max HP on kill.`;
                 }
             },
-            // Requirement #5: Overdrive Skill (Boost Enhancements)
+            // Requirement #5: Overdrive (Boost Upgrade) replacing Might & Reach
             {
-                id: 'overdrive',
+                id: 'boostEnhancer',
                 name: 'Overdrive',
                 icon: '🚀',
                 noEvolution: false,
                 getDesc: (lvl, evolved) => {
-                    if (evolved) return "EVOLVED: Hyper Drive! +3.5s Boost duration & -10s Cooldown!";
-                    if (lvl === 5) return "FINAL UPGRADE: Hyper Drive!";
-                    if (lvl === 0) return "Increases Boost duration by +0.5s & decreases cooldown by -1.5s.";
-                    return `Lvl ${lvl+1}: +${((lvl+1)*0.5).toFixed(1)}s Duration, -${((lvl+1)*1.5).toFixed(1)}s Cooldown.`;
+                    if (evolved) return "EVOLVED: Warp Speed! +100% Boost Duration, -60% CD, & +50% Speed!";
+                    if (lvl === 5) return "FINAL UPGRADE: Maximum Speed & Rapid Cooldown!";
+                    if (lvl === 0) return "+0.5s Boost duration & -1.5s Cooldown per level.";
+                    return `Lvl ${lvl+1}: Duration: +${(lvl+1)*0.5}s | Cooldown: -${(lvl+1)*1.5}s`;
                 }
             },
             {
@@ -573,26 +558,26 @@
                     return `Lvl ${lvl+1}: Increases earned EXP by ${mults[lvl+1]}x per orb!`;
                 }
             },
-            // Requirement #1: Scavenger Skill (No evolution capability)
+            // Requirement #1: Scavenger now has NO final upgrade evolution
             {
                 id: 'itemSpawner',
                 name: 'Scavenger',
                 icon: '🧲',
                 noEvolution: true,
                 getDesc: (lvl) => {
-                    if (lvl === 5) return "MAX LEVEL: Highest spawn frequency and massive pickup radius!";
+                    if (lvl === 5) return "MAX LEVEL: Spawns items rapidly & maximum pickup radius!";
                     if (lvl === 0) return "Spawns Hearts (30% HP) and Magnets randomly over time.";
-                    return `Lvl ${lvl+1}: Faster item spawn rate & +${(lvl+1)*10} Pickup Range.`;
+                    return `Lvl ${lvl+1}: Higher item spawn frequency & +${(lvl+1)*12} Pickup Radius.`;
                 }
             }
         ];
 
-        // Requirement #3: Start player with Magic Darts Lv 1
+        // Requirement #3: Player starts with Magic Darts LV 1
         let playerSkills = {
             autoRanged: 1,
             spinningOrbit: 0,
             vampirism: 0,
-            overdrive: 0,
+            boostEnhancer: 0,
             laserAttack: 0,
             xpMultiplier: 0,
             itemSpawner: 0
@@ -602,15 +587,13 @@
             autoRanged: false,
             spinningOrbit: false,
             vampirism: false,
-            overdrive: false,
-            laserAttack: false,
-            itemSpawner: false
+            boostEnhancer: false,
+            laserAttack: false
         };
 
         let playerProjectiles = [];
         let enemyBullets = [];
         let particles = [];
-        
         let expOrbs = [];
         let mapChests = [];
         let mapItems = [];
@@ -764,9 +747,6 @@
         });
 
         function recalculatePlayerStats() {
-            player.atk = player.baseAtk;
-
-            // Scavenger pickup radius calculation
             let scavLvl = playerSkills.itemSpawner;
             player.pickupRadius = 32 + (scavLvl * 12);
         }
@@ -775,7 +755,6 @@
             const data = {
                 hp: player.hp,
                 maxHp: player.maxHp,
-                baseAtk: player.baseAtk,
                 level: player.level,
                 xp: player.xp,
                 nextXp: player.nextXp,
@@ -799,7 +778,6 @@
                 const parsed = JSON.parse(data);
                 player.hp = parsed.hp;
                 player.maxHp = parsed.maxHp;
-                player.baseAtk = parsed.baseAtk || 15;
                 player.level = parsed.level;
                 player.xp = parsed.xp;
                 player.nextXp = parsed.nextXp;
@@ -840,7 +818,7 @@
             player.level += levels;
             player.maxHp += 15 * levels;
             player.hp = player.maxHp;
-            player.baseAtk += 2 * levels;
+            player.atk += 2 * levels;
             recalculatePlayerStats();
             updateHUD();
             saveGame();
@@ -934,39 +912,41 @@
             }
         }
 
-        // Requirement #4: Boost Speed Action Trigger
-        function triggerSpeedBoost() {
-            if (player.boostCooldownTimer > 0 || isPaused) return;
+        // Requirement #4: Boost Action Trigger Function
+        function triggerBoost() {
+            if (isPaused) return;
+            if (player.boostCooldownTimer > 0) return;
 
-            const ovLvl = playerSkills.overdrive;
-            const ovEvol = skillEvolutions.overdrive;
+            const boostLvl = playerSkills.boostEnhancer;
+            const boostEvol = skillEvolutions.boostEnhancer;
 
-            // Base 2.0s boost duration, expanded by Overdrive
-            let boostDuration = 120 + (ovLvl * 30); // 2s + 0.5s per level
-            if (ovEvol) boostDuration = 330; // 5.5 seconds
+            // Base duration = 2.0s (120 frames). Each Level adds 0.5s.
+            let durationSeconds = 2.0 + (boostLvl * 0.5);
+            if (boostEvol) durationSeconds += 1.0;
 
-            // Base 15s cooldown (900 frames), reduced by Overdrive
-            let boostCooldown = 900 - (ovLvl * 90); // 15s - 1.5s per level
-            if (ovEvol) boostCooldown = 300; // 5 seconds
+            player.boostActiveTimer = Math.floor(durationSeconds * 60);
 
-            player.boostActiveTimer = boostDuration;
-            player.boostCooldownTimer = boostCooldown;
+            // Base Cooldown = 15.0s (900 frames). Each Level reduces 1.5s.
+            let cooldownSeconds = Math.max(5.0, 15.0 - (boostLvl * 1.5));
+            if (boostEvol) cooldownSeconds = Math.max(3.0, cooldownSeconds - 3.0);
 
-            createBurst(player.x + 7, player.y + 8, '#2ecc71');
+            player.boostCooldownTimer = Math.floor(cooldownSeconds * 60);
+
+            createBurst(player.x + player.width / 2, player.y + player.height / 2, '#2ecc71');
         }
 
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
-            if (e.code === 'Space') triggerSpeedBoost();
+            if (e.code === 'Space') triggerBoost();
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        const btnBoost = document.getElementById('btn-boost');
-        btnBoost.addEventListener('touchstart', (e) => {
+        const boostBtn = document.getElementById('btn-boost');
+        boostBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            triggerSpeedBoost();
+            triggerBoost();
         });
-        btnBoost.addEventListener('click', () => triggerSpeedBoost());
+        boostBtn.addEventListener('click', () => triggerBoost());
 
         function getClosestEnemy(fromX, fromY, ignoreList = []) {
             let closest = null;
@@ -985,7 +965,7 @@
             return closest;
         }
 
-        // Requirement #2: Drop EXP Gem based on amount & special types
+        // Requirement #2: Expanded EXP Orbs System
         function spawnExpOrb(x, y, rawXp) {
             const xpMultipliers = [1, 1.5, 2, 4, 5, 8];
             const xpLvl = playerSkills.xpMultiplier || 0;
@@ -993,34 +973,35 @@
 
             let color = '#2ecc71'; // Green (Small)
             let radius = 3;
-            let orbType = 'standard';
-            let customXpVal = finalXp;
+            let type = 'normal';
 
-            // Random chance for special percentage / extreme gems
-            const randSpecial = Math.random();
+            // Special percentage calculation: 20% of player current level requirement
+            const isPercentOrb = Math.random() < 0.08; // 8% chance on drop to spawn 20% LV orb
+            const isExtremeOrb = !isPercentOrb && finalXp >= 500;
 
-            if (randSpecial < 0.05) { // 5% chance for 20% Level EXP Orb
-                color = '#00ffff'; // Cyan Diamond
+            if (isPercentOrb) {
+                color = '#e056fd'; // Pulsing Cyan/Pink Percent Orb
+                radius = 5.5;
+                type = 'percent';
+            } else if (isExtremeOrb) {
+                color = '#9b59b6'; // Purple Orb (500 EXP)
                 radius = 6;
-                orbType = 'percent20';
-            } else if (randSpecial < 0.12) { // 7% chance for Extreme 500 EXP Gem
-                color = '#9b59b6'; // Purple Extreme
-                radius = 6;
-                customXpVal = Math.floor(500 * xpMultipliers[xpLvl]);
+                type = 'extreme';
             } else if (finalXp >= 100) {
-                color = '#f1c40f'; // Gold (Large)
-                radius = 5;
+                color = '#f1c40f'; // Gold Orb
+                radius = 4.5;
             } else if (finalXp >= 30) {
-                color = '#3498db'; // Blue (Medium)
-                radius = 4;
+                color = '#3498db'; // Blue Orb
+                radius = 3.5;
             }
 
             expOrbs.push({
                 x, y,
-                xp: customXpVal,
+                xp: finalXp,
+                type,
                 color,
                 radius,
-                orbType,
+                pulse: 0,
                 beingMagnetized: false
             });
         }
@@ -1055,10 +1036,18 @@
                         height: 12,
                         beingMagnetized: false
                     });
-                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
+                    
+                    // Drops special extreme purple orb & percent orb
+                    spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 500);
                     
                     activeBoss = null;
                     bossTimer = BOSS_INTERVAL;
+                    
+                    // Overdrive Evolution resets boost CD on boss kill
+                    if (skillEvolutions.boostEnhancer) {
+                        player.boostCooldownTimer = 0;
+                    }
+
                     showNotification("BOSS DEFEATED!\nA Treasure Chest has dropped!");
                 } else {
                     spawnExpOrb(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.xpValue);
@@ -1074,7 +1063,7 @@
                 player.nextXp = Math.floor(player.nextXp * 1.5);
                 player.maxHp += 15;
                 player.hp = player.maxHp;
-                player.baseAtk += 2;
+                player.atk += 2;
                 recalculatePlayerStats();
 
                 createBurst(player.x, player.y, '#f1c40f');
@@ -1097,6 +1086,23 @@
             document.getElementById('spd-txt').innerText = player.speed.toFixed(1);
             document.getElementById('level-txt').innerText = `LVL ${player.level}`;
 
+            // Boost Button HUD text update
+            const boostStatusTxt = document.getElementById('boost-status');
+            const boostBtn = document.getElementById('btn-boost');
+
+            if (player.boostActiveTimer > 0) {
+                const secs = (player.boostActiveTimer / 60).toFixed(1);
+                boostStatusTxt.innerText = `FAST (${secs}s)`;
+                boostBtn.className = 'boosting';
+            } else if (player.boostCooldownTimer > 0) {
+                const secs = Math.ceil(player.boostCooldownTimer / 60);
+                boostStatusTxt.innerText = `CD (${secs}s)`;
+                boostBtn.className = 'cooling';
+            } else {
+                boostStatusTxt.innerText = 'READY';
+                boostBtn.className = '';
+            }
+
             const skillsDiv = document.getElementById('skills-list');
             skillsDiv.innerHTML = '';
             
@@ -1117,21 +1123,6 @@
                 const mins = Math.floor(bossTimer / 60);
                 const secs = Math.floor(bossTimer % 60);
                 timerEl.innerText = `BOSS: ${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-            }
-
-            // Update Boost Button UI
-            const btn = document.getElementById('btn-boost');
-            const boostTxt = document.getElementById('boost-timer-txt');
-
-            if (player.boostActiveTimer > 0) {
-                btn.className = 'active';
-                boostTxt.innerText = (player.boostActiveTimer / 60).toFixed(1) + 's';
-            } else if (player.boostCooldownTimer > 0) {
-                btn.className = '';
-                boostTxt.innerText = (player.boostCooldownTimer / 60).toFixed(1) + 's';
-            } else {
-                btn.className = 'ready';
-                boostTxt.innerText = 'READY';
             }
         }
 
@@ -1176,24 +1167,24 @@
                 }
             }
 
-            // --- BOOST TIMERS ---
-            if (player.boostActiveTimer > 0) {
-                player.boostActiveTimer--;
-                player.speed = player.baseSpeed * 2.2; // Double movement speed during boost
-            } else {
-                player.speed = player.baseSpeed;
-            }
-
+            // Requirement #4 & #5: Boost Timers & Movement Speed calculation
             if (player.boostCooldownTimer > 0) {
                 player.boostCooldownTimer--;
             }
+
+            let speedMultiplier = 1.0;
+            if (player.boostActiveTimer > 0) {
+                player.boostActiveTimer--;
+                speedMultiplier = skillEvolutions.boostEnhancer ? 2.5 : 2.0; // Boost speed increases player speed by +100% or +150%
+            }
+            player.speed = player.baseSpeed * speedMultiplier;
 
             // Map Item Spawner Timer Logic
             const scavLvl = playerSkills.itemSpawner;
             player.itemSpawnTimer++;
             const spawnInterval = Math.max(200, 600 - (scavLvl * 80));
 
-            if (player.itemSpawnTimer >= spawnInterval) {
+            if (player.itemSpawnTimer >= spawnInterval && scavLvl > 0) {
                 const maxAllowedItems = 3 + scavLvl * 2;
                 if (mapItems.length < maxAllowedItems) {
                     const angle = Math.random() * Math.PI * 2;
@@ -1239,22 +1230,26 @@
 
             // --- UPDATE EXP ORBS PICKUP LOGIC ---
             expOrbs.forEach(orb => {
+                orb.pulse = (orb.pulse || 0) + 0.1;
                 const dist = Math.hypot(orb.x - px, orb.y - py);
+
                 if (dist < player.pickupRadius || orb.beingMagnetized) {
                     orb.beingMagnetized = true;
                     const angle = Math.atan2(py - orb.y, px - orb.x);
-                    const flySpeed = 4.5;
+                    const flySpeed = 5.0;
                     orb.x += Math.cos(angle) * flySpeed;
                     orb.y += Math.sin(angle) * flySpeed;
                 }
 
                 if (dist < 8) {
-                    if (orb.orbType === 'percent20') {
-                        const earned = Math.floor(player.nextXp * 0.20);
-                        gainXp(earned);
-                    } else {
-                        gainXp(orb.xp);
+                    let earnedXp = orb.xp;
+                    if (orb.type === 'percent') {
+                        earnedXp = Math.floor(player.nextXp * 0.20); // Requirement #2: 20% of current LV max EXP
+                    } else if (orb.type === 'extreme') {
+                        earnedXp = 500; // Requirement #2: 500 EXP
                     }
+
+                    gainXp(earnedXp);
                     createBurst(orb.x, orb.y, orb.color);
                     orb.collected = true;
                 }
@@ -1309,8 +1304,8 @@
             const autoEvol = skillEvolutions.autoRanged;
             if (autoLvl > 0 || autoEvol) {
                 player.autoRangedTimer++;
-                const cooldowns = [0, 80, 65, 50, 40, 25];
-                const cd = autoEvol ? 18 : cooldowns[autoLvl];
+                const cooldowns = [0, 75, 60, 48, 36, 24];
+                const cd = autoEvol ? 16 : cooldowns[autoLvl];
 
                 if (player.autoRangedTimer >= cd) {
                     const target = getClosestEnemy(px, py);
@@ -1569,14 +1564,27 @@
                 const ox = orb.x - camX;
                 const oy = orb.y - camY;
 
-                ctx.fillStyle = orb.color;
-                ctx.beginPath();
-                ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
-                ctx.fill();
+                if (orb.type === 'percent') {
+                    // Pulsing Cyan/Pink ring for 20% level up orb
+                    const pulseRadius = orb.radius + Math.sin(orb.pulse) * 1.5;
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(ox, oy, pulseRadius, 0, Math.PI * 2);
+                    ctx.fill();
 
-                // Inner diamond highlight
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(ox - 1, oy - 1, 2, 2);
+                    ctx.fillStyle = '#ff007f';
+                    ctx.beginPath();
+                    ctx.arc(ox, oy, pulseRadius * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = orb.color;
+                    ctx.beginPath();
+                    ctx.arc(ox, oy, orb.radius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(ox - 1, oy - 1, 2, 2);
+                }
             });
 
             // Draw Treasure Chests
@@ -1672,14 +1680,6 @@
             const pScrY = player.y - camY;
 
             if (player.invulnerableTimer === 0 || Math.floor(player.invulnerableTimer / 4) % 2 === 0) {
-                // Speed Boost Aura Glow
-                if (player.boostActiveTimer > 0) {
-                    ctx.fillStyle = 'rgba(46, 204, 113, 0.3)';
-                    ctx.beginPath();
-                    ctx.arc(pScrX + 7, pScrY + 8, 14, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
                 // Pickup Range Magnet Ring Indicator
                 if (playerSkills.itemSpawner > 0) {
                     ctx.strokeStyle = 'rgba(52, 152, 219, 0.15)';
@@ -1689,6 +1689,14 @@
                     ctx.stroke();
                 }
 
+                // Speed Trail / Boost Aura Graphic
+                if (player.boostActiveTimer > 0) {
+                    ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
+                    ctx.beginPath();
+                    ctx.arc(pScrX + 7, pScrY + 8, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
                 // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.beginPath();
@@ -1696,7 +1704,7 @@
                 ctx.fill();
 
                 // Body Armor
-                ctx.fillStyle = '#2980b9';
+                ctx.fillStyle = player.boostActiveTimer > 0 ? '#2ecc71' : '#2980b9';
                 ctx.fillRect(pScrX + 3, pScrY + 6, 8, 7);
 
                 // Belt & Strap
