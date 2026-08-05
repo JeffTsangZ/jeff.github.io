@@ -6,10 +6,10 @@
   <title>Loot Chest Mobile</title>
   <style>
     :root {
-      --bg: #121218;
-      --card-bg: #1e1e28;
+      --bg: #0e0e13;
+      --card-bg: #181822;
       --accent: #ffd700;
-      --common: #a0a0a0;
+      --common: #b0b0b0;
       --uncommon: #2ecc71;
       --rare: #3498db;
       --epic: #9b59b6;
@@ -25,25 +25,96 @@
 
     body {
       margin: 0;
-      padding: 16px;
+      padding: 0;
       background-color: var(--bg);
       color: #fff;
       display: flex;
       flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Exp Bar & Header Section */
+    .top-section {
+      background: #121218;
+      border-bottom: 1px solid #222;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      min-height: 100vh;
     }
 
-    h1 {
-      margin: 8px 0;
-      font-size: 1.5rem;
+    .top-bar h1 {
+      margin: 0;
+      font-size: 1.1rem;
       color: var(--accent);
-      text-align: center;
     }
 
-    /* Chest Area */
+    .top-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-top {
+      background: #2a2a38;
+      color: #fff;
+      border: 1px solid #444;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .btn-reset {
+      background: #a93226;
+      border-color: #7b241c;
+    }
+
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+
+    .diamonds {
+      color: #00ffffff;
+    }
+
+    .exp-container {
+      width: 100%;
+      height: 12px;
+      background: #222230;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #333;
+    }
+
+    .exp-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #27ae60, #2ecc71);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Center Section: Chest */
+    .main-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
     .chest-area {
-      margin: 16px 0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -51,8 +122,8 @@
     }
 
     .chest-icon {
-      width: 110px;
-      height: 110px;
+      width: 120px;
+      height: 120px;
       transition: transform 0.1s ease;
     }
 
@@ -66,72 +137,84 @@
       margin-top: 6px;
     }
 
-    /* Character Display */
-    .character-container {
-      width: 100%;
-      max-width: 400px;
+    /* Bottom Section: Equipment GUI & Set Buffs */
+    .bottom-gui {
       background: var(--card-bg);
-      border-radius: 12px;
-      padding: 12px;
-      margin-top: 10px;
-      border: 1px solid #333;
+      border-top: 2px solid #2a2a38;
+      border-radius: 16px 16px 0 0;
+      padding: 10px 12px;
+      max-height: 45vh;
+      overflow-y: auto;
     }
 
-    .section-title {
-      font-size: 1rem;
-      font-weight: bold;
-      margin-bottom: 10px;
-      text-align: center;
-      border-bottom: 1px solid #333;
-      padding-bottom: 6px;
+    .set-buff-banner {
+      background: #101016;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
+
+    .set-buff-title {
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    .active-buff { color: #2ecc71; }
+    .inactive-buff { color: #666; }
 
     .gear-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
+      gap: 6px;
     }
 
     .gear-slot {
-      background: #14141c;
-      border-radius: 8px;
-      padding: 8px;
+      background: #101016;
+      border-radius: 6px;
+      padding: 6px 8px;
       display: flex;
       flex-direction: column;
       border: 1px solid #2a2a38;
-      min-height: 60px;
+      min-height: 48px;
       justify-content: center;
     }
 
     .slot-label {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: #777;
       text-transform: uppercase;
-      margin-bottom: 2px;
     }
 
     .gear-name {
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       font-weight: bold;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .gear-stats {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       color: #aaa;
     }
 
-    /* Rarity Colors */
+    /* Rarities */
     .rarity-Common { color: var(--common); border-color: var(--common) !important; }
     .rarity-Uncommon { color: var(--uncommon); border-color: var(--uncommon) !important; }
     .rarity-Rare { color: var(--rare); border-color: var(--rare) !important; }
     .rarity-Epic { color: var(--epic); border-color: var(--epic) !important; }
     .rarity-Legendary { color: var(--legendary); border-color: var(--legendary) !important; }
 
-    /* Modal Styling */
+    /* Modal */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.85);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -149,36 +232,36 @@
 
     .modal-card {
       background: var(--card-bg);
-      border-radius: 16px;
-      padding: 20px;
+      border-radius: 14px;
+      padding: 16px;
       width: 100%;
       max-width: 320px;
       text-align: center;
       border: 2px solid var(--accent);
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
 
     .item-card {
-      background: #14141c;
+      background: #101016;
       border-radius: 8px;
-      padding: 12px;
-      margin: 12px 0;
+      padding: 10px;
+      margin: 8px 0;
       border: 1px solid #444;
+      text-align: left;
     }
 
     .btn-group {
       display: flex;
       gap: 10px;
-      margin-top: 16px;
+      margin-top: 12px;
     }
 
     .btn {
       flex: 1;
-      padding: 12px;
+      padding: 10px;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       font-weight: bold;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       cursor: pointer;
     }
 
@@ -188,40 +271,60 @@
 </head>
 <body>
 
-  <h1>Loot Chest RPG</h1>
-
-  <!-- Chest Interactive Area -->
-  <div class="chest-area" id="chestBtn">
-    <svg id="chestIcon" class="chest-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Closed Chest SVG -->
-      <rect x="8" y="24" width="48" height="32" rx="4" fill="#8B4513" stroke="#5c2d0c" stroke-width="2"/>
-      <path d="M8 24 C8 16, 56 16, 56 24 Z" fill="#A0522D" stroke="#5c2d0c" stroke-width="2"/>
-      <rect x="28" y="26" width="8" height="10" rx="2" fill="#FFD700"/>
-      <circle cx="32" cy="31" r="1.5" fill="#000"/>
-      <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>
-    </svg>
-    <div class="tap-hint">Tap chest to open!</div>
+  <!-- Top Bar & EXP Bar -->
+  <div class="top-section">
+    <div class="top-bar">
+      <h1>Loot Chest RPG</h1>
+      <div class="top-buttons">
+        <button class="btn-top" id="fullScreenBtn">Full Screen</button>
+        <button class="btn-top btn-reset" id="resetSaveBtn">Reset Save</button>
+      </div>
+    </div>
+    <div class="stats-row">
+      <span id="levelLabel">Lv. 1</span>
+      <span class="diamonds">💎 <span id="diamondCount">100</span></span>
+    </div>
+    <div class="exp-container">
+      <div class="exp-fill" id="expFill"></div>
+    </div>
   </div>
 
-  <!-- Character Inventory Slots -->
-  <div class="character-container">
-    <div class="section-title">Equipped Gear</div>
+  <!-- Middle: Chest -->
+  <div class="main-stage">
+    <div class="chest-area" id="chestBtn">
+      <svg id="chestIcon" class="chest-icon" viewBox="0 0 64 64" fill="none">
+        <rect x="8" y="24" width="48" height="32" rx="4" fill="#8B4513" stroke="#5c2d0c" stroke-width="2"/>
+        <path d="M8 24 C8 16, 56 16, 56 24 Z" fill="#A0522D" stroke="#5c2d0c" stroke-width="2"/>
+        <rect x="28" y="26" width="8" height="10" rx="2" fill="#FFD700"/>
+        <circle cx="32" cy="31" r="1.5" fill="#000"/>
+        <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>
+      </svg>
+      <div class="tap-hint">Tap chest to open! (1 💎)</div>
+    </div>
+  </div>
+
+  <!-- Bottom: Equipment & Set Buff GUI -->
+  <div class="bottom-gui">
+    <div class="set-buff-banner">
+      <div class="set-buff-title">Set Bonuses:</div>
+      <div id="setBuffList"></div>
+    </div>
     <div class="gear-grid" id="gearGrid"></div>
   </div>
 
-  <!-- Modal for Loot Prompt -->
+  <!-- Modal -->
   <div class="modal-overlay" id="lootModal">
     <div class="modal-card">
-      <h2 style="margin:0; font-size: 1.2rem;" id="modalHeader">You Found Loot!</h2>
+      <h2 style="margin:0; font-size: 1.1rem;" id="modalHeader">You Found Loot!</h2>
       
       <div id="newItemCard" class="item-card"></div>
       
       <div id="compareSection" style="display: none;">
-        <div style="font-size: 0.8rem; color: #aaa;">Currently Equipped:</div>
+        <div style="font-size: 0.75rem; color: #aaa;">Currently Equipped:</div>
         <div id="equippedItemCard" class="item-card" style="opacity: 0.7; margin-top: 4px;"></div>
       </div>
 
-      <div id="promptText" style="font-size: 0.9rem; margin-top: 8px;">Equip this item?</div>
+      <div id="promptText" style="font-size: 0.85rem; margin-top: 6px;">Equip this item?</div>
 
       <div class="btn-group">
         <button class="btn btn-primary" id="equipBtn">Equip</button>
@@ -231,53 +334,60 @@
   </div>
 
   <script>
-    // Definition of Slots
     const SLOTS = {
-      HEAD: 'Head',
-      BODY: 'Body',
-      LEFT_HAND: 'Left Hand',
-      RIGHT_HAND: 'Right Hand',
-      WAIST: 'Waist',
-      LEG: 'Leg',
-      SHOES: 'Shoes',
-      MANA_BALL: 'Mana Ball'
+      HEAD: 'Head Equipment',
+      BODY: 'Body Equipment',
+      LEFT_HAND: 'Left Hand Equipment',
+      RIGHT_HAND: 'Right Hand Equipment',
+      WAIST: 'Waist Equipment',
+      LEG: 'Leg Equipment',
+      SHOES: 'Shoes Equipment',
+      MANA_BALL: 'Mana Ball Weapon'
+    };
+
+    const SETS = ['Warrior', 'Mage', 'Rogue'];
+
+    const SLOT_NAMES = {
+      [SLOTS.HEAD]: { Warrior: 'Iron Helm', Mage: 'Arcane Hood', Rogue: 'Shadow Mask' },
+      [SLOTS.BODY]: { Warrior: 'Plate Cuirass', Mage: 'Silk Robe', Rogue: 'Leather Vest' },
+      [SLOTS.LEFT_HAND]: { Warrior: 'Tower Shield', Mage: 'Spell tome', Rogue: 'Parrying Dagger' },
+      [SLOTS.RIGHT_HAND]: { Warrior: 'Broadsword', Mage: 'Wand of Fire', Rogue: 'Shortsword' },
+      [SLOTS.WAIST]: { Warrior: 'Heavy Belt', Mage: 'Sash of Intelligence', Rogue: 'Utility Belt' },
+      [SLOTS.LEG]: { Warrior: 'Iron Greaves', Mage: 'Enchanted Pants', Rogue: 'Agile Leggings' },
+      [SLOTS.SHOES]: { Warrior: 'Steel Boots', Mage: 'Mystic Sandals', Rogue: 'Silent Treads' },
+      [SLOTS.MANA_BALL]: { Warrior: 'Orb of Fortitude', Mage: 'Sphere of Power', Rogue: 'Orb of Deception' }
     };
 
     const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
-    const RARITY_WEIGHTS = [50, 30, 12, 6, 2]; // Percentages
+    const RARITY_MULTIPLIERS = { Common: 1, Uncommon: 1.5, Rare: 2.5, Epic: 4, Legendary: 7 };
+    const ALL_SLOTS = Object.values(SLOTS);
 
-    const WEAPON_TYPES = [SLOTS.LEFT_HAND, SLOTS.RIGHT_HAND, SLOTS.MANA_BALL];
-    const ARMOR_TYPES = [SLOTS.HEAD, SLOTS.BODY, SLOTS.LEFT_HAND, SLOTS.RIGHT_HAND, SLOTS.WAIST, SLOTS.LEG, SLOTS.SHOES];
-
-    const ITEM_NAMES = {
-      [SLOTS.HEAD]: ['Helmet', 'Cap', 'Crown', 'Hood'],
-      [SLOTS.BODY]: ['Armor', 'Robe', 'Tunic', 'Chestplate'],
-      [SLOTS.LEFT_HAND]: ['Shield', 'Dagger', 'Off-hand Orb', 'Buckler'],
-      [SLOTS.RIGHT_HAND]: ['Sword', 'Axe', 'Mace', 'Staff'],
-      [SLOTS.WAIST]: ['Belt', 'Sash', 'Girdle'],
-      [SLOTS.LEG]: ['Greaves', 'Pants', 'Leggings'],
-      [SLOTS.SHOES]: ['Boots', 'Sandals', 'Treads'],
-      [SLOTS.MANA_BALL]: ['Mana Sphere', 'Arcane Orb', 'Celestial Globe']
+    // Initial State Structure
+    const defaultState = {
+      diamonds: 100,
+      level: 1,
+      exp: 0,
+      maxExp: 50,
+      equipped: {
+        [SLOTS.HEAD]: null,
+        [SLOTS.BODY]: null,
+        [SLOTS.LEFT_HAND]: null,
+        [SLOTS.RIGHT_HAND]: null,
+        [SLOTS.WAIST]: null,
+        [SLOTS.LEG]: null,
+        [SLOTS.SHOES]: null,
+        [SLOTS.MANA_BALL]: null
+      }
     };
 
-    // State
-    let equipped = {
-      [SLOTS.HEAD]: null,
-      [SLOTS.BODY]: null,
-      [SLOTS.LEFT_HAND]: null,
-      [SLOTS.RIGHT_HAND]: null,
-      [SLOTS.WAIST]: null,
-      [SLOTS.LEG]: null,
-      [SLOTS.SHOES]: null,
-      [SLOTS.MANA_BALL]: null
-    };
-
+    let gameState = loadSave();
     let pendingItem = null;
 
     // Elements
     const chestBtn = document.getElementById('chestBtn');
     const chestIcon = document.getElementById('chestIcon');
     const gearGrid = document.getElementById('gearGrid');
+    const setBuffList = document.getElementById('setBuffList');
     const lootModal = document.getElementById('lootModal');
     const newItemCard = document.getElementById('newItemCard');
     const equippedItemCard = document.getElementById('equippedItemCard');
@@ -285,8 +395,13 @@
     const promptText = document.getElementById('promptText');
     const equipBtn = document.getElementById('equipBtn');
     const discardBtn = document.getElementById('discardBtn');
+    const fullScreenBtn = document.getElementById('fullScreenBtn');
+    const resetSaveBtn = document.getElementById('resetSaveBtn');
+    const diamondCount = document.getElementById('diamondCount');
+    const levelLabel = document.getElementById('levelLabel');
+    const expFill = document.getElementById('expFill');
 
-    // SVG graphics for closed vs open chest
+    // SVGs
     const CHEST_CLOSED_SVG = `
       <rect x="8" y="24" width="48" height="32" rx="4" fill="#8B4513" stroke="#5c2d0c" stroke-width="2"/>
       <path d="M8 24 C8 16, 56 16, 56 24 Z" fill="#A0522D" stroke="#5c2d0c" stroke-width="2"/>
@@ -300,53 +415,127 @@
       <rect x="20" y="20" width="24" height="10" fill="#FFD700" opacity="0.8"/>
       <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>`;
 
-    // Helpers
-    function getRandomRarity() {
+    // 1. Save & Load Functions
+    function saveGame() {
+      localStorage.setItem('loot_chest_save', JSON.stringify(gameState));
+    }
+
+    function loadSave() {
+      const saved = localStorage.getItem('loot_chest_save');
+      return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(defaultState));
+    }
+
+    // 2. Reset Save Button
+    resetSaveBtn.addEventListener('click', () => {
+      if (confirm("Are you sure you want to reset all your progress and gear?")) {
+        localStorage.removeItem('loot_chest_save');
+        gameState = JSON.parse(JSON.stringify(defaultState));
+        saveGame();
+        updateUI();
+      }
+    });
+
+    fullScreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => alert(err.message));
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // 5. Dynamic Rarity based on 15-Level Milestones
+    function getRarityWeights(level) {
+      const tier = Math.floor((level - 1) / 15);
+      switch(tier) {
+        case 0:  return [65, 25, 8, 2, 0];    // Lv 1-15
+        case 1:  return [40, 35, 18, 6, 1];   // Lv 16-30
+        case 2:  return [20, 35, 30, 12, 3];  // Lv 31-45
+        case 3:  return [10, 25, 40, 20, 5];  // Lv 46-60
+        default: return [5, 15, 40, 30, 10];  // Lv 61+
+      }
+    }
+
+    function getRandomRarity(level) {
+      const weights = getRarityWeights(level);
       const rand = Math.random() * 100;
       let sum = 0;
-      for (let i = 0; i < RARITY_WEIGHTS.length; i++) {
-        sum += RARITY_WEIGHTS[i];
+      for (let i = 0; i < weights.length; i++) {
+        sum += weights[i];
         if (rand <= sum) return RARITIES[i];
       }
       return RARITIES[0];
     }
 
+    // 4. Item Level Generator (<= Player Level)
     function generateLoot() {
-      // 50% chance weapon, 50% chance equipment
-      const isWeapon = Math.random() < 0.5;
-      const categoryPool = isWeapon ? WEAPON_TYPES : ARMOR_TYPES;
-      const slot = categoryPool[Math.floor(Math.random() * categoryPool.length)];
+      const slot = ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)];
+      const set = SETS[Math.floor(Math.random() * SETS.length)];
+      const name = `${set}'s ${SLOT_NAMES[slot][set]}`;
+      const rarity = getRandomRarity(gameState.level);
       
-      const names = ITEM_NAMES[slot];
-      const name = names[Math.floor(Math.random() * names.length)];
-      const rarity = getRandomRarity();
-      const level = Math.floor(Math.random() * 10) + 1;
+      // Item level capped at player current level
+      const itemLevel = Math.max(1, Math.floor(Math.random() * gameState.level) + 1);
 
-      return {
-        id: Date.now(),
-        name,
-        slot,
-        rarity,
-        level,
-        isWeapon
-      };
+      return { id: Date.now(), name, slot, set, rarity, level: itemLevel };
+    }
+
+    // 6. EXP Gain System
+    function addExpForItem(item) {
+      const baseExp = item.level * 10;
+      const gainedExp = Math.round(baseExp * RARITY_MULTIPLIERS[item.rarity]);
+      
+      gameState.exp += gainedExp;
+      while (gameState.exp >= gameState.maxExp) {
+        gameState.exp -= gameState.maxExp;
+        gameState.level++;
+        gameState.maxExp = Math.round(gameState.maxExp * 1.35); // Scaling exp cap
+      }
     }
 
     function renderItemDetails(item) {
       return `
         <div class="gear-name rarity-${item.rarity}">${item.name}</div>
         <div class="gear-stats">
-          Type: ${item.slot} | Lvl ${item.level} | <span class="rarity-${item.rarity}">${item.rarity}</span>
+          Slot: ${item.slot}<br>Set: ${item.set} | Lvl ${item.level} | <span class="rarity-${item.rarity}">${item.rarity}</span>
         </div>
       `;
     }
 
-    function updateCharacterUI() {
+    function updateSetBuffs() {
+      const setCounts = { Warrior: 0, Mage: 0, Rogue: 0 };
+      Object.values(gameState.equipped).forEach(item => {
+        if (item && item.set) {
+          setCounts[item.set] = (setCounts[item.set] || 0) + 1;
+        }
+      });
+
+      let buffHTML = '';
+      const bonuses = [
+        { name: 'Warrior', b3: '+10% Def', b5: '+25% HP' },
+        { name: 'Mage', b3: '+10% MP Rec', b5: '+25% Magic' },
+        { name: 'Rogue', b3: '+5% Crit', b5: '+20% Speed' }
+      ];
+
+      bonuses.forEach(b => {
+        const count = setCounts[b.name];
+        buffHTML += `<div><strong>${b.name} (${count}):</strong> `;
+        buffHTML += `<span class="${count >= 3 ? 'active-buff' : 'inactive-buff'}">[3] ${b.b3}</span> | `;
+        buffHTML += `<span class="${count >= 5 ? 'active-buff' : 'inactive-buff'}">[5] ${b.b5}</span></div>`;
+      });
+
+      setBuffList.innerHTML = buffHTML;
+    }
+
+    function updateUI() {
+      // Top stats
+      diamondCount.innerText = gameState.diamonds;
+      levelLabel.innerText = `Lv. ${gameState.level}`;
+      expFill.style.width = `${Math.min(100, (gameState.exp / gameState.maxExp) * 100)}%`;
+
+      // Gear Slots
       gearGrid.innerHTML = '';
-      Object.keys(SLOTS).forEach(slotKey => {
-        const slotName = SLOTS[slotKey];
-        const item = equipped[slotName];
-        
+      ALL_SLOTS.forEach(slotName => {
+        const item = gameState.equipped[slotName];
         const slotEl = document.createElement('div');
         slotEl.className = `gear-slot ${item ? 'rarity-' + item.rarity : ''}`;
         
@@ -359,31 +548,43 @@
         } else {
           slotEl.innerHTML = `
             <div class="slot-label">${slotName}</div>
-            <div class="gear-stats" style="color:#555;">Empty</div>
+            <div class="gear-stats" style="color:#444;">Empty</div>
           `;
         }
         gearGrid.appendChild(slotEl);
       });
+
+      updateSetBuffs();
     }
 
-    // Interactive Flow
+    // 3. Opening Chest with Diamond Cost
     function openChest() {
+      if (gameState.diamonds < 1) {
+        alert("Out of diamonds! Reset your save to start over.");
+        return;
+      }
+
+      gameState.diamonds -= 1;
       chestIcon.innerHTML = CHEST_OPEN_SVG;
       pendingItem = generateLoot();
 
-      // Setup Modal Content
+      // Award EXP right away upon receiving item
+      addExpForItem(pendingItem);
+
       newItemCard.innerHTML = renderItemDetails(pendingItem);
       
-      const currentItem = equipped[pendingItem.slot];
+      const currentItem = gameState.equipped[pendingItem.slot];
       if (currentItem) {
         compareSection.style.display = 'block';
         equippedItemCard.innerHTML = renderItemDetails(currentItem);
-        promptText.innerText = `Replace equipped ${pendingItem.slot}? (Old item will be destroyed)`;
+        promptText.innerText = `Replace equipped ${pendingItem.slot}?`;
       } else {
         compareSection.style.display = 'none';
-        promptText.innerText = `Equip this ${pendingItem.slot}?`;
+        promptText.innerText = `Equip this item?`;
       }
 
+      saveGame();
+      updateUI();
       lootModal.classList.add('active');
     }
 
@@ -393,21 +594,21 @@
       pendingItem = null;
     }
 
-    // Event Listeners
     chestBtn.addEventListener('click', openChest);
 
     equipBtn.addEventListener('click', () => {
       if (pendingItem) {
-        equipped[pendingItem.slot] = pendingItem;
-        updateCharacterUI();
+        gameState.equipped[pendingItem.slot] = pendingItem;
+        saveGame();
+        updateUI();
       }
       closeModal();
     });
 
     discardBtn.addEventListener('click', closeModal);
 
-    // Initial setup
-    updateCharacterUI();
+    // Initial UI Render
+    updateUI();
   </script>
 </body>
 </html>
