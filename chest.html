@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -82,7 +82,7 @@
       transition: width 0.3s ease;
     }
 
-    /* Tab Content Viewports */
+    /* Main Tab Content Viewports */
     .tab-view {
       flex: 1;
       display: none;
@@ -91,7 +91,9 @@
       position: relative;
     }
 
-    .tab-view.active { display: flex; }
+    .tab-view.active {
+      display: flex;
+    }
 
     /* Chest View Styling */
     .main-stage {
@@ -101,7 +103,7 @@
       justify-content: center;
       align-items: center;
       min-height: 180px;
-      position: relative;
+      gap: 8px;
     }
 
     .chest-area {
@@ -125,37 +127,15 @@
       margin-top: 6px;
     }
 
-    /* Rates Info Panel */
     .rates-btn {
-      background: #1e1e2d;
+      background: #222230;
       color: var(--accent);
-      border: 1px solid var(--accent);
-      padding: 6px 12px;
-      border-radius: 20px;
+      border: 1px solid #444;
+      padding: 4px 10px;
+      border-radius: 12px;
       font-size: 0.75rem;
       font-weight: bold;
       cursor: pointer;
-      margin-top: 10px;
-    }
-
-    .rates-card {
-      background: #14141d;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 8px 12px;
-      margin-top: 8px;
-      font-size: 0.75rem;
-      display: none;
-      flex-direction: column;
-      gap: 4px;
-      width: 220px;
-    }
-
-    .rates-card.active { display: flex; }
-
-    .rate-row {
-      display: flex;
-      justify-content: space-between;
     }
 
     .bottom-gui {
@@ -346,6 +326,16 @@
       text-align: left;
     }
 
+    .rate-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 8px;
+      margin: 4px 0;
+      background: #101016;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
     .btn-group { display: flex; gap: 8px; margin-top: 12px; }
     .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
     .btn-primary { background: #27ae60; color: white; }
@@ -380,17 +370,7 @@
         <svg id="chestIcon" class="chest-icon" viewBox="0 0 64 64" fill="none"></svg>
         <div class="tap-hint" id="chestHint">Tap chest to open! (1 💎)</div>
       </div>
-
-      <!-- Probability Rates Dropdown Toggle -->
-      <button class="rates-btn" id="toggleRatesBtn">📊 Drop Probabilities</button>
-      <div class="rates-card" id="ratesCard">
-        <div style="text-align:center; font-weight:bold; color:var(--accent); margin-bottom:4px;" id="tierTitle">Lv. 1-15 Rates</div>
-        <div class="rate-row"><span class="rarity-Common">Common:</span><span id="rate-Common">0%</span></div>
-        <div class="rate-row"><span class="rarity-Uncommon">Uncommon:</span><span id="rate-Uncommon">0%</span></div>
-        <div class="rate-row"><span class="rarity-Rare">Rare:</span><span id="rate-Rare">0%</span></div>
-        <div class="rate-row"><span class="rarity-Epic">Epic:</span><span id="rate-Epic">0%</span></div>
-        <div class="rate-row"><span class="rarity-Legendary">Legendary:</span><span id="rate-Legendary">0%</span></div>
-      </div>
+      <button class="rates-btn" id="ratesBtn">📊 View Drop Rates</button>
     </div>
     <div class="bottom-gui">
       <div class="set-buff-banner">
@@ -464,6 +444,17 @@
     </div>
   </div>
 
+  <!-- Rates Modal -->
+  <div class="modal-overlay" id="ratesModal">
+    <div class="modal-card">
+      <button class="close-x" id="ratesCloseX">&times;</button>
+      <h2 style="margin:0 0 4px 0; font-size: 1.1rem; color: var(--accent);">Chest Drop Rates</h2>
+      <div style="font-size:0.75rem; color:#aaa; margin-bottom:12px;" id="ratesSubheader">Current Player Level: Lv. 1</div>
+      
+      <div id="ratesList"></div>
+    </div>
+  </div>
+
   <script>
     const SLOTS = {
       HEAD: 'Head Equipment',
@@ -528,11 +519,13 @@
     const expFill = document.getElementById('expFill');
     const fullScreenBtn = document.getElementById('fullScreenBtn');
     const resetSaveBtn = document.getElementById('resetSaveBtn');
-    
-    // Rates UI Elements
-    const toggleRatesBtn = document.getElementById('toggleRatesBtn');
-    const ratesCard = document.getElementById('ratesCard');
-    const tierTitle = document.getElementById('tierTitle');
+
+    // Rates elements
+    const ratesBtn = document.getElementById('ratesBtn');
+    const ratesModal = document.getElementById('ratesModal');
+    const ratesCloseX = document.getElementById('ratesCloseX');
+    const ratesList = document.getElementById('ratesList');
+    const ratesSubheader = document.getElementById('ratesSubheader');
 
     // SVGs
     const CHEST_CLOSED_SVG = `
@@ -548,7 +541,6 @@
       <rect x="20" y="20" width="24" height="10" fill="#FFD700" opacity="0.8"/>
       <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>`;
 
-    // Save Logic
     function saveGame() {
       localStorage.setItem('loot_chest_save', JSON.stringify(gameState));
     }
@@ -576,12 +568,6 @@
       }
     });
 
-    // Toggle Drop Probabilities Box
-    toggleRatesBtn.addEventListener('click', () => {
-      ratesCard.classList.toggle('active');
-    });
-
-    // Navigation
     function switchTab(tabName) {
       document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
@@ -590,28 +576,14 @@
       event?.target?.classList.add('active');
     }
 
-    // Probability Weights per Level Tier
     function getRarityWeights(level) {
       const tier = Math.floor((level - 1) / 15);
       switch(tier) {
-        case 0:  return [65, 25, 8, 2, 0];    // Lv 1-15
-        case 1:  return [40, 35, 18, 6, 1];   // Lv 16-30
-        case 2:  return [20, 35, 30, 12, 3];  // Lv 31-45
-        default: return [10, 25, 40, 20, 5];  // Lv 46+
+        case 0:  return [65, 25, 8, 2, 0];
+        case 1:  return [40, 35, 18, 6, 1];
+        case 2:  return [20, 35, 30, 12, 3];
+        default: return [10, 25, 40, 20, 5];
       }
-    }
-
-    function updateRatesDisplay() {
-      const tier = Math.floor((gameState.level - 1) / 15);
-      const startLv = tier * 15 + 1;
-      const endLv = (tier + 1) * 15;
-      
-      tierTitle.innerText = `Lv. ${startLv}-${endLv} Rates`;
-
-      const weights = getRarityWeights(gameState.level);
-      RARITIES.forEach((rarity, index) => {
-        document.getElementById(`rate-${rarity}`).innerText = `${weights[index]}%`;
-      });
     }
 
     function getRandomRarity(level) {
@@ -624,6 +596,30 @@
       }
       return RARITIES[0];
     }
+
+    // Drop Rates Display Logic
+    ratesBtn.addEventListener('click', () => {
+      const weights = getRarityWeights(gameState.level);
+      ratesSubheader.innerText = `Current Player Level: Lv. ${gameState.level}`;
+      
+      let html = '';
+      RARITIES.forEach((rarity, index) => {
+        const rate = weights[index];
+        html += `
+          <div class="rate-row">
+            <span class="rarity-${rarity}" style="font-weight:bold;">${rarity}</span>
+            <span>${rate}%</span>
+          </div>
+        `;
+      });
+      
+      ratesList.innerHTML = html;
+      ratesModal.classList.add('active');
+    });
+
+    ratesCloseX.addEventListener('click', () => {
+      ratesModal.classList.remove('active');
+    });
 
     function generateLoot() {
       const slot = ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)];
@@ -690,7 +686,9 @@
       `;
     }
 
-    modalCloseX.addEventListener('click', () => lootModal.classList.remove('active'));
+    modalCloseX.addEventListener('click', () => {
+      lootModal.classList.remove('active');
+    });
 
     equipBtn.addEventListener('click', () => {
       if (gameState.pendingItem) {
@@ -748,7 +746,6 @@
       });
 
       updateSetBuffs();
-      updateRatesDisplay();
       document.getElementById('stageTitle').innerText = `Stage ${gameState.stageWorld}-${gameState.stageLevel}`;
     }
 
