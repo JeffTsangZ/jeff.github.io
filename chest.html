@@ -34,7 +34,7 @@
       overflow: hidden;
     }
 
-    /* Exp Bar & Header Section */
+    /* Top Section */
     .top-section {
       background: #121218;
       border-bottom: 1px solid #222;
@@ -56,26 +56,6 @@
       color: var(--accent);
     }
 
-    .top-buttons {
-      display: flex;
-      gap: 6px;
-    }
-
-    .btn-top {
-      background: #2a2a38;
-      color: #fff;
-      border: 1px solid #444;
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      cursor: pointer;
-    }
-
-    .btn-reset {
-      background: #a93226;
-      border-color: #7b241c;
-    }
-
     .stats-row {
       display: flex;
       justify-content: space-between;
@@ -84,13 +64,11 @@
       font-weight: bold;
     }
 
-    .diamonds {
-      color: #00ffffff;
-    }
+    .diamonds { color: #00ffffff; }
 
     .exp-container {
       width: 100%;
-      height: 12px;
+      height: 10px;
       background: #222230;
       border-radius: 6px;
       overflow: hidden;
@@ -104,13 +82,25 @@
       transition: width 0.3s ease;
     }
 
-    /* Center Section: Chest */
+    /* Tab Content Viewports */
+    .tab-view {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .tab-view.active { display: flex; }
+
+    /* Chest View Styling */
     .main-stage {
       flex: 1;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
+      min-height: 180px;
       position: relative;
     }
 
@@ -122,14 +112,12 @@
     }
 
     .chest-icon {
-      width: 120px;
-      height: 120px;
+      width: 110px;
+      height: 110px;
       transition: transform 0.1s ease;
     }
 
-    .chest-area:active .chest-icon {
-      transform: scale(0.95);
-    }
+    .chest-area:active .chest-icon { transform: scale(0.95); }
 
     .tap-hint {
       font-size: 0.85rem;
@@ -137,7 +125,39 @@
       margin-top: 6px;
     }
 
-    /* Bottom Section: Equipment GUI & Set Buffs */
+    /* Rates Info Panel */
+    .rates-btn {
+      background: #1e1e2d;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .rates-card {
+      background: #14141d;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      font-size: 0.75rem;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      width: 220px;
+    }
+
+    .rates-card.active { display: flex; }
+
+    .rate-row {
+      display: flex;
+      justify-content: space-between;
+    }
+
     .bottom-gui {
       background: var(--card-bg);
       border-top: 2px solid #2a2a38;
@@ -154,16 +174,9 @@
       padding: 6px 10px;
       margin-bottom: 8px;
       font-size: 0.75rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
     }
 
-    .set-buff-title {
-      color: var(--accent);
-      font-weight: bold;
-    }
-
+    .set-buff-title { color: var(--accent); font-weight: bold; }
     .active-buff { color: #2ecc71; }
     .inactive-buff { color: #666; }
 
@@ -184,23 +197,97 @@
       justify-content: center;
     }
 
-    .slot-label {
-      font-size: 0.65rem;
-      color: #777;
-      text-transform: uppercase;
+    .slot-label { font-size: 0.65rem; color: #777; text-transform: uppercase; }
+    .gear-name { font-size: 0.8rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gear-stats { font-size: 0.7rem; color: #aaa; }
+
+    /* Battle View Styling */
+    .battle-container {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
     }
 
-    .gear-name {
-      font-size: 0.8rem;
-      font-weight: bold;
-      white-space: nowrap;
+    .stage-card {
+      background: var(--card-bg);
+      width: 100%;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #333;
+      text-align: center;
+    }
+
+    .battle-arena {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      width: 100%;
+      margin: 16px 0;
+    }
+
+    .fighter {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 45%;
+    }
+
+    .fighter-avatar { font-size: 2.5rem; }
+
+    .hp-bar-bg {
+      width: 100%;
+      height: 10px;
+      background: #333;
+      border-radius: 5px;
       overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    .gear-stats {
-      font-size: 0.7rem;
+    .hp-bar-fill {
+      height: 100%;
+      background: #e74c3c;
+      width: 100%;
+      transition: width 0.2s ease;
+    }
+
+    .combat-log {
+      background: #101016;
+      border: 1px solid #222;
+      width: 100%;
+      height: 120px;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.75rem;
+      overflow-y: auto;
+      text-align: left;
       color: #aaa;
+    }
+
+    /* Navigation Bar */
+    .nav-bar {
+      display: flex;
+      background: #121218;
+      border-top: 1px solid #222;
+    }
+
+    .nav-btn {
+      flex: 1;
+      padding: 12px;
+      background: none;
+      border: none;
+      color: #777;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .nav-btn.active {
+      color: var(--accent);
+      border-top: 2px solid var(--accent);
+      background: #1a1a24;
     }
 
     /* Rarities */
@@ -225,10 +312,7 @@
       transition: opacity 0.2s ease;
     }
 
-    .modal-overlay.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
 
     .modal-card {
       background: var(--card-bg);
@@ -238,6 +322,19 @@
       max-width: 320px;
       text-align: center;
       border: 2px solid var(--accent);
+      position: relative;
+    }
+
+    .close-x {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 1.2rem;
+      font-weight: bold;
+      cursor: pointer;
     }
 
     .item-card {
@@ -249,24 +346,12 @@
       text-align: left;
     }
 
-    .btn-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .btn {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-
+    .btn-group { display: flex; gap: 8px; margin-top: 12px; }
+    .btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
     .btn-primary { background: #27ae60; color: white; }
     .btn-secondary { background: #e74c3c; color: white; }
+    .btn-top { background: #2a2a38; color: #fff; border: 1px solid #444; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+    .btn-reset { background: #a93226; border-color: #7b241c; }
   </style>
 </head>
 <body>
@@ -275,9 +360,8 @@
   <div class="top-section">
     <div class="top-bar">
       <h1>Loot Chest RPG</h1>
-      <div class="top-buttons">
+      <div style="display:flex; gap:6px;">
         <button class="btn-top" id="fullScreenBtn">Full Screen</button>
-        <button class="btn-top btn-reset" id="resetSaveBtn">Reset Save</button>
       </div>
     </div>
     <div class="stats-row">
@@ -289,33 +373,80 @@
     </div>
   </div>
 
-  <!-- Middle: Chest -->
-  <div class="main-stage">
-    <div class="chest-area" id="chestBtn">
-      <svg id="chestIcon" class="chest-icon" viewBox="0 0 64 64" fill="none">
-        <rect x="8" y="24" width="48" height="32" rx="4" fill="#8B4513" stroke="#5c2d0c" stroke-width="2"/>
-        <path d="M8 24 C8 16, 56 16, 56 24 Z" fill="#A0522D" stroke="#5c2d0c" stroke-width="2"/>
-        <rect x="28" y="26" width="8" height="10" rx="2" fill="#FFD700"/>
-        <circle cx="32" cy="31" r="1.5" fill="#000"/>
-        <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>
-      </svg>
-      <div class="tap-hint">Tap chest to open! (1 💎)</div>
+  <!-- TAB 1: CHEST & GEAR -->
+  <div class="tab-view active" id="tab-chest">
+    <div class="main-stage">
+      <div class="chest-area" id="chestBtn">
+        <svg id="chestIcon" class="chest-icon" viewBox="0 0 64 64" fill="none"></svg>
+        <div class="tap-hint" id="chestHint">Tap chest to open! (1 💎)</div>
+      </div>
+
+      <!-- Probability Rates Dropdown Toggle -->
+      <button class="rates-btn" id="toggleRatesBtn">📊 Drop Probabilities</button>
+      <div class="rates-card" id="ratesCard">
+        <div style="text-align:center; font-weight:bold; color:var(--accent); margin-bottom:4px;" id="tierTitle">Lv. 1-15 Rates</div>
+        <div class="rate-row"><span class="rarity-Common">Common:</span><span id="rate-Common">0%</span></div>
+        <div class="rate-row"><span class="rarity-Uncommon">Uncommon:</span><span id="rate-Uncommon">0%</span></div>
+        <div class="rate-row"><span class="rarity-Rare">Rare:</span><span id="rate-Rare">0%</span></div>
+        <div class="rate-row"><span class="rarity-Epic">Epic:</span><span id="rate-Epic">0%</span></div>
+        <div class="rate-row"><span class="rarity-Legendary">Legendary:</span><span id="rate-Legendary">0%</span></div>
+      </div>
+    </div>
+    <div class="bottom-gui">
+      <div class="set-buff-banner">
+        <div class="set-buff-title">Set Bonuses:</div>
+        <div id="setBuffList"></div>
+      </div>
+      <div class="gear-grid" id="gearGrid"></div>
     </div>
   </div>
 
-  <!-- Bottom: Equipment & Set Buff GUI -->
-  <div class="bottom-gui">
-    <div class="set-buff-banner">
-      <div class="set-buff-title">Set Bonuses:</div>
-      <div id="setBuffList"></div>
+  <!-- TAB 2: BATTLE -->
+  <div class="tab-view" id="tab-battle">
+    <div class="battle-container">
+      <div class="stage-card">
+        <h2 id="stageTitle" style="margin: 0; color: var(--accent);">Stage 1-1</h2>
+        <div class="battle-arena">
+          <div class="fighter">
+            <div class="fighter-avatar">🧙‍♂️</div>
+            <div style="font-size:0.8rem; font-weight:bold;">Player</div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" id="playerHpFill"></div></div>
+            <div style="font-size:0.7rem;" id="playerHpText">100/100</div>
+          </div>
+          <div style="font-weight:bold; color: #888;">VS</div>
+          <div class="fighter">
+            <div class="fighter-avatar" id="enemyAvatar">👾</div>
+            <div style="font-size:0.8rem; font-weight:bold;" id="enemyName">Goblin</div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" id="enemyHpFill"></div></div>
+            <div style="font-size:0.7rem;" id="enemyHpText">50/50</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="startBattleBtn" style="width: 100%;">Fight Stage</button>
+      </div>
+      <div class="combat-log" id="combatLog">Click "Fight Stage" to start combat...</div>
     </div>
-    <div class="gear-grid" id="gearGrid"></div>
   </div>
 
-  <!-- Modal -->
+  <!-- TAB 3: SETTING -->
+  <div class="tab-view" id="tab-setting" style="padding: 20px;">
+    <h2 style="color: var(--accent); margin-top:0;">Settings</h2>
+    <div style="margin-top: 20px;">
+      <button class="btn btn-reset" id="resetSaveBtn" style="width: 100%; padding: 12px;">Reset All Game Progress</button>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <div class="nav-bar">
+    <button class="nav-btn active" onclick="switchTab('chest')">Chest</button>
+    <button class="nav-btn" onclick="switchTab('battle')">Battle</button>
+    <button class="nav-btn" onclick="switchTab('setting')">Setting</button>
+  </div>
+
+  <!-- Loot Modal -->
   <div class="modal-overlay" id="lootModal">
     <div class="modal-card">
-      <h2 style="margin:0; font-size: 1.1rem;" id="modalHeader">You Found Loot!</h2>
+      <button class="close-x" id="modalCloseX">&times;</button>
+      <h2 style="margin:0; font-size: 1.1rem;">You Found Loot!</h2>
       
       <div id="newItemCard" class="item-card"></div>
       
@@ -362,30 +493,26 @@
     const RARITY_MULTIPLIERS = { Common: 1, Uncommon: 1.5, Rare: 2.5, Epic: 4, Legendary: 7 };
     const ALL_SLOTS = Object.values(SLOTS);
 
-    // Initial State Structure
     const defaultState = {
       diamonds: 100,
       level: 1,
       exp: 0,
       maxExp: 50,
+      stageWorld: 1,
+      stageLevel: 1,
+      pendingItem: null,
       equipped: {
-        [SLOTS.HEAD]: null,
-        [SLOTS.BODY]: null,
-        [SLOTS.LEFT_HAND]: null,
-        [SLOTS.RIGHT_HAND]: null,
-        [SLOTS.WAIST]: null,
-        [SLOTS.LEG]: null,
-        [SLOTS.SHOES]: null,
-        [SLOTS.MANA_BALL]: null
+        [SLOTS.HEAD]: null, [SLOTS.BODY]: null, [SLOTS.LEFT_HAND]: null, [SLOTS.RIGHT_HAND]: null,
+        [SLOTS.WAIST]: null, [SLOTS.LEG]: null, [SLOTS.SHOES]: null, [SLOTS.MANA_BALL]: null
       }
     };
 
     let gameState = loadSave();
-    let pendingItem = null;
 
-    // Elements
+    // DOM Elements
     const chestBtn = document.getElementById('chestBtn');
     const chestIcon = document.getElementById('chestIcon');
+    const chestHint = document.getElementById('chestHint');
     const gearGrid = document.getElementById('gearGrid');
     const setBuffList = document.getElementById('setBuffList');
     const lootModal = document.getElementById('lootModal');
@@ -395,11 +522,17 @@
     const promptText = document.getElementById('promptText');
     const equipBtn = document.getElementById('equipBtn');
     const discardBtn = document.getElementById('discardBtn');
-    const fullScreenBtn = document.getElementById('fullScreenBtn');
-    const resetSaveBtn = document.getElementById('resetSaveBtn');
+    const modalCloseX = document.getElementById('modalCloseX');
     const diamondCount = document.getElementById('diamondCount');
     const levelLabel = document.getElementById('levelLabel');
     const expFill = document.getElementById('expFill');
+    const fullScreenBtn = document.getElementById('fullScreenBtn');
+    const resetSaveBtn = document.getElementById('resetSaveBtn');
+    
+    // Rates UI Elements
+    const toggleRatesBtn = document.getElementById('toggleRatesBtn');
+    const ratesCard = document.getElementById('ratesCard');
+    const tierTitle = document.getElementById('tierTitle');
 
     // SVGs
     const CHEST_CLOSED_SVG = `
@@ -415,7 +548,7 @@
       <rect x="20" y="20" width="24" height="10" fill="#FFD700" opacity="0.8"/>
       <line x1="8" y1="36" x2="56" y2="36" stroke="#FFD700" stroke-width="2"/>`;
 
-    // 1. Save & Load Functions
+    // Save Logic
     function saveGame() {
       localStorage.setItem('loot_chest_save', JSON.stringify(gameState));
     }
@@ -425,13 +558,13 @@
       return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(defaultState));
     }
 
-    // 2. Reset Save Button
     resetSaveBtn.addEventListener('click', () => {
-      if (confirm("Are you sure you want to reset all your progress and gear?")) {
+      if (confirm("Reset all game progress?")) {
         localStorage.removeItem('loot_chest_save');
         gameState = JSON.parse(JSON.stringify(defaultState));
         saveGame();
         updateUI();
+        switchTab('chest');
       }
     });
 
@@ -443,16 +576,42 @@
       }
     });
 
-    // 5. Dynamic Rarity based on 15-Level Milestones
+    // Toggle Drop Probabilities Box
+    toggleRatesBtn.addEventListener('click', () => {
+      ratesCard.classList.toggle('active');
+    });
+
+    // Navigation
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+      event?.target?.classList.add('active');
+    }
+
+    // Probability Weights per Level Tier
     function getRarityWeights(level) {
       const tier = Math.floor((level - 1) / 15);
       switch(tier) {
         case 0:  return [65, 25, 8, 2, 0];    // Lv 1-15
         case 1:  return [40, 35, 18, 6, 1];   // Lv 16-30
         case 2:  return [20, 35, 30, 12, 3];  // Lv 31-45
-        case 3:  return [10, 25, 40, 20, 5];  // Lv 46-60
-        default: return [5, 15, 40, 30, 10];  // Lv 61+
+        default: return [10, 25, 40, 20, 5];  // Lv 46+
       }
+    }
+
+    function updateRatesDisplay() {
+      const tier = Math.floor((gameState.level - 1) / 15);
+      const startLv = tier * 15 + 1;
+      const endLv = (tier + 1) * 15;
+      
+      tierTitle.innerText = `Lv. ${startLv}-${endLv} Rates`;
+
+      const weights = getRarityWeights(gameState.level);
+      RARITIES.forEach((rarity, index) => {
+        document.getElementById(`rate-${rarity}`).innerText = `${weights[index]}%`;
+      });
     }
 
     function getRandomRarity(level) {
@@ -466,20 +625,16 @@
       return RARITIES[0];
     }
 
-    // 4. Item Level Generator (<= Player Level)
     function generateLoot() {
       const slot = ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)];
       const set = SETS[Math.floor(Math.random() * SETS.length)];
       const name = `${set}'s ${SLOT_NAMES[slot][set]}`;
       const rarity = getRandomRarity(gameState.level);
-      
-      // Item level capped at player current level
       const itemLevel = Math.max(1, Math.floor(Math.random() * gameState.level) + 1);
 
       return { id: Date.now(), name, slot, set, rarity, level: itemLevel };
     }
 
-    // 6. EXP Gain System
     function addExpForItem(item) {
       const baseExp = item.level * 10;
       const gainedExp = Math.round(baseExp * RARITY_MULTIPLIERS[item.rarity]);
@@ -488,8 +643,42 @@
       while (gameState.exp >= gameState.maxExp) {
         gameState.exp -= gameState.maxExp;
         gameState.level++;
-        gameState.maxExp = Math.round(gameState.maxExp * 1.35); // Scaling exp cap
+        gameState.maxExp = Math.round(gameState.maxExp * 1.35);
       }
+    }
+
+    function openChest() {
+      if (gameState.pendingItem) {
+        showLootModal(gameState.pendingItem);
+        return;
+      }
+
+      if (gameState.diamonds < 1) {
+        alert("Out of diamonds!");
+        return;
+      }
+
+      gameState.diamonds -= 1;
+      gameState.pendingItem = generateLoot();
+      addExpForItem(gameState.pendingItem);
+
+      saveGame();
+      updateUI();
+      showLootModal(gameState.pendingItem);
+    }
+
+    function showLootModal(item) {
+      newItemCard.innerHTML = renderItemDetails(item);
+      const currentItem = gameState.equipped[item.slot];
+      if (currentItem) {
+        compareSection.style.display = 'block';
+        equippedItemCard.innerHTML = renderItemDetails(currentItem);
+        promptText.innerText = `Replace equipped ${item.slot}?`;
+      } else {
+        compareSection.style.display = 'none';
+        promptText.innerText = `Equip this item?`;
+      }
+      lootModal.classList.add('active');
     }
 
     function renderItemDetails(item) {
@@ -501,38 +690,42 @@
       `;
     }
 
-    function updateSetBuffs() {
-      const setCounts = { Warrior: 0, Mage: 0, Rogue: 0 };
-      Object.values(gameState.equipped).forEach(item => {
-        if (item && item.set) {
-          setCounts[item.set] = (setCounts[item.set] || 0) + 1;
-        }
-      });
+    modalCloseX.addEventListener('click', () => lootModal.classList.remove('active'));
 
-      let buffHTML = '';
-      const bonuses = [
-        { name: 'Warrior', b3: '+10% Def', b5: '+25% HP' },
-        { name: 'Mage', b3: '+10% MP Rec', b5: '+25% Magic' },
-        { name: 'Rogue', b3: '+5% Crit', b5: '+20% Speed' }
-      ];
+    equipBtn.addEventListener('click', () => {
+      if (gameState.pendingItem) {
+        gameState.equipped[gameState.pendingItem.slot] = gameState.pendingItem;
+        gameState.pendingItem = null;
+        saveGame();
+        updateUI();
+      }
+      lootModal.classList.remove('active');
+    });
 
-      bonuses.forEach(b => {
-        const count = setCounts[b.name];
-        buffHTML += `<div><strong>${b.name} (${count}):</strong> `;
-        buffHTML += `<span class="${count >= 3 ? 'active-buff' : 'inactive-buff'}">[3] ${b.b3}</span> | `;
-        buffHTML += `<span class="${count >= 5 ? 'active-buff' : 'inactive-buff'}">[5] ${b.b5}</span></div>`;
-      });
+    discardBtn.addEventListener('click', () => {
+      gameState.pendingItem = null;
+      saveGame();
+      updateUI();
+      lootModal.classList.remove('active');
+    });
 
-      setBuffList.innerHTML = buffHTML;
-    }
+    chestBtn.addEventListener('click', openChest);
 
     function updateUI() {
-      // Top stats
       diamondCount.innerText = gameState.diamonds;
       levelLabel.innerText = `Lv. ${gameState.level}`;
       expFill.style.width = `${Math.min(100, (gameState.exp / gameState.maxExp) * 100)}%`;
 
-      // Gear Slots
+      if (gameState.pendingItem) {
+        chestIcon.innerHTML = CHEST_OPEN_SVG;
+        chestHint.innerText = "Claim pending loot!";
+        chestHint.style.color = "var(--accent)";
+      } else {
+        chestIcon.innerHTML = CHEST_CLOSED_SVG;
+        chestHint.innerText = "Tap chest to open! (1 💎)";
+        chestHint.style.color = "#888";
+      }
+
       gearGrid.innerHTML = '';
       ALL_SLOTS.forEach(slotName => {
         const item = gameState.equipped[slotName];
@@ -555,59 +748,101 @@
       });
 
       updateSetBuffs();
+      updateRatesDisplay();
+      document.getElementById('stageTitle').innerText = `Stage ${gameState.stageWorld}-${gameState.stageLevel}`;
     }
 
-    // 3. Opening Chest with Diamond Cost
-    function openChest() {
-      if (gameState.diamonds < 1) {
-        alert("Out of diamonds! Reset your save to start over.");
-        return;
-      }
+    function updateSetBuffs() {
+      const setCounts = { Warrior: 0, Mage: 0, Rogue: 0 };
+      Object.values(gameState.equipped).forEach(item => {
+        if (item && item.set) setCounts[item.set] = (setCounts[item.set] || 0) + 1;
+      });
 
-      gameState.diamonds -= 1;
-      chestIcon.innerHTML = CHEST_OPEN_SVG;
-      pendingItem = generateLoot();
+      let buffHTML = '';
+      const bonuses = [
+        { name: 'Warrior', b3: '+10% Def', b5: '+25% HP' },
+        { name: 'Mage', b3: '+10% MP Rec', b5: '+25% Magic' },
+        { name: 'Rogue', b3: '+5% Crit', b5: '+20% Speed' }
+      ];
 
-      // Award EXP right away upon receiving item
-      addExpForItem(pendingItem);
+      bonuses.forEach(b => {
+        const count = setCounts[b.name];
+        buffHTML += `<div><strong>${b.name} (${count}):</strong> `;
+        buffHTML += `<span class="${count >= 3 ? 'active-buff' : 'inactive-buff'}">[3] ${b.b3}</span> | `;
+        buffHTML += `<span class="${count >= 5 ? 'active-buff' : 'inactive-buff'}">[5] ${b.b5}</span></div>`;
+      });
 
-      newItemCard.innerHTML = renderItemDetails(pendingItem);
+      setBuffList.innerHTML = buffHTML;
+    }
+
+    function calculatePlayerStats() {
+      let atk = 10 + (gameState.level * 2);
+      let hp = 100 + (gameState.level * 10);
+
+      Object.values(gameState.equipped).forEach(item => {
+        if (item) {
+          atk += item.level * RARITY_MULTIPLIERS[item.rarity] * 2;
+          hp += item.level * RARITY_MULTIPLIERS[item.rarity] * 5;
+        }
+      });
+
+      return { maxHp: Math.round(hp), atk: Math.round(atk) };
+    }
+
+    document.getElementById('startBattleBtn').addEventListener('click', () => {
+      const log = document.getElementById('combatLog');
+      const playerStats = calculatePlayerStats();
       
-      const currentItem = gameState.equipped[pendingItem.slot];
-      if (currentItem) {
-        compareSection.style.display = 'block';
-        equippedItemCard.innerHTML = renderItemDetails(currentItem);
-        promptText.innerText = `Replace equipped ${pendingItem.slot}?`;
-      } else {
-        compareSection.style.display = 'none';
-        promptText.innerText = `Equip this item?`;
-      }
+      const stageFactor = (gameState.stageWorld - 1) * 5 + gameState.stageLevel;
+      let enemyHp = 30 + (stageFactor * 25);
+      let enemyMaxHp = enemyHp;
+      let enemyAtk = 5 + (stageFactor * 4);
 
-      saveGame();
-      updateUI();
-      lootModal.classList.add('active');
-    }
+      let playerHp = playerStats.maxHp;
 
-    function closeModal() {
-      lootModal.classList.remove('active');
-      chestIcon.innerHTML = CHEST_CLOSED_SVG;
-      pendingItem = null;
-    }
+      log.innerText = `Battle Started against Stage ${gameState.stageWorld}-${gameState.stageLevel} Enemy!\n`;
 
-    chestBtn.addEventListener('click', openChest);
+      const interval = setInterval(() => {
+        enemyHp -= playerStats.atk;
+        log.innerText += `Player deals ${playerStats.atk} DMG to Enemy!\n`;
+        
+        if (enemyHp <= 0) {
+          enemyHp = 0;
+          log.innerText += `VICTORY! Stage ${gameState.stageWorld}-${gameState.stageLevel} Cleared!\n`;
+          
+          gameState.stageLevel++;
+          if (gameState.stageLevel > 5) {
+            gameState.stageLevel = 1;
+            gameState.stageWorld++;
+          }
+          gameState.diamonds += 5;
+          log.innerText += `Reward: 5 Diamonds!\n`;
+          
+          saveGame();
+          updateUI();
+          clearInterval(interval);
+          return;
+        }
 
-    equipBtn.addEventListener('click', () => {
-      if (pendingItem) {
-        gameState.equipped[pendingItem.slot] = pendingItem;
-        saveGame();
-        updateUI();
-      }
-      closeModal();
+        playerHp -= enemyAtk;
+        log.innerText += `Enemy deals ${enemyAtk} DMG to Player!\n`;
+
+        if (playerHp <= 0) {
+          playerHp = 0;
+          log.innerText += `DEFEAT! Try getting stronger gear from chests!\n`;
+          clearInterval(interval);
+        }
+
+        document.getElementById('playerHpFill').style.width = `${(playerHp / playerStats.maxHp) * 100}%`;
+        document.getElementById('playerHpText').innerText = `${Math.max(0, playerHp)}/${playerStats.maxHp}`;
+        
+        document.getElementById('enemyHpFill').style.width = `${(enemyHp / enemyMaxHp) * 100}%`;
+        document.getElementById('enemyHpText').innerText = `${Math.max(0, enemyHp)}/${enemyMaxHp}`;
+
+        log.scrollTop = log.scrollHeight;
+      }, 500);
     });
 
-    discardBtn.addEventListener('click', closeModal);
-
-    // Initial UI Render
     updateUI();
   </script>
 </body>
