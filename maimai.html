@@ -27,17 +27,27 @@
             border: 2px solid #0ff; text-align: center;
             box-shadow: 0 0 20px #0ff;
         }
+        #fullscreenBtn {
+            position: absolute;
+            top: 15px; right: 15px; z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff; border: 1px solid #0ff;
+            border-radius: 8px; padding: 10px 15px;
+            cursor: pointer; font-weight: bold;
+        }
+        #fullscreenBtn:hover { background: rgba(0, 255, 255, 0.2); }
+        
         #gameCanvas {
             border-radius: 50%;
             background: rgba(0,0,0,0.6);
             box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
             display: none;
         }
-        button, input[type="file"] {
+        button:not(#fullscreenBtn), input[type="file"] {
             padding: 12px; font-size: 16px; margin: 10px;
             border-radius: 8px; border: none; cursor: pointer;
         }
-        button { background: #0ff; color: #000; font-weight: bold; }
+        button:not(#fullscreenBtn) { background: #0ff; color: #000; font-weight: bold; }
         button:disabled { background: #555; color: #888; }
         .setting { margin: 15px 0; }
         input[type="range"] { width: 80%; }
@@ -46,6 +56,7 @@
 <body>
 
     <video id="bgVideo" autoplay loop muted></video>
+    <button id="fullscreenBtn">⛶ Fullscreen</button>
 
     <div id="ui">
         <h2>maimai Simulator</h2>
@@ -75,17 +86,29 @@
 
         let notes = [];
         let activeNotes = [];
-        let judgements = []; // Stores hit text (Perfect, Miss, etc.)
+        let judgements = [];
         let audio = new Audio();
         let isPlaying = false;
         
+        // Combo & Scoring
+        let combo = 0;
+
         // Speed & Timing
         let APPROACH_TIME = 1.5; 
         const speedSlider = document.getElementById('speedSlider');
         speedSlider.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('speedVal').innerText = val.toFixed(1);
-            APPROACH_TIME = 4.0 - val; // Invert so higher slider value = shorter time on screen
+            APPROACH_TIME = 4.0 - val;
+        });
+
+        // --- FULLSCREEN TOGGLE ---
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.log(err));
+            } else {
+                document.exitFullscreen();
+            }
         });
 
         // --- RESIZE CANVAS TO FIT ANY SCREEN ---
@@ -98,7 +121,6 @@
             BUTTON_RADIUS = size * 0.07;
 
             buttons = [];
-            // 8 outer buttons
             for (let i = 0; i < 8; i++) {
                 let angle = (i * 45 + 22.5) * (Math.PI / 180);
                 buttons.push({
@@ -107,10 +129,7 @@
                     angle: angle, active: false, type: 'ring'
                 });
             }
-            // Center Touch button (Index 8 or 'C')
-            buttons.push({
-                x: CENTER.x, y: CENTER.y, angle: 0, active: false, type: 'center'
-            });
+            buttons.push({ x: CENTER.x, y: CENTER.y, angle: 0, active: false, type: 'center' });
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
@@ -122,14 +141,12 @@
 
             document.getElementById('statusText').innerText = "Unzipping chart...";
             JSZip.loadAsync(file).then(async function(zip) {
-                // Audio
                 let audioFile = zip.file(/track\.(mp3|ogg|wav)/i)[0];
                 if (audioFile) {
                     let blob = await audioFile.async("blob");
                     audio.src = URL.createObjectURL(blob);
                 }
 
-                // Background
                 let pvFile = zip.file(/pv\.mp4/i)[0];
                 let bgFile = zip.file(/bg\.(jpg|png)/i)[0];
                 if (pvFile) {
@@ -143,7 +160,6 @@
                     document.body.style.backgroundPosition = "center";
                 }
 
-                // Chart Data
                 let maidataFile = zip.file(/maidata\.txt/i)[0];
                 if (maidataFile) {
                     let text = await maidataFile.async("string");
@@ -158,9 +174,8 @@
             });
         });
 
-        // --- 2. ADVANCED SIMAI PARSER (Fixes Sync Bug) ---
+        // --- 2. ADVANCED SIMAI PARSER & CHORD DETECTION ---
         function parseDuration(str, bpm) {
-            // Converts simai [8:1] notation into seconds
             let parts = str.replace(/[\[\]]/g, '').split(':');
             if (parts.length === 2) {
                 let div = parseFloat(parts[0]);
@@ -172,17 +187,13 @@
 
         function parseMaidata(text) {
             let parsedNotes = [];
-            // Get hardest difficulty (usually 6, 5, or 4)
             let chartMatch = text.match(/&inote_6=([^&]+)/) || text.match(/&inote_5=([^&]+)/) || text.match(/&inote_4=([^&]+)/);
             if (!chartMatch) return [];
 
-            // Get audio offset (vital for sync)
             let firstMatch = text.match(/&first=([\d\.\-]+)/);
             let currentTime = firstMatch ? parseFloat(firstMatch[1]) : 0.0;
-
-            let chartStr = chartMatch[1].replace(/\s+/g, ''); // Remove all spaces/newlines
+            let chartStr = chartMatch[1].replace(/\s+/g, ''); 
             let blocks = chartStr.split(',');
-
             let currentBPM = 120;
             let currentDivisor = 4;
 
@@ -192,55 +203,62 @@
                     continue;
                 }
 
-                // Extract BPM changes
                 let bpmMatch = block.match(/\(([\d\.]+)\)/);
                 if (bpmMatch) {
                     currentBPM = parseFloat(bpmMatch[1]);
                     block = block.replace(/\([\d\.]+\)/, '');
                 }
 
-                // Extract Divisor changes (e.g., {8})
                 let divMatch = block.match(/\{([\d\.]+)\}/);
                 if (divMatch) {
                     currentDivisor = parseFloat(divMatch[1]);
                     block = block.replace(/\{[\d\.]+\}/, '');
                 }
 
-                // Split chords on '/'
                 let elements = block.split('/');
                 for (let el of elements) {
                     if (!el) continue;
 
-                    // Touch Note (C)
                     if (el.includes('C')) {
-                        parsedNotes.push({ type: 'touch', time: currentTime, pos: 8 }); 
+                        parsedNotes.push({ type: 'touch', time: currentTime, pos: 8, isChord: false }); 
                         continue;
                     }
 
-                    // Slide Note (e.g. 1-4)
                     let slideMatch = el.match(/^([1-8])[a-zA-Z\-\^\<\>]+([1-8])/);
                     if (slideMatch) {
-                        parsedNotes.push({ type: 'slide', time: currentTime, pos: parseInt(slideMatch[1]) - 1 });
+                        parsedNotes.push({ type: 'slide', time: currentTime, pos: parseInt(slideMatch[1]) - 1, isChord: false });
                         continue;
                     }
 
-                    // Hold Note (e.g. 1h[4:1])
                     let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
                     if (holdMatch) {
                         let duration = parseDuration(holdMatch[2], currentBPM);
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: parseInt(holdMatch[1]) - 1, duration: duration });
+                        parsedNotes.push({ type: 'hold', time: currentTime, pos: parseInt(holdMatch[1]) - 1, duration: duration, isChord: false });
                         continue;
                     }
 
-                    // Tap Note (Just a number)
                     let tapMatch = el.match(/^([1-8])/);
                     if (tapMatch) {
-                        parsedNotes.push({ type: 'tap', time: currentTime, pos: parseInt(tapMatch[1]) - 1 });
+                        parsedNotes.push({ type: 'tap', time: currentTime, pos: parseInt(tapMatch[1]) - 1, isChord: false });
                     }
                 }
-                // Advance rhythm by one tick
                 currentTime += (240 / currentBPM) / currentDivisor;
             }
+
+            // --- Chord Detection Pass ---
+            // If multiple notes share the exact same timestamp, mark them as chords
+            let timeGroups = {};
+            parsedNotes.forEach(note => {
+                let t = note.time.toFixed(4); // Use 4 decimals to handle float imprecision
+                if (!timeGroups[t]) timeGroups[t] = [];
+                timeGroups[t].push(note);
+            });
+            for (let t in timeGroups) {
+                if (timeGroups[t].length > 1) {
+                    timeGroups[t].forEach(note => note.isChord = true);
+                }
+            }
+
             return parsedNotes;
         }
 
@@ -249,6 +267,7 @@
             document.getElementById('ui').style.display = 'none';
             canvas.style.display = 'block';
             activeNotes = JSON.parse(JSON.stringify(notes));
+            combo = 0; // Reset combo
             
             if (document.getElementById('bgVideo').src) {
                 document.getElementById('bgVideo').currentTime = 0;
@@ -264,6 +283,7 @@
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawUI();
+            drawCombo(); 
             updateAndDrawNotes(elapsedTime);
             drawJudgements(elapsedTime);
             
@@ -271,15 +291,13 @@
         }
 
         function drawUI() {
-            // Main ring
             ctx.beginPath();
             ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Render hit buttons
-            buttons.forEach((btn, index) => {
+            buttons.forEach((btn) => {
                 if (btn.type === 'ring') {
                     ctx.beginPath();
                     ctx.arc(btn.x, btn.y, BUTTON_RADIUS, 0, Math.PI * 2);
@@ -289,11 +307,31 @@
                     ctx.lineWidth = 2;
                     ctx.stroke();
                 } else if (btn.type === 'center') {
-                    // Center touch zone
                     ctx.fillStyle = btn.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
                     ctx.fillRect(btn.x - BUTTON_RADIUS, btn.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
                 }
             });
+        }
+
+        function drawCombo() {
+            if (combo > 0) {
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Draw numbers
+                ctx.font = `bold ${BUTTON_RADIUS * 1.5}px Arial`;
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = '#111'; // Dark thick outline
+                ctx.strokeText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
+                ctx.fillStyle = '#ffcc00'; // Dark Yellow text
+                ctx.fillText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
+                
+                // Draw "COMBO" text
+                ctx.font = `bold ${BUTTON_RADIUS * 0.4}px Arial`;
+                ctx.lineWidth = 4;
+                ctx.strokeText("COMBO", CENTER.x, CENTER.y + BUTTON_RADIUS * 0.8);
+                ctx.fillText("COMBO", CENTER.x, CENTER.y + BUTTON_RADIUS * 0.8);
+            }
         }
 
         function drawStar(cx, cy, spikes, outerRadius, innerRadius, rotation) {
@@ -324,9 +362,10 @@
                 let timeUntilHit = note.time - elapsedTime;
                 let target = buttons[note.pos];
 
-                // Remove completely missed notes
+                // Missed note completely
                 if (timeUntilHit < -0.16) {
-                    spawnJudgement("Miss", "#888", target.angle);
+                    spawnJudgement("MISS", "#888", target.angle);
+                    combo = 0; // Reset combo on miss
                     activeNotes.splice(i, 1);
                     continue;
                 }
@@ -334,27 +373,28 @@
                 if (timeUntilHit <= APPROACH_TIME) {
                     let progress = 1 - (timeUntilHit / APPROACH_TIME);
                     let cx, cy;
+                    
+                    // Assign colors based on if it's a chord (Yellow) or isolated
+                    let tapColor = note.isChord ? '#ffff00' : '#ff00ff';
+                    let slideColor = note.isChord ? '#ffff00' : '#00aaff';
+                    let holdTailColor = note.isChord ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 0, 255, 0.6)';
 
                     if (note.type === 'touch') {
-                        // Touch spawns in center
                         cx = CENTER.x; cy = CENTER.y;
-                        ctx.fillStyle = `rgba(0, 150, 255, ${progress})`;
+                        ctx.fillStyle = note.isChord ? `rgba(255, 255, 0, ${progress})` : `rgba(0, 150, 255, ${progress})`;
                         ctx.fillRect(cx - BUTTON_RADIUS, cy - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
                     
                     } else {
-                        // Normal ring approach
                         cx = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * progress);
                         cy = CENTER.y + Math.sin(target.angle) * (RING_RADIUS * progress);
 
                         if (note.type === 'slide') {
-                            // Slide: Rotating Blue Star
-                            ctx.fillStyle = '#00aaff';
+                            ctx.fillStyle = slideColor;
                             ctx.strokeStyle = '#fff';
                             ctx.lineWidth = 2;
                             drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                         
                         } else if (note.type === 'hold') {
-                            // Hold: Long trailing bar behind the note
                             let tailTimeUntil = (note.time + note.duration) - elapsedTime;
                             let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
                             let tX = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * tailProgress);
@@ -363,20 +403,18 @@
                             ctx.beginPath();
                             ctx.moveTo(cx, cy);
                             ctx.lineTo(tX, tY);
-                            ctx.strokeStyle = 'rgba(255, 0, 255, 0.6)';
+                            ctx.strokeStyle = holdTailColor;
                             ctx.lineWidth = BUTTON_RADIUS;
                             ctx.stroke();
 
-                            // Note Head
                             ctx.beginPath();
                             ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                            ctx.fillStyle = '#ff00ff'; ctx.fill();
+                            ctx.fillStyle = tapColor; ctx.fill();
                         
                         } else {
-                            // Tap: Pink Circle
                             ctx.beginPath();
                             ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                            ctx.fillStyle = '#ff00ff'; ctx.fill();
+                            ctx.fillStyle = tapColor; ctx.fill();
                             ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
                         }
                     }
@@ -388,7 +426,7 @@
         function spawnJudgement(text, color, angle) {
             let jX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.65);
             let jY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.65);
-            if (angle === 0) { jX = CENTER.x; jY = CENTER.y - BUTTON_RADIUS * 2; } // For Center touch
+            if (angle === 0) { jX = CENTER.x; jY = CENTER.y - BUTTON_RADIUS * 2; }
             
             judgements.push({
                 text: text, color: color, x: jX, y: jY, 
@@ -401,7 +439,7 @@
                 let j = judgements[i];
                 let age = elapsedTime - j.spawnTime;
                 
-                if (age > 0.5) { // Fade out after 0.5 seconds
+                if (age > 0.5) { 
                     judgements.splice(i, 1);
                     continue;
                 }
@@ -409,9 +447,17 @@
                 ctx.fillStyle = j.color;
                 ctx.font = `bold ${BUTTON_RADIUS * 0.8}px Arial`;
                 ctx.textAlign = 'center';
-                ctx.globalAlpha = 1 - (age / 0.5); // Fade effect
-                // Float upwards slightly
-                ctx.fillText(j.text, j.x, j.y - (age * 30)); 
+                ctx.textBaseline = 'middle';
+                
+                // Add a slight dark stroke to judgments to make them pop against background
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#000';
+                ctx.globalAlpha = 1 - (age / 0.5); 
+                
+                let dropY = j.y - (age * 30);
+                ctx.strokeText(j.text, j.x, dropY); 
+                ctx.fillText(j.text, j.x, dropY); 
+                
                 ctx.globalAlpha = 1.0;
             }
         }
@@ -427,7 +473,7 @@
 
                 buttons.forEach((btn, index) => {
                     let dist = Math.hypot(tx - btn.x, ty - btn.y);
-                    if (dist < BUTTON_RADIUS * 2.5) { // Hitbox size
+                    if (dist < BUTTON_RADIUS * 2.5) {
                         btn.active = true;
                         checkHit(index);
                         setTimeout(() => btn.active = false, 100);
@@ -445,15 +491,15 @@
                     
                     if (diff <= 0.16) {
                         let target = buttons[note.pos];
-                        // Assign judgement windows
-                        if (diff <= 0.03) spawnJudgement("CRITICAL", "#ffd700", target.angle); // Gold
-                        else if (diff <= 0.06) spawnJudgement("PERFECT", "#ffeb3b", target.angle); // Yellow
-                        else if (diff <= 0.10) spawnJudgement("GREAT", "#ff8c00", target.angle); // Orange
-                        else if (diff <= 0.15) spawnJudgement("GOOD", "#00ff00", target.angle); // Green
-                        else spawnJudgement("MISS", "#888", target.angle);
+                        
+                        if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.angle); combo++; }
+                        else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.angle); combo++; }
+                        else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.angle); combo++; }
+                        else if (diff <= 0.15) { spawnJudgement("GOOD", "#00ff00", target.angle); combo++; }
+                        else { spawnJudgement("MISS", "#888", target.angle); combo = 0; }
                         
                         activeNotes.splice(i, 1);
-                        break; // Only consume one note per tap
+                        break; 
                     }
                 }
             }
