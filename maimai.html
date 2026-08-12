@@ -105,16 +105,17 @@
         let notes = [];
         let activeNotes = [];
         let judgements = [];
+        let clickEffects = [];
         let audio = new Audio();
         let isPlaying = false;
         let combo = 0;
 
-        let APPROACH_TIME = 1.5; 
+        let APPROACH_TIME = 3.0; // Increased base display time to show tracks earlier
         const speedSlider = document.getElementById('speedSlider');
         speedSlider.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('speedVal').innerText = val.toFixed(1);
-            APPROACH_TIME = 4.0 - val;
+            APPROACH_TIME = 4.5 - val;
         });
 
         // --- FULLSCREEN TOGGLE ---
@@ -363,6 +364,7 @@
             drawUI();
             drawCombo(); 
             updateAndDrawNotes(elapsedTime);
+            drawClickEffects();
             drawJudgements(elapsedTime);
             
             requestAnimationFrame(gameLoop);
@@ -376,11 +378,11 @@
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Draw Judgment Area Sector Lines (D1-D8 Slices) matching reference layout
+            // Draw Judgment Area Sector Lines (D1-D8 Slices)
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 4]); // Dashed divider lines between sectors
+            ctx.setLineDash([4, 4]);
             for (let i = 0; i < 8; i++) {
                 let angle = (i * 45) * (Math.PI / 180);
                 let innerX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.35);
@@ -473,11 +475,42 @@
             ctx.stroke();
         }
 
+        function spawnClickEffect(x, y, color = '#0ff') {
+            clickEffects.push({
+                x: x, y: y,
+                radius: BUTTON_RADIUS * 0.5,
+                maxRadius: BUTTON_RADIUS * 1.8,
+                alpha: 1.0,
+                color: color
+            });
+        }
+
+        function drawClickEffects() {
+            for (let i = clickEffects.length - 1; i >= 0; i--) {
+                let eff = clickEffects[i];
+                eff.radius += 3;
+                eff.alpha -= 0.06;
+                if (eff.alpha <= 0) {
+                    clickEffects.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(eff.x, eff.y, eff.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = eff.color;
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = eff.alpha;
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
         function updateAndDrawNotes(elapsedTime) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
                 let target = buttons[note.pos];
 
+                // Hold body stays visible until tail is reached
                 if (note.type === 'hold' && note.state === 'holding') {
                     if (elapsedTime >= note.time + note.duration) {
                         spawnJudgement("CRITICAL", "#ffd700", target.angle);
@@ -486,10 +519,23 @@
                         continue;
                     }
                     let startBtn = buttons[note.pos];
+                    let holdProgress = (elapsedTime - note.time) / note.duration;
+                    let tailDist = RING_RADIUS * (1 - Math.min(1, holdProgress));
+                    let tX = CENTER.x + Math.cos(target.angle) * tailDist;
+                    let tY = CENTER.y + Math.sin(target.angle) * tailDist;
+
+                    ctx.beginPath();
+                    ctx.moveTo(startBtn.x, startBtn.y);
+                    ctx.lineTo(tX, tY);
+                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(255, 0, 255, 0.8)';
+                    ctx.lineWidth = BUTTON_RADIUS;
+                    ctx.stroke();
+
                     ctx.beginPath();
                     ctx.arc(startBtn.x, startBtn.y, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ff00ff'; ctx.fill();
-                    ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4; ctx.stroke();
+                    ctx.fillStyle = note.isChord ? '#ffff00' : '#ff00ff';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
                     continue;
                 }
 
@@ -659,6 +705,7 @@
                 currentlyTouched.forEach(index => {
                     if (!previouslyTouched.has(index)) {
                         buttons[index].active = true;
+                        spawnClickEffect(buttons[index].x, buttons[index].y, '#0ff');
                         checkHit(index);
                         setTimeout(() => buttons[index].active = false, 100);
                     }
