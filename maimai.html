@@ -26,6 +26,7 @@
             padding: 30px; border-radius: 15px;
             border: 2px solid #0ff; text-align: center;
             box-shadow: 0 0 20px #0ff;
+            min-width: 300px;
         }
         #fullscreenBtn {
             position: absolute;
@@ -43,14 +44,24 @@
             box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
             display: none;
         }
-        button:not(#fullscreenBtn), input[type="file"] {
+        button:not(#fullscreenBtn), input[type="file"], select {
             padding: 12px; font-size: 16px; margin: 10px;
             border-radius: 8px; border: none; cursor: pointer;
+            width: 90%; box-sizing: border-box;
         }
+        select { background: #222; color: #fff; border: 1px solid #0ff; outline: none; }
         button:not(#fullscreenBtn) { background: #0ff; color: #000; font-weight: bold; }
         button:disabled { background: #555; color: #888; }
         .setting { margin: 15px 0; }
-        input[type="range"] { width: 80%; }
+        input[type="range"] { width: 90%; }
+        
+        #difficultyContainer {
+            display: none;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
@@ -62,6 +73,11 @@
         <h2>maimai Simulator</h2>
         <input type="file" id="adxUpload" accept=".adx,.zip" />
         
+        <div id="difficultyContainer">
+            <label style="font-weight: bold; color: #0ff;">Select Difficulty:</label>
+            <select id="diffSelect"></select>
+        </div>
+
         <div class="setting">
             <label>Note Speed: <span id="speedVal">1.5</span></label><br>
             <input type="range" id="speedSlider" min="0.5" max="3.5" step="0.1" value="1.5">
@@ -78,22 +94,21 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // Responsive Scaling variables
         let CENTER = { x: 0, y: 0 };
         let RING_RADIUS = 0;
         let BUTTON_RADIUS = 0;
         let buttons = [];
+
+        let availableCharts = {};
+        let globalAudioOffset = 0;
 
         let notes = [];
         let activeNotes = [];
         let judgements = [];
         let audio = new Audio();
         let isPlaying = false;
-        
-        // Combo & Scoring
         let combo = 0;
 
-        // Speed & Timing
         let APPROACH_TIME = 1.5; 
         const speedSlider = document.getElementById('speedSlider');
         speedSlider.addEventListener('input', (e) => {
@@ -134,12 +149,15 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // --- 1. UNZIP & PARSE ---
+        // --- 1. UNZIP & EXTRACT DIFFICULTIES ---
         document.getElementById('adxUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             document.getElementById('statusText').innerText = "Unzipping chart...";
+            document.getElementById('difficultyContainer').style.display = 'none';
+            document.getElementById('startBtn').disabled = true;
+
             JSZip.loadAsync(file).then(async function(zip) {
                 let audioFile = zip.file(/track\.(mp3|ogg|wav)/i)[0];
                 if (audioFile) {
@@ -163,10 +181,17 @@
                 let maidataFile = zip.file(/maidata\.txt/i)[0];
                 if (maidataFile) {
                     let text = await maidataFile.async("string");
-                    notes = parseMaidata(text);
-                    document.getElementById('statusText').innerText = `Chart Ready! (${notes.length} notes)`;
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('startBtn').innerText = "START GAME";
+                    extractAvailableCharts(text);
+                    
+                    if (Object.keys(availableCharts).length > 0) {
+                        populateDifficultyUI();
+                        document.getElementById('statusText').innerText = "File loaded! Ready to play.";
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('startBtn').innerText = "START GAME";
+                        document.getElementById('difficultyContainer').style.display = 'block';
+                    } else {
+                        document.getElementById('statusText').innerText = "Error: No playable charts found in maidata.txt.";
+                    }
                 }
             }).catch(err => {
                 document.getElementById('statusText').innerText = "Error loading file!";
@@ -174,7 +199,49 @@
             });
         });
 
-        // --- 2. ADVANCED SIMAI PARSER & CHORD DETECTION ---
+        // --- 2. EXTRACT CHARTS & POPULATE UI ---
+        function extractAvailableCharts(text) {
+            availableCharts = {};
+            let firstMatch = text.match(/&first=([\d\.\-]+)/);
+            globalAudioOffset = firstMatch ? parseFloat(firstMatch[1]) : 0.0;
+
+            const difficultyNames = {
+                1: "Basic (Green)",
+                2: "Advanced (Orange)",
+                3: "Expert (Red)",
+                4: "Master (Purple)",
+                5: "Re:Master (White)",
+                6: "Utage"
+            };
+
+            for (let i = 1; i <= 6; i++) {
+                let regex = new RegExp(`&inote_${i}=([^&]+)`);
+                let match = text.match(regex);
+                if (match) {
+                    availableCharts[i] = {
+                        name: difficultyNames[i],
+                        data: match[1]
+                    };
+                }
+            }
+        }
+
+        function populateDifficultyUI() {
+            const select = document.getElementById('diffSelect');
+            select.innerHTML = ''; 
+            
+            let highestDiff = 1;
+            for (let key in availableCharts) {
+                let option = document.createElement('option');
+                option.value = key;
+                option.text = availableCharts[key].name;
+                select.appendChild(option);
+                highestDiff = key;
+            }
+            select.value = highestDiff; 
+        }
+
+        // --- 3. ADVANCED SIMAI PARSER & CHORD DETECTION ---
         function parseDuration(str, bpm) {
             let parts = str.replace(/[\[\]]/g, '').split(':');
             if (parts.length === 2) {
@@ -185,15 +252,12 @@
             return 0;
         }
 
-        function parseMaidata(text) {
+        function parseChartString(chartStr, offsetTime) {
             let parsedNotes = [];
-            let chartMatch = text.match(/&inote_6=([^&]+)/) || text.match(/&inote_5=([^&]+)/) || text.match(/&inote_4=([^&]+)/);
-            if (!chartMatch) return [];
-
-            let firstMatch = text.match(/&first=([\d\.\-]+)/);
-            let currentTime = firstMatch ? parseFloat(firstMatch[1]) : 0.0;
-            let chartStr = chartMatch[1].replace(/\s+/g, ''); 
-            let blocks = chartStr.split(',');
+            let currentTime = offsetTime;
+            
+            let cleanStr = chartStr.replace(/\s+/g, ''); 
+            let blocks = cleanStr.split(',');
             let currentBPM = 120;
             let currentDivisor = 4;
 
@@ -245,11 +309,9 @@
                 currentTime += (240 / currentBPM) / currentDivisor;
             }
 
-            // --- Chord Detection Pass ---
-            // If multiple notes share the exact same timestamp, mark them as chords
             let timeGroups = {};
             parsedNotes.forEach(note => {
-                let t = note.time.toFixed(4); // Use 4 decimals to handle float imprecision
+                let t = note.time.toFixed(4); 
                 if (!timeGroups[t]) timeGroups[t] = [];
                 timeGroups[t].push(note);
             });
@@ -262,12 +324,17 @@
             return parsedNotes;
         }
 
-        // --- 3. GAME ENGINE & DRAWING ---
+        // --- 4. GAME ENGINE & DRAWING ---
         document.getElementById('startBtn').addEventListener('click', () => {
+            let selectedDiff = document.getElementById('diffSelect').value;
+            let chartData = availableCharts[selectedDiff].data;
+            notes = parseChartString(chartData, globalAudioOffset);
+
             document.getElementById('ui').style.display = 'none';
             canvas.style.display = 'block';
+            
             activeNotes = JSON.parse(JSON.stringify(notes));
-            combo = 0; // Reset combo
+            combo = 0; 
             
             if (document.getElementById('bgVideo').src) {
                 document.getElementById('bgVideo').currentTime = 0;
@@ -318,15 +385,13 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                // Draw numbers
                 ctx.font = `bold ${BUTTON_RADIUS * 1.5}px Arial`;
                 ctx.lineWidth = 6;
-                ctx.strokeStyle = '#111'; // Dark thick outline
+                ctx.strokeStyle = '#111'; 
                 ctx.strokeText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
-                ctx.fillStyle = '#ffcc00'; // Dark Yellow text
+                ctx.fillStyle = '#ffcc00'; 
                 ctx.fillText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
                 
-                // Draw "COMBO" text
                 ctx.font = `bold ${BUTTON_RADIUS * 0.4}px Arial`;
                 ctx.lineWidth = 4;
                 ctx.strokeText("COMBO", CENTER.x, CENTER.y + BUTTON_RADIUS * 0.8);
@@ -362,10 +427,9 @@
                 let timeUntilHit = note.time - elapsedTime;
                 let target = buttons[note.pos];
 
-                // Missed note completely
                 if (timeUntilHit < -0.16) {
                     spawnJudgement("MISS", "#888", target.angle);
-                    combo = 0; // Reset combo on miss
+                    combo = 0; 
                     activeNotes.splice(i, 1);
                     continue;
                 }
@@ -374,7 +438,6 @@
                     let progress = 1 - (timeUntilHit / APPROACH_TIME);
                     let cx, cy;
                     
-                    // Assign colors based on if it's a chord (Yellow) or isolated
                     let tapColor = note.isChord ? '#ffff00' : '#ff00ff';
                     let slideColor = note.isChord ? '#ffff00' : '#00aaff';
                     let holdTailColor = note.isChord ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 0, 255, 0.6)';
@@ -422,7 +485,7 @@
             }
         }
 
-        // --- 4. HIT DETECTION & JUDGEMENT ---
+        // --- 5. HIT DETECTION & JUDGEMENT ---
         function spawnJudgement(text, color, angle) {
             let jX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.65);
             let jY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.65);
@@ -449,7 +512,6 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                // Add a slight dark stroke to judgments to make them pop against background
                 ctx.lineWidth = 2;
                 ctx.strokeStyle = '#000';
                 ctx.globalAlpha = 1 - (age / 0.5); 
@@ -462,7 +524,10 @@
             }
         }
 
-        canvas.addEventListener('touchstart', (e) => {
+        // --- 6. ADVANCED SLIDE-TO-HIT TOUCH LOGIC ---
+        let touchState = {}; // Tracks which buttons each finger is currently over
+
+        function handleTouches(e) {
             e.preventDefault(); 
             let rect = canvas.getBoundingClientRect();
             
@@ -471,16 +536,43 @@
                 let tx = touch.clientX - rect.left;
                 let ty = touch.clientY - rect.top;
 
+                // If finger is lifted, clear it from memory
+                if (e.type === 'touchend' || e.type === 'touchcancel') {
+                    delete touchState[touch.identifier];
+                    continue;
+                }
+
+                // Check which buttons the finger is currently over
+                let currentlyTouched = new Set();
                 buttons.forEach((btn, index) => {
                     let dist = Math.hypot(tx - btn.x, ty - btn.y);
-                    if (dist < BUTTON_RADIUS * 2.5) {
-                        btn.active = true;
-                        checkHit(index);
-                        setTimeout(() => btn.active = false, 100);
+                    if (dist < BUTTON_RADIUS * 2.5) { // Generous hitbox for easy sliding
+                        currentlyTouched.add(index);
                     }
                 });
+
+                // Compare with where the finger was previously
+                let previouslyTouched = touchState[touch.identifier] || new Set();
+
+                // If the finger has ENTERED a new button, trigger a hit
+                currentlyTouched.forEach(index => {
+                    if (!previouslyTouched.has(index)) {
+                        buttons[index].active = true;
+                        checkHit(index);
+                        setTimeout(() => buttons[index].active = false, 100); // Visual flash
+                    }
+                });
+
+                // Update memory for next frame
+                touchState[touch.identifier] = currentlyTouched;
             }
-        }, {passive: false});
+        }
+
+        // Attach same handler to all touch events to enable smooth gliding
+        canvas.addEventListener('touchstart', handleTouches, {passive: false});
+        canvas.addEventListener('touchmove', handleTouches, {passive: false});
+        canvas.addEventListener('touchend', handleTouches, {passive: false});
+        canvas.addEventListener('touchcancel', handleTouches, {passive: false});
 
         function checkHit(posIndex) {
             let elapsedTime = audio.currentTime;
