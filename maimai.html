@@ -3,78 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Maimai (.adx Simulator)</title>
-    <!-- Include JSZip to extract the .adx file in the browser -->
+    <title>Web Maimai DX Simulator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body {
-            margin: 0;
-            background-color: #000;
-            color: white;
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow: hidden; /* Prevent scrolling on mobile */
-            touch-action: none; /* Crucial for touch screens */
+            margin: 0; background-color: #000; color: white;
+            font-family: 'Arial', sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            overflow: hidden; touch-action: none;
+            height: 100vh;
         }
+
+        /* 1. Adjusted Game Window Size */
+        #gameArea {
+            position: relative;
+            width: 800px; height: 800px;
+            overflow: hidden;
+            display: flex; justify-content: center; align-items: center;
+        }
+
         #bgVideo {
-            position: absolute;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            object-fit: cover;
-            z-index: -2;
-            display: none;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: -2; display: none;
         }
         #overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.6); /* Darken BG so notes are visible */
-            z-index: -1;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); z-index: -1;
         }
-        #ui {
-            margin-top: 10px;
-            text-align: center;
-            z-index: 10;
-        }
+
         #gameCanvas {
+            position: relative; z-index: 1;
             border-radius: 50%;
-            margin-top: 20px;
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
-            background: rgba(0,0,0,0.4);
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.4);
         }
-        button, input {
-            padding: 10px;
-            font-size: 16px;
-            margin: 5px;
+
+        /* 2. Judgement Text Container */
+        #judgementDisplay {
+            position: absolute;
+            font-size: 48px; font-weight: bold; font-style: italic;
+            text-transform: uppercase; text-align: center;
+            opacity: 0;
+            pointer-events: none; /* Let touches pass through */
+            z-index: 5;
+            text-shadow: 0 0 10px #fff;
         }
+
+        /* Colors for each judgement */
+        .judge-critical { color: #f0f; text-shadow: 0 0 15px #f0f; }
+        .judge-perfect { color: #ff0; }
+        .judge-great { color: #0f0; }
+        .judge-good { color: #07f; }
+        .judge-miss { color: #f00; }
+
+        @keyframes judgePop {
+            0% { transform: scale(0.5); opacity: 0; }
+            20% { transform: scale(1.1); opacity: 1; }
+            30% { transform: scale(1.0); opacity: 1; }
+            80% { transform: scale(1.0); opacity: 1; }
+            100% { transform: scale(1.2); opacity: 0; }
+        }
+
+        #ui { margin-top: 10px; text-align: center; z-index: 10; }
+        input[type="file"], input[type="range"], button { padding: 10px; font-size: 16px; margin: 5px; }
+        label { display: block; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <video id="bgVideo" autoplay loop muted></video>
-    <div id="overlay"></div>
-
     <div id="ui">
-        <h2>Web Maimai Prototype</h2>
+        <h2>Web Maimai Engine</h2>
         <input type="file" id="adxUpload" accept=".adx,.zip" />
+        
+        <!-- 4. Note Speed Adjuster -->
+        <label for="speedSelector">Note Speed (APPROACH TIME):</label>
+        <input type="range" id="speedSelector" min="0.5" max="3.0" step="0.1" value="1.5">
+        <span id="speedValue">1.5s</span> (Low is fast, High is slow)
+        
         <br>
-        <button id="startBtn" disabled>Loading Data... (Upload File First)</button>
-        <p id="statusText">Waiting for .adx file...</p>
+        <button id="startBtn" disabled>Upload File First</button>
+        <p id="statusText">Waiting for .adx...</p>
     </div>
 
-    <!-- Canvas sized for most screens (can be adjusted) -->
-    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    <!-- The 1:1 ratio game window -->
+    <div id="gameArea">
+        <video id="bgVideo" autoplay loop muted></video>
+        <div id="overlay"></div>
+        <canvas id="gameCanvas" width="800" height="800"></canvas>
+        
+        <!-- Judgement will be dynamic inside this area -->
+        <div id="judgementDisplay"></div>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const CENTER = { x: canvas.width / 2, y: canvas.height / 2 };
-        const RING_RADIUS = 250;
-        const BUTTON_RADIUS = 35; // Larger for touch screens
+        const speedSelector = document.getElementById('speedSelector');
+        const speedValueDisplay = document.getElementById('speedValue');
         
+        const AREA_SIZE = 800; // Game Area Size
+        const CENTER = { x: AREA_SIZE / 2, y: AREA_SIZE / 2 };
+        const RING_RADIUS = 350; // Approaching edge
+        const BUTTON_RADIUS = 40; // Size of sensor rings
+        
+        const JUDGE_MS = { CRITICAL: 30, PERFECT: 60, GREAT: 100, GOOD: 150 }; // ms error window
+
+        // Type definitions (3. kinds of notes)
+        const NOTE_TYPE = { TAP: 0, HOLD: 1, TOUCH: 2, SLIDE: 3 };
+
+        // Define buttons around the perimeter
         let buttons = [];
         for (let i = 0; i < 8; i++) {
-            let angle = (i * 45 + 22.5) * (Math.PI / 180); // Maimai starting angle
+            let angle = (i * 45 + 22.5) * (Math.PI / 180);
             buttons.push({
                 x: CENTER.x + Math.cos(angle) * RING_RADIUS,
                 y: CENTER.y + Math.sin(angle) * RING_RADIUS,
@@ -83,122 +122,105 @@
             });
         }
 
-        let notes = [];
+        let chartNotes = [];
         let activeNotes = [];
+        let activeHoldNotes = []; // Hold notes currently being held
         let audio = new Audio();
         let isPlaying = false;
         let startTime = 0;
-        const APPROACH_TIME = 1.5; // How fast notes travel (seconds)
-        const GLOBAL_OFFSET = 0; // Adjust if audio and notes are out of sync
+        let approachTime = parseFloat(speedSelector.value); // (4.) Dynamic speed
+        
+        // Speed Selector Update
+        speedSelector.addEventListener('input', (e) => {
+            approachTime = parseFloat(e.target.value);
+            speedValueDisplay.innerText = approachTime.toFixed(1) + 's';
+        });
 
-        // --- 1. FILE UPLOAD & UNZIPPING ---
+        // --- 1. ZIP PARSING ---
         document.getElementById('adxUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
-            document.getElementById('statusText').innerText = "Unzipping file...";
-
+            document.getElementById('statusText').innerText = "Unzipping...";
             JSZip.loadAsync(file).then(function(zip) {
-                // 1. Load Audio
+                // Audio
                 let audioFile = zip.file(/track\.(mp3|ogg)/i)[0];
-                if (audioFile) {
-                    audioFile.async("blob").then(blob => {
-                        audio.src = URL.createObjectURL(blob);
-                    });
-                }
+                if (audioFile) audioFile.async("blob").then(blob => audio.src = URL.createObjectURL(blob));
 
-                // 2. Load Background Video or Image
+                // BG/Video
                 let pvFile = zip.file(/pv\.mp4/i)[0];
                 let bgFile = zip.file(/bg\.(jpg|png)/i)[0];
-                
-                if (pvFile) {
-                    pvFile.async("blob").then(blob => {
-                        const vid = document.getElementById('bgVideo');
-                        vid.src = URL.createObjectURL(blob);
-                        vid.style.display = 'block';
-                    });
-                } else if (bgFile) {
-                    bgFile.async("blob").then(blob => {
-                        document.body.style.backgroundImage = `url(${URL.createObjectURL(blob)})`;
-                        document.body.style.backgroundSize = "cover";
-                        document.body.style.backgroundPosition = "center";
-                    });
-                }
+                if (pvFile) pvFile.async("blob").then(blob => {
+                    const vid = document.getElementById('bgVideo');
+                    vid.src = URL.createObjectURL(blob); vid.style.display = 'block';
+                });
 
-                // 3. Load and Parse Chart (maidata.txt)
+                // Chart Parsing (maidata.txt)
                 let maidataFile = zip.file(/maidata\.txt/i)[0];
-                if (maidataFile) {
-                    maidataFile.async("string").then(text => {
-                        notes = parseMaidata(text);
-                        document.getElementById('statusText').innerText = `Chart loaded! Found ${notes.length} notes.`;
-                        document.getElementById('startBtn').disabled = false;
-                        document.getElementById('startBtn').innerText = "START GAME";
-                    });
-                }
-            }).catch(err => {
-                document.getElementById('statusText').innerText = "Error reading zip file!";
-                console.error(err);
+                if (maidataFile) maidataFile.async("string").then(text => {
+                    chartNotes = parseMaidata(text);
+                    document.getElementById('statusText').innerText = `Loaded! ${chartNotes.length} notes found.`;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startBtn').innerText = "START";
+                });
             });
         });
 
-        // --- 2. MAIDATA (SIMAI) PARSER ---
+        // --- 2. MAIDATA PARSER (Updated) ---
         function parseMaidata(text) {
-            // Find the hardest difficulty available (usually inote_5 or inote_6)
-            let chartMatch = text.match(/&inote_6=([^&]+)/) || text.match(/&inote_5=([^&]+)/) || text.match(/&inote_4=([^&]+)/);
+            let chartMatch = text.match(/&inote_(\d+)=([^&]+)/);
             if (!chartMatch) return [];
+            let chartStr = chartMatch[2].replace(/\s|\n|\r/g, ''); 
 
-            let chartStr = chartMatch[1].replace(/\s|\n|\r/g, ''); // Clean whitespace
             let parsedNotes = [];
-            let currentBPM = 120;
-            let currentDivisor = 4; // Default quarter notes
-            let currentTime = GLOBAL_OFFSET;
+            let bpm = 120, div = 4, time = 0;
 
-            let elements = chartStr.split(',');
+            chartStr.split(',').forEach(el => {
+                if (el === '') { time += (60/bpm)*(4/div); return; }
 
-            for (let el of elements) {
-                if (el === '') {
-                    currentTime += (60 / currentBPM) * (4 / currentDivisor);
-                    continue;
-                }
+                // Speed/Div Changes
+                let bpmM = el.match(/\(([\d\.]+)\)/); if (bpmM) bpm = parseFloat(bpmM[1]);
+                let divM = el.match(/\{([\d\.]+)\}/); if (divM) div = parseFloat(divM[1]);
+                el = el.replace(/\([\d\.]+\)/,'').replace(/\{[\d\.]+\}/,'');
 
-                // Check for BPM changes: (150)
-                let bpmMatch = el.match(/\(([\d\.]+)\)/);
-                if (bpmMatch) {
-                    currentBPM = parseFloat(bpmMatch[1]);
-                    el = el.replace(/\([\d\.]+\)/, ''); // Remove from string
-                }
+                // Basic Multi-note parsing (1h[8:1],2,3)
+                let noteMatches = el.split('/'); 
 
-                // Check for Divisor changes: {8}
-                let divMatch = el.match(/\{([\d\.]+)\}/);
-                if (divMatch) {
-                    currentDivisor = parseFloat(divMatch[1]);
-                    el = el.replace(/\{[\d\.]+\}/, '');
-                }
+                noteMatches.forEach(noteStr => {
+                    let posM = noteStr.match(/^[1-8]/);
+                    if (!posM) return;
+                    let pos = parseInt(posM[0]) - 1;
 
-                // Extract note positions (1 to 8). 
-                // NOTE: This is a basic parser. It converts holds (1h) and slides (1-4) into basic taps.
-                let taps = el.match(/[1-8]/g);
-                if (taps) {
-                    taps.forEach(t => {
-                        parsedNotes.push({ time: currentTime, pos: parseInt(t) - 1 });
-                    });
-                }
-                
-                // Advance time by one beat
-                currentTime += (60 / currentBPM) * (4 / currentDivisor);
-            }
+                    // (3.) Tap/Hold Handling
+                    if (noteStr.includes('h')) {
+                        // Hold note (e.g., 1h[8:1])
+                        let duration = (60/bpm); // Default 1 beat if duration fails
+                        let durMatch = noteStr.match(/\[(\d+):(\d+)\]/);
+                        if (durMatch) {
+                            duration = (60/bpm) * (4/parseInt(durMatch[1])) * parseInt(durMatch[2]);
+                        }
+                        parsedNotes.push({ type: NOTE_TYPE.HOLD, time, pos, duration });
+                    } else if (noteStr.match(/[1-8][\-<>\^vpqszwMV]/)) {
+                        // Placeholder for SLIDE (e.g., 1-4)
+                        console.log("Found Slide (unsupported): " + noteStr);
+                    } else if (noteStr.startsWith('t')) {
+                        // Placeholder for TOUCH
+                        console.log("Found Touch (unsupported): " + noteStr);
+                    } else {
+                        // Ordinary Tap
+                        parsedNotes.push({ type: NOTE_TYPE.TAP, time, pos });
+                    }
+                });
+                time += (60 / bpm) * (4 / div);
+            });
             return parsedNotes;
         }
 
-        // --- 3. GAME ENGINE & TOUCH CONTROLS ---
+        // --- 3. GAME ENGINE ---
         document.getElementById('startBtn').addEventListener('click', () => {
-            document.getElementById('ui').style.display = 'none'; // Hide UI
-            activeNotes = JSON.parse(JSON.stringify(notes)); // Clone notes
-            
-            // Try to sync video if it exists
-            const vid = document.getElementById('bgVideo');
-            if (vid.src) vid.currentTime = 0;
-            
+            document.getElementById('ui').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'block';
+            activeNotes = JSON.parse(JSON.stringify(chartNotes));
             audio.play();
             startTime = performance.now();
             isPlaying = true;
@@ -207,99 +229,129 @@
 
         function gameLoop() {
             if (!isPlaying) return;
-            // Use audio time to prevent desync
-            let elapsedTime = audio.currentTime;
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawUI();
-            updateAndDrawNotes(elapsedTime);
-            
+            let time = audio.currentTime;
+            ctx.clearRect(0, 0, AREA_SIZE, AREA_SIZE);
+            drawSensors();
+            updateAndDrawNotes(time);
             requestAnimationFrame(gameLoop);
         }
 
-        function drawUI() {
-            ctx.beginPath();
-            ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 4;
-            ctx.stroke();
+        function drawSensors() {
+            ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 5; ctx.stroke();
 
-            buttons.forEach((btn, index) => {
-                ctx.beginPath();
-                ctx.arc(btn.x, btn.y, BUTTON_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = btn.active ? '#0ff' : 'rgba(0, 0, 0, 0.5)';
-                ctx.fill();
-                ctx.strokeStyle = '#0ff';
-                ctx.lineWidth = 3;
-                ctx.stroke();
+            buttons.forEach(btn => {
+                ctx.beginPath(); ctx.arc(btn.x, btn.y, BUTTON_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = btn.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0.4)';
+                ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
             });
         }
 
-        function updateAndDrawNotes(elapsedTime) {
+        // Dynamic drawing based on Note Type
+        function updateAndDrawNotes(time) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
-                let timeUntilHit = note.time - elapsedTime;
+                let timeUntil = note.time - time;
 
-                // Draw note if it's on screen
-                if (timeUntilHit <= APPROACH_TIME && timeUntilHit >= -0.15) {
-                    let progress = 1 - (timeUntilHit / APPROACH_TIME);
-                    let targetBtn = buttons[note.pos];
-                    
-                    let currentX = CENTER.x + Math.cos(targetBtn.angle) * (RING_RADIUS * progress);
-                    let currentY = CENTER.y + Math.sin(targetBtn.angle) * (RING_RADIUS * progress);
+                if (timeUntil <= approachTime && timeUntil >= -0.2) {
+                    let prg = 1 - (timeUntil / approachTime);
+                    let target = buttons[note.pos];
+                    let nx = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * prg);
+                    let ny = CENTER.y + Math.sin(target.angle) * (RING_RADIUS * prg);
 
-                    ctx.beginPath();
-                    ctx.arc(currentX, currentY, 20, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ff00ff';
-                    ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
+                    if (note.type === NOTE_TYPE.TAP) {
+                        drawTap(nx, ny);
+                    } else if (note.type === NOTE_TYPE.HOLD) {
+                        drawHold(nx, ny, prg, note, timeUntil);
+                    }
                 }
 
-                // Remove notes you missed
-                if (timeUntilHit < -0.15) {
-                    activeNotes.splice(i, 1);
+                if (timeUntil < -0.2 && note.type !== NOTE_TYPE.HOLD) {
+                    showJudgement('Miss'); activeNotes.splice(i, 1);
                 }
             }
         }
 
-        // TOUCH CONTROLS
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Stop screen from scrolling
-            let rect = canvas.getBoundingClientRect();
-            
-            // Handle multiple fingers at once
-            for(let i = 0; i < e.changedTouches.length; i++) {
-                let touch = e.changedTouches[i];
-                // Scale coordinates to canvas size
-                let scaleX = canvas.width / rect.width;
-                let scaleY = canvas.height / rect.height;
-                let tx = (touch.clientX - rect.left) * scaleX;
-                let ty = (touch.clientY - rect.top) * scaleY;
+        // Drawing helpers
+        function drawTap(x, y) {
+            ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2);
+            ctx.fillStyle = '#f0f'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke();
+        }
 
-                // Check which button was tapped
+        function drawHold(x, y, prg, note, timeUntil) {
+            // Draw a rectangle path extending backwards
+            let target = buttons[note.pos];
+            let endPrg = Math.min(1, prg);
+            let startPrg = Math.max(0, 1 - ((note.time + note.duration - audio.currentTime) / approachTime));
+            
+            ctx.beginPath();
+            ctx.moveTo(CENTER.x + Math.cos(target.angle)*(RING_RADIUS*startPrg), CENTER.y + Math.sin(target.angle)*(RING_RADIUS*startPrg));
+            ctx.lineTo(CENTER.x + Math.cos(target.angle)*(RING_RADIUS*endPrg), CENTER.y + Math.sin(target.angle)*(RING_RADIUS*endPrg));
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.6)'; ctx.lineWidth = 40; ctx.lineCap = 'round'; ctx.stroke();
+
+            // Draw Head
+            ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2); ctx.fillStyle = prg >= 1 ? '#0ff' : '#f0f'; ctx.fill();
+            
+            // Check Hold Completion
+            if (audio.currentTime > note.time + note.duration) {
+                activeNotes.splice(activeNotes.indexOf(note), 1);
+            }
+        }
+
+        // --- 2. JUDGEMENT & COMBO ---
+        function showJudgement(type) {
+            const el = document.getElementById('judgementDisplay');
+            el.innerText = type;
+            el.className = 'judge-' + type.toLowerCase();
+            
+            // Position randomly near center for effect
+            el.style.left = (CENTER.x - el.offsetWidth/2 + (Math.random()*40 - 20)) + 'px';
+            el.style.top = (CENTER.y - el.offsetHeight/2 - 50 + (Math.random()*20 - 10)) + 'px';
+
+            el.style.animation = 'none'; // Reset animation
+            void el.offsetWidth; // Trigger reflow
+            el.style.animation = 'judgePop 0.8s ease-out forwards';
+        }
+
+        // TOUCH HANDLING
+        canvas.addEventListener('touchstart', handleTouch, {passive: false});
+
+        function handleTouch(e) {
+            e.preventDefault();
+            let rect = canvas.getBoundingClientRect();
+            let sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+
+            for(let touch of e.changedTouches) {
+                let tx = (touch.clientX - rect.left)*sx, ty = (touch.clientY - rect.top)*sy;
+
                 buttons.forEach((btn, index) => {
                     let dist = Math.hypot(tx - btn.x, ty - btn.y);
-                    if (dist < BUTTON_RADIUS * 2.5) { // Generous hitbox for fingers
+                    if (dist < BUTTON_RADIUS * 2) { 
                         btn.active = true;
-                        checkHit(index);
-                        setTimeout(() => btn.active = false, 100); // Visual flash
+                        if(isPlaying) checkHit(index);
+                        setTimeout(() => btn.active = false, 100);
                     }
                 });
             }
-        }, {passive: false});
+        }
 
-        function checkHit(posIndex) {
-            let elapsedTime = audio.currentTime;
+        function checkHit(pos) {
+            let time = audio.currentTime;
             for (let i = 0; i < activeNotes.length; i++) {
                 let note = activeNotes[i];
-                if (note.pos === posIndex) {
-                    let diff = Math.abs(note.time - elapsedTime);
-                    // 150ms hit window
-                    if (diff < 0.15) {
-                        activeNotes.splice(i, 1); // Note hit, remove from screen
-                        break; // Only hit one note per tap
+                if (note.pos === pos) {
+                    let diff = Math.abs(note.time - time) * 1000; // error in ms
+
+                    let judge = null;
+                    if (diff < JUDGE_MS.CRITICAL) judge = 'Critical';
+                    else if (diff < JUDGE_MS.PERFECT) judge = 'Perfect';
+                    else if (diff < JUDGE_MS.GREAT) judge = 'Great';
+                    else if (diff < JUDGE_MS.GOOD) judge = 'Good';
+
+                    if (judge) {
+                        showJudgement(judge);
+                        activeNotes.splice(i, 1);
+                        break; 
                     }
                 }
             }
