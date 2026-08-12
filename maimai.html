@@ -199,7 +199,6 @@
             });
         });
 
-        // --- 2. EXTRACT CHARTS & POPULATE UI ---
         function extractAvailableCharts(text) {
             availableCharts = {};
             let firstMatch = text.match(/&first=([\d\.\-]+)/);
@@ -241,7 +240,7 @@
             select.value = highestDiff; 
         }
 
-        // --- 3. ADVANCED SIMAI PARSER & CHORD DETECTION ---
+        // --- 2. ADVANCED SIMAI PARSER ---
         function parseDuration(str, bpm) {
             let parts = str.replace(/[\[\]]/g, '').split(':');
             if (parts.length === 2) {
@@ -284,26 +283,38 @@
                     if (!el) continue;
 
                     if (el.includes('C')) {
-                        parsedNotes.push({ type: 'touch', time: currentTime, pos: 8, isChord: false }); 
+                        parsedNotes.push({ type: 'touch', time: currentTime, pos: 8, isChord: false, state: 'waiting' }); 
                         continue;
                     }
 
-                    let slideMatch = el.match(/^([1-8])[a-zA-Z\-\^\<\>]+([1-8])/);
+                    let slideMatch = el.match(/^([1-8])([a-zA-Z\-\^\<\>]+)([1-8])(?:\[(.*?)\])?/);
                     if (slideMatch) {
-                        parsedNotes.push({ type: 'slide', time: currentTime, pos: parseInt(slideMatch[1]) - 1, isChord: false });
+                        let startPos = parseInt(slideMatch[1]) - 1;
+                        let endPos = parseInt(slideMatch[3]) - 1;
+                        let slideDur = slideMatch[4] ? parseDuration(slideMatch[4], currentBPM) : (240 / currentBPM) / 2;
+                        
+                        parsedNotes.push({ 
+                            type: 'slide_head', 
+                            time: currentTime, 
+                            pos: startPos, 
+                            endPos: endPos, 
+                            duration: slideDur,
+                            state: 'waiting', 
+                            isChord: false 
+                        });
                         continue;
                     }
 
                     let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
                     if (holdMatch) {
                         let duration = parseDuration(holdMatch[2], currentBPM);
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: parseInt(holdMatch[1]) - 1, duration: duration, isChord: false });
+                        parsedNotes.push({ type: 'hold', time: currentTime, pos: parseInt(holdMatch[1]) - 1, duration: duration, isChord: false, state: 'waiting' });
                         continue;
                     }
 
                     let tapMatch = el.match(/^([1-8])/);
                     if (tapMatch) {
-                        parsedNotes.push({ type: 'tap', time: currentTime, pos: parseInt(tapMatch[1]) - 1, isChord: false });
+                        parsedNotes.push({ type: 'tap', time: currentTime, pos: parseInt(tapMatch[1]) - 1, isChord: false, state: 'waiting' });
                     }
                 }
                 currentTime += (240 / currentBPM) / currentDivisor;
@@ -324,7 +335,7 @@
             return parsedNotes;
         }
 
-        // --- 4. GAME ENGINE & DRAWING ---
+        // --- 3. GAME ENGINE & DRAWING ---
         document.getElementById('startBtn').addEventListener('click', () => {
             let selectedDiff = document.getElementById('diffSelect').value;
             let chartData = availableCharts[selectedDiff].data;
@@ -358,13 +369,46 @@
         }
 
         function drawUI() {
+            // Draw Outer Ring
             ctx.beginPath();
             ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            buttons.forEach((btn) => {
+            // Draw Judgment Area Sector Lines (D1-D8 Slices) matching reference layout
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]); // Dashed divider lines between sectors
+            for (let i = 0; i < 8; i++) {
+                let angle = (i * 45) * (Math.PI / 180);
+                let innerX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.35);
+                let innerY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.35);
+                let outerX = CENTER.x + Math.cos(angle) * RING_RADIUS;
+                let outerY = CENTER.y + Math.sin(angle) * RING_RADIUS;
+
+                ctx.beginPath();
+                ctx.moveTo(innerX, innerY);
+                ctx.lineTo(outerX, outerY);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Draw Zone Labels (D1-D8) near the outer rim
+            ctx.font = `bold ${BUTTON_RADIUS * 0.35}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (let i = 0; i < 8; i++) {
+                let dAngle = (i * 45 + 22.5) * (Math.PI / 180);
+                let dX = CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.88);
+                let dY = CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.88);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.fillText(`D${i + 1}`, dX, dY);
+            }
+
+            // Draw Buttons (A1-A8 and Center C)
+            buttons.forEach((btn, index) => {
                 if (btn.type === 'ring') {
                     ctx.beginPath();
                     ctx.arc(btn.x, btn.y, BUTTON_RADIUS, 0, Math.PI * 2);
@@ -373,6 +417,14 @@
                     ctx.strokeStyle = '#0ff';
                     ctx.lineWidth = 2;
                     ctx.stroke();
+
+                    // Button Label (A1-A8)
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.font = `bold ${BUTTON_RADIUS * 0.45}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`A${index + 1}`, btn.x, btn.y);
+
                 } else if (btn.type === 'center') {
                     ctx.fillStyle = btn.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
                     ctx.fillRect(btn.x - BUTTON_RADIUS, btn.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
@@ -424,10 +476,53 @@
         function updateAndDrawNotes(elapsedTime) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
-                let timeUntilHit = note.time - elapsedTime;
                 let target = buttons[note.pos];
 
-                if (timeUntilHit < -0.16) {
+                if (note.type === 'hold' && note.state === 'holding') {
+                    if (elapsedTime >= note.time + note.duration) {
+                        spawnJudgement("CRITICAL", "#ffd700", target.angle);
+                        combo++;
+                        activeNotes.splice(i, 1);
+                        continue;
+                    }
+                    let startBtn = buttons[note.pos];
+                    ctx.beginPath();
+                    ctx.arc(startBtn.x, startBtn.y, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff00ff'; ctx.fill();
+                    ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 4; ctx.stroke();
+                    continue;
+                }
+
+                if (note.type === 'slide_travel' && note.state === 'sliding') {
+                    let travelProgress = (elapsedTime - note.time) / note.duration;
+                    if (travelProgress >= 1.0) {
+                        note.type = 'slide_destination';
+                        note.pos = note.endPos; 
+                        note.time = elapsedTime; 
+                        continue;
+                    }
+
+                    let startB = buttons[note.pos];
+                    let endB = buttons[note.endPos];
+                    ctx.beginPath();
+                    ctx.moveTo(startB.x, startB.y);
+                    ctx.lineTo(endB.x, endB.y);
+                    ctx.strokeStyle = 'rgba(0, 170, 255, 0.4)';
+                    ctx.lineWidth = 10;
+                    ctx.stroke();
+
+                    let starX = startB.x + (endB.x - startB.x) * travelProgress;
+                    let starY = startB.y + (endB.y - startB.y) * travelProgress;
+                    ctx.fillStyle = '#00aaff';
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
+                    continue;
+                }
+
+                let timeUntilHit = note.time - elapsedTime;
+                let missWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
+                if (timeUntilHit < -missWindow) {
                     spawnJudgement("MISS", "#888", target.angle);
                     combo = 0; 
                     activeNotes.splice(i, 1);
@@ -451,12 +546,18 @@
                         cx = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * progress);
                         cy = CENTER.y + Math.sin(target.angle) * (RING_RADIUS * progress);
 
-                        if (note.type === 'slide') {
+                        if (note.type === 'slide_head') {
                             ctx.fillStyle = slideColor;
                             ctx.strokeStyle = '#fff';
                             ctx.lineWidth = 2;
                             drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                         
+                        } else if (note.type === 'slide_destination') {
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, BUTTON_RADIUS * 0.8, 0, Math.PI * 2);
+                            ctx.fillStyle = '#00aaff'; ctx.fill();
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+
                         } else if (note.type === 'hold') {
                             let tailTimeUntil = (note.time + note.duration) - elapsedTime;
                             let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
@@ -485,7 +586,7 @@
             }
         }
 
-        // --- 5. HIT DETECTION & JUDGEMENT ---
+        // --- 4. JUDGEMENTS ---
         function spawnJudgement(text, color, angle) {
             let jX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.65);
             let jY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.65);
@@ -524,8 +625,8 @@
             }
         }
 
-        // --- 6. ADVANCED SLIDE-TO-HIT TOUCH LOGIC ---
-        let touchState = {}; // Tracks which buttons each finger is currently over
+        // --- 5. TOUCH & HOLD / SLIDE LOGIC ---
+        let touchState = {}; 
 
         function handleTouches(e) {
             e.preventDefault(); 
@@ -536,39 +637,37 @@
                 let tx = touch.clientX - rect.left;
                 let ty = touch.clientY - rect.top;
 
-                // If finger is lifted, clear it from memory
                 if (e.type === 'touchend' || e.type === 'touchcancel') {
+                    let releasedButtons = touchState[touch.identifier] || new Set();
+                    releasedButtons.forEach(posIndex => {
+                        checkHoldRelease(posIndex);
+                    });
                     delete touchState[touch.identifier];
                     continue;
                 }
 
-                // Check which buttons the finger is currently over
                 let currentlyTouched = new Set();
                 buttons.forEach((btn, index) => {
                     let dist = Math.hypot(tx - btn.x, ty - btn.y);
-                    if (dist < BUTTON_RADIUS * 2.5) { // Generous hitbox for easy sliding
+                    if (dist < BUTTON_RADIUS * 2.5) {
                         currentlyTouched.add(index);
                     }
                 });
 
-                // Compare with where the finger was previously
                 let previouslyTouched = touchState[touch.identifier] || new Set();
 
-                // If the finger has ENTERED a new button, trigger a hit
                 currentlyTouched.forEach(index => {
                     if (!previouslyTouched.has(index)) {
                         buttons[index].active = true;
                         checkHit(index);
-                        setTimeout(() => buttons[index].active = false, 100); // Visual flash
+                        setTimeout(() => buttons[index].active = false, 100);
                     }
                 });
 
-                // Update memory for next frame
                 touchState[touch.identifier] = currentlyTouched;
             }
         }
 
-        // Attach same handler to all touch events to enable smooth gliding
         canvas.addEventListener('touchstart', handleTouches, {passive: false});
         canvas.addEventListener('touchmove', handleTouches, {passive: false});
         canvas.addEventListener('touchend', handleTouches, {passive: false});
@@ -580,19 +679,60 @@
                 let note = activeNotes[i];
                 if (note.pos === posIndex) {
                     let diff = Math.abs(note.time - elapsedTime);
-                    
-                    if (diff <= 0.16) {
+                    let hitWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
+
+                    if (diff <= hitWindow) {
                         let target = buttons[note.pos];
-                        
-                        if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.angle); combo++; }
-                        else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.angle); combo++; }
-                        else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.angle); combo++; }
-                        else if (diff <= 0.15) { spawnJudgement("GOOD", "#00ff00", target.angle); combo++; }
-                        else { spawnJudgement("MISS", "#888", target.angle); combo = 0; }
-                        
-                        activeNotes.splice(i, 1);
-                        break; 
+
+                        if (note.type === 'hold') {
+                            note.state = 'holding';
+                            spawnJudgement("PERFECT", "#ffeb3b", target.angle);
+                            combo++;
+                            return; 
+                        } 
+                        else if (note.type === 'slide_head') {
+                            note.type = 'slide_travel';
+                            note.state = 'sliding';
+                            note.time = elapsedTime; 
+                            spawnJudgement("GREAT", "#ff8c00", target.angle);
+                            combo++;
+                            return;
+                        } 
+                        else if (note.type === 'slide_destination') {
+                            spawnJudgement("CRITICAL", "#ffd700", target.angle);
+                            combo++;
+                            activeNotes.splice(i, 1);
+                            break;
+                        }
+                        else {
+                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.angle); combo++; }
+                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.angle); combo++; }
+                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.angle); combo++; }
+                            else { spawnJudgement("GOOD", "#00ff00", target.angle); combo++; }
+                            
+                            activeNotes.splice(i, 1);
+                            break;
+                        }
                     }
+                }
+            }
+        }
+
+        function checkHoldRelease(posIndex) {
+            let elapsedTime = audio.currentTime;
+            for (let i = activeNotes.length - 1; i >= 0; i--) {
+                let note = activeNotes[i];
+                if (note.type === 'hold' && note.pos === posIndex && note.state === 'holding') {
+                    let target = buttons[note.pos];
+                    if (elapsedTime < note.time + note.duration - 0.15) {
+                        spawnJudgement("MISS", "#888", target.angle);
+                        combo = 0;
+                    } else {
+                        spawnJudgement("PERFECT", "#ffeb3b", target.angle);
+                        combo++;
+                    }
+                    activeNotes.splice(i, 1);
+                    break;
                 }
             }
         }
