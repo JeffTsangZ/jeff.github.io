@@ -81,7 +81,7 @@
         <div class="setting">
             <label>Note Speed: <span id="speedVal">5.0</span></label><br>
             <input type="range" id="speedSlider" min="1" max="10" step="0.1" value="5">
-            <p style="font-size: 12px; color: #aaa;">(1 = Slow, 10 = Very Fast)</p>
+            <p style="font-size: 12px; color: #aaa;">(1 = Slow, 10 = Ultra Fast)</p>
         </div>
 
         <button id="startBtn" disabled>Upload .adx to Start</button>
@@ -101,6 +101,7 @@
 
         let availableCharts = {};
         let globalAudioOffset = 0;
+        let initialBPM = 120;
 
         let notes = [];
         let activeNotes = [];
@@ -110,12 +111,18 @@
         let isPlaying = false;
         let combo = 0;
 
-        let APPROACH_TIME = 2.0; 
+        let gameStartTime = 0;
+        let preRollTime = 2.0;
+        let lastBeatIndex = -1;
+        let audioStarted = false;
+        let audioCtx = null;
+
+        let APPROACH_TIME = 1.0; 
         const speedSlider = document.getElementById('speedSlider');
         speedSlider.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('speedVal').innerText = val.toFixed(1);
-            APPROACH_TIME = 10.0 / val; // E.g., Speed 5 = 2.0s, Speed 10 = 1.0s
+            APPROACH_TIME = 5.0 / val; // Speed 5 = 1.0s, Speed 10 = 0.5s (2x faster)
         });
 
         document.getElementById('fullscreenBtn').addEventListener('click', () => {
@@ -235,6 +242,10 @@
             let blocks = cleanStr.split(',');
             let currentBPM = 120, currentDivisor = 4;
 
+            // Extract initial BPM for ready measure
+            let firstBpmMatch = chartStr.match(/\(([\d\.]+)\)/);
+            if (firstBpmMatch) initialBPM = parseFloat(firstBpmMatch[1]);
+
             for (let block of blocks) {
                 if (!block) { currentTime += (240 / currentBPM) / currentDivisor; continue; }
                 let bpmMatch = block.match(/\(([\d\.]+)\)/);
@@ -255,7 +266,13 @@
                     }
                     let slideMatch = el.match(/^([1-8])([a-zA-Z\-\^\<\>]+[A-E1-8C]+)(?:\[(.*?)\])?/);
                     if (slideMatch) {
-                        parsedNotes.push({ type: 'slide_head', time: currentTime, pos: `A${slideMatch[1]}`, pathStr: slideMatch[2], duration: slideMatch[3] ? parseDuration(slideMatch[3], currentBPM) : (240 / currentBPM) / 2, state: 'waiting', isChord: false }); continue;
+                        let dur = slideMatch[3] ? parseDuration(slideMatch[3], currentBPM) : (240 / currentBPM) / 2;
+                        let startPos = `A${slideMatch[1]}`;
+                        parsedNotes.push({ 
+                            type: 'slide_head', time: currentTime, pos: startPos, pathStr: slideMatch[2], duration: dur, state: 'waiting', isChord: false,
+                            slideData: calculateSlidePoints(slideMatch[2], startPos)
+                        }); 
+                        continue;
                     }
                     let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
                     if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
@@ -276,7 +293,7 @@
         }
 
         function calculateSlidePoints(pathStr, startPosKey) {
-            let nodes = [NODE_POSITIONS[startPosKey]];
+            let nodes = [NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y}];
             let normalizedStr = pathStr.replace(/v/g, '-C-'); 
             let regex = /([A-E][1-8]?|C|[1-8])/g;
             let match;
@@ -295,6 +312,23 @@
             return { points: nodes, segments: segments, totalLength: totalLen };
         }
 
+        function playClick(isHigh) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = isHigh ? 880 : 440;
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } catch(e) {}
+        }
+
         document.getElementById('startBtn').addEventListener('click', () => {
             let selectedDiff = document.getElementById('diffSelect').value;
             notes = parseChartString(availableCharts[selectedDiff].data, globalAudioOffset);
@@ -303,14 +337,44 @@
             canvas.style.display = 'block';
             
             activeNotes = JSON.parse(JSON.stringify(notes));
+            // Re-bind slideData objects after deep copy
+            activeNotes.forEach(n => {
+                if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
+            });
+
             combo = 0; 
+            preRollTime = 240 / initialBPM; // 1 full 4/4 measure ready time
+            gameStartTime = performance.now();
+            lastBeatIndex = -1;
+            audioStarted = false;
+
             if (document.getElementById('bgVideo').src) document.getElementById('bgVideo').currentTime = 0;
-            audio.play(); isPlaying = true; requestAnimationFrame(gameLoop);
+            isPlaying = true; 
+            requestAnimationFrame(gameLoop);
         });
 
         function gameLoop() {
             if (!isPlaying) return;
-            let elapsedTime = audio.currentTime;
+            let now = performance.now();
+            let elapsedTime = (now - gameStartTime) / 1000 - preRollTime;
+
+            // Handle 1-measure ready metronome pre-roll
+            if (elapsedTime < 0) {
+                let beatInterval = 60 / initialBPM;
+                let timeIntoPreRoll = preRollTime + elapsedTime;
+                let beatIndex = Math.floor(timeIntoPreRoll / beatInterval);
+                if (beatIndex > lastBeatIndex && beatIndex < 4) {
+                    lastBeatIndex = beatIndex;
+                    playClick(beatIndex === 0);
+                }
+            } else {
+                if (!audioStarted) {
+                    audio.currentTime = 0;
+                    audio.play().catch(e => console.log(e));
+                    audioStarted = true;
+                }
+                elapsedTime = audio.currentTime;
+            }
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawUI(); drawCombo(); 
@@ -414,6 +478,28 @@
                 let target = NODE_POSITIONS[note.pos];
                 if (!target && note.type !== 'slide_destination' && note.type !== 'slide_travel') continue;
 
+                let timeUntilHit = note.time - elapsedTime;
+
+                // 1. Display Slide Track Early (during approach/waiting phase)
+                if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
+                    let pData = note.slideData;
+                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
+                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
+                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.35)' : 'rgba(0, 170, 255, 0.35)';
+                    ctx.lineWidth = 8; ctx.stroke();
+                }
+
+                // 2. Slide Star Miss Check (Missing star does NOT block slide track)
+                if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
+                    spawnJudgement("MISS", "#888", target.x, target.y);
+                    combo = 0;
+                    // Automatically transition to sliding track even if star was missed
+                    note.type = 'slide_travel';
+                    note.state = 'sliding';
+                    note.time = elapsedTime;
+                }
+
+                // 3. Active Slide Travel Logic
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
                     let travelProgress = (elapsedTime - note.time) / note.duration;
                     if (travelProgress >= 1.0) {
@@ -426,7 +512,7 @@
                     let pData = note.slideData;
                     ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
                     for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 170, 255, 0.4)';
+                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.7)' : 'rgba(0, 170, 255, 0.7)';
                     ctx.lineWidth = 10; ctx.stroke();
 
                     let currentDist = travelProgress * pData.totalLength;
@@ -446,11 +532,10 @@
                     continue;
                 }
 
-                let timeUntilHit = note.time - elapsedTime;
                 let missWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
                 let isHolding = (note.state === 'holding');
 
-                if (!isHolding && timeUntilHit < -missWindow) {
+                if (!isHolding && note.type !== 'slide_head' && timeUntilHit < -missWindow) {
                     spawnJudgement("MISS", "#888", note.finalX || target.x, note.finalY || target.y);
                     combo = 0; activeNotes.splice(i, 1); continue;
                 }
@@ -500,11 +585,11 @@
                         let holdColor = note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)';
                         drawHexagonBar(tailX, tailY, headX, headY, holdColor);
                         
-                    } else if (note.type === 'slide_head') {
+                    } else if (note.type === 'slide_head' && note.state === 'waiting') {
                         ctx.fillStyle = note.isChord ? cYellow : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                         drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                     
-                    } else { // Tap
+                    } else if (note.type === 'tap') {
                         ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
                         ctx.fillStyle = note.isChord ? cYellow : '#ff00ff'; ctx.fill(); 
                         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
@@ -579,15 +664,14 @@
                         if (note.type === 'hold' || note.type === 'hold_touch') {
                             note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
                             combo++; return; 
-                        } else if (note.type === 'slide_head') {
+                        } else if (note.type === 'slide_head' && note.state === 'waiting') {
                             note.type = 'slide_travel'; note.state = 'sliding';
-                            note.slideData = calculateSlidePoints(note.pathStr, note.pos);
                             note.time = elapsedTime; 
-                            spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; return;
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
                         } else if (note.type === 'slide_destination') {
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
                             combo++; activeNotes.splice(i, 1); break;
-                        } else {
+                        } else if (note.type === 'tap' || note.type === 'touch') {
                             if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
                             else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
                             else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
