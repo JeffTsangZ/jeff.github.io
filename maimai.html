@@ -122,7 +122,7 @@
         speedSlider.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('speedVal').innerText = val.toFixed(1);
-            APPROACH_TIME = 5.0 / val; // Speed 5 = 1.0s, Speed 10 = 0.5s (2x faster)
+            APPROACH_TIME = 5.0 / val; 
         });
 
         document.getElementById('fullscreenBtn').addEventListener('click', () => {
@@ -242,7 +242,6 @@
             let blocks = cleanStr.split(',');
             let currentBPM = 120, currentDivisor = 4;
 
-            // Extract initial BPM for ready measure
             let firstBpmMatch = chartStr.match(/\(([\d\.]+)\)/);
             if (firstBpmMatch) initialBPM = parseFloat(firstBpmMatch[1]);
 
@@ -293,14 +292,40 @@
         }
 
         function calculateSlidePoints(pathStr, startPosKey) {
+            let startIndex = parseInt(startPosKey.replace('A', '')) || 1;
+            let isArc = /[^\-\d]/.test(pathStr) && !pathStr.includes('C');
+            
             let nodes = [NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y}];
-            let normalizedStr = pathStr.replace(/v/g, '-C-'); 
-            let regex = /([A-E][1-8]?|C|[1-8])/g;
-            let match;
-            while ((match = regex.exec(normalizedStr)) !== null) {
-                let key = match[1];
-                if (/^[1-8]$/.test(key)) key = `A${key}`; 
-                if (NODE_POSITIONS[key]) nodes.push(NODE_POSITIONS[key]);
+            let nums = pathStr.match(/[1-8]/g);
+
+            if (nums && nums.length > 0) {
+                let endNum = parseInt(nums[nums.length - 1]);
+                if (isArc) {
+                    let startAngle = -90 + (startIndex - 1) * 45;
+                    let endAngle = -90 + (endNum - 1) * 45;
+                    let diff = endAngle - startAngle;
+                    if (diff > 180) diff -= 360;
+                    if (diff < -180) diff += 360;
+                    
+                    let steps = 12;
+                    for (let s = 1; s <= steps; s++) {
+                        let ang = (startAngle + (diff * (s / steps))) * (Math.PI / 180);
+                        nodes.push({
+                            x: CENTER.x + Math.cos(ang) * RING_RADIUS,
+                            y: CENTER.y + Math.sin(ang) * RING_RADIUS,
+                            type: 'waypoint'
+                        });
+                    }
+                } else {
+                    let normalizedStr = pathStr.replace(/v/g, '-C-'); 
+                    let regex = /([A-E][1-8]?|C|[1-8])/g;
+                    let match;
+                    while ((match = regex.exec(normalizedStr)) !== null) {
+                        let key = match[1];
+                        if (/^[1-8]$/.test(key)) key = `A${key}`; 
+                        if (NODE_POSITIONS[key]) nodes.push(NODE_POSITIONS[key]);
+                    }
+                }
             }
             if (nodes.length === 1) nodes.push(NODE_POSITIONS['C']); 
 
@@ -337,13 +362,12 @@
             canvas.style.display = 'block';
             
             activeNotes = JSON.parse(JSON.stringify(notes));
-            // Re-bind slideData objects after deep copy
             activeNotes.forEach(n => {
                 if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
             });
 
             combo = 0; 
-            preRollTime = 240 / initialBPM; // 1 full 4/4 measure ready time
+            preRollTime = 240 / initialBPM; 
             gameStartTime = performance.now();
             lastBeatIndex = -1;
             audioStarted = false;
@@ -358,7 +382,6 @@
             let now = performance.now();
             let elapsedTime = (now - gameStartTime) / 1000 - preRollTime;
 
-            // Handle 1-measure ready metronome pre-roll
             if (elapsedTime < 0) {
                 let beatInterval = 60 / initialBPM;
                 let timeIntoPreRoll = preRollTime + elapsedTime;
@@ -480,7 +503,7 @@
 
                 let timeUntilHit = note.time - elapsedTime;
 
-                // 1. Display Slide Track Early (during approach/waiting phase)
+                // Display Slide Track Early
                 if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
                     let pData = note.slideData;
                     ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
@@ -489,17 +512,16 @@
                     ctx.lineWidth = 8; ctx.stroke();
                 }
 
-                // 2. Slide Star Miss Check (Missing star does NOT block slide track)
+                // Slide Star Miss Check (does not block slide track)
                 if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
                     spawnJudgement("MISS", "#888", target.x, target.y);
                     combo = 0;
-                    // Automatically transition to sliding track even if star was missed
                     note.type = 'slide_travel';
                     note.state = 'sliding';
                     note.time = elapsedTime;
                 }
 
-                // 3. Active Slide Travel Logic
+                // Active Slide Travel & Blue Arrows Waypoints
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
                     let travelProgress = (elapsedTime - note.time) / note.duration;
                     if (travelProgress >= 1.0) {
@@ -514,6 +536,13 @@
                     for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
                     ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.7)' : 'rgba(0, 170, 255, 0.7)';
                     ctx.lineWidth = 10; ctx.stroke();
+
+                    // Render judgment blue arrows along the path
+                    for(let w = 1; w < pData.points.length - 1; w++) {
+                        let wp = pData.points[w];
+                        ctx.beginPath(); ctx.arc(wp.x, wp.y, BUTTON_RADIUS * 0.25, 0, Math.PI * 2);
+                        ctx.fillStyle = '#00ffff'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+                    }
 
                     let currentDist = travelProgress * pData.totalLength;
                     let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
@@ -552,8 +581,9 @@
                     let cYellow = '#ffff00';
 
                     if (note.type === 'slide_destination') {
-                        ctx.beginPath(); ctx.arc(note.finalX, note.finalY, BUTTON_RADIUS * 0.8, 0, Math.PI * 2);
-                        ctx.fillStyle = note.isChord ? cYellow : '#00aaff'; ctx.fill(); 
+                        // Final destination node determining the real slide judgment
+                        ctx.beginPath(); ctx.arc(note.finalX, note.finalY, BUTTON_RADIUS * 0.9, 0, Math.PI * 2);
+                        ctx.fillStyle = note.isChord ? cYellow : '#ff00ff'; ctx.fill(); 
                         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
                     
                     } else if (note.type === 'touch' || note.type === 'hold_touch') {
@@ -669,8 +699,10 @@
                             note.time = elapsedTime; 
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
                         } else if (note.type === 'slide_destination') {
-                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
-                            combo++; activeNotes.splice(i, 1); break;
+                            if (diff <= 0.05) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
+                            else if (diff <= 0.12) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
+                            else { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
+                            activeNotes.splice(i, 1); break;
                         } else if (note.type === 'tap' || note.type === 'touch') {
                             if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
                             else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
