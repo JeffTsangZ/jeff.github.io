@@ -429,6 +429,41 @@
             } catch(e) {}
         }
 
+        function playHitSFX(judgement) {
+            if (judgement === 'MISS') return; // Miss has no sound effect
+
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+
+                if (judgement === 'CRITICAL' || judgement === 'PERFECT') {
+                    // Type 1 Sound Effect: High bright chime
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1056, audioCtx.currentTime); // C6
+                    osc.frequency.exponentialRampToValueAtTime(1584, audioCtx.currentTime + 0.06);
+
+                    gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+                } else {
+                    // Type 2 Sound Effect: Other judgements (GREAT, GOOD)
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.exponentialRampToValueAtTime(392, audioCtx.currentTime + 0.07);
+
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.07);
+                }
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.07);
+            } catch(e) {}
+        }
+
         document.getElementById('startBtn').addEventListener('click', () => {
             let selectedDiff = document.getElementById('diffSelect').value;
             notes = parseChartString(availableCharts[selectedDiff].data, globalAudioOffset);
@@ -677,21 +712,18 @@
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         
-                        // Sharp high-visibility neon coloring for touch notes
                         let tOutline = note.isChord ? '#ffff00' : '#00ffff';
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
                         ctx.save();
                         ctx.translate(target.x, target.y);
-                        ctx.rotate(Math.PI / 4); // 45 degree rotated square layout
+                        ctx.rotate(Math.PI / 4);
                         
                         if (note.type === 'hold_touch') {
-                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time
                             let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
                             let baseSquareSize = BUTTON_RADIUS * 1.5;
                             let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
 
-                            // 4-Color multi-segment quad rendering around the rotating square border
                             let quadColors = ['#ff0055', '#00ffcc', '#ffcc00', '#9900ff'];
                             let angles = [0, Math.PI/2, Math.PI, Math.PI*3/2];
                             for(let q = 0; q < 4; q++) {
@@ -708,7 +740,6 @@
                             ctx.lineWidth = 4;
                             ctx.strokeRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
                         } else {
-                            // Standard Sharp Touch Note (45-degree rotated square)
                             ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
                             ctx.strokeRect(-size/2, -size/2, size, size);
                             ctx.fillStyle = tFill;
@@ -742,7 +773,10 @@
             }
         }
 
-        function spawnJudgement(text, color, jX, jY) { judgements.push({ text: text, color: color, x: jX, y: jY - 25, spawnTime: audio.currentTime }); }
+        function spawnJudgement(text, color, jX, jY) { 
+            judgements.push({ text: text, color: color, x: jX, y: jY - 25, spawnTime: audio.currentTime }); 
+            playHitSFX(text);
+        }
         
         function drawJudgements(elapsedTime) {
             for (let i = judgements.length - 1; i >= 0; i--) {
