@@ -255,32 +255,61 @@
                 let elements = block.split('/');
                 for (let el of elements) {
                     if (!el) continue;
+
                     let touchHoldMatch = el.match(/^([A-E][1-8]?|C)h\[(.*?)\]/);
                     if (touchHoldMatch) {
                         parsedNotes.push({ type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], duration: parseDuration(touchHoldMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
                     }
+
                     let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
                     if (holdMatch) {
                         parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: parseDuration(holdMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
                     }
-                    let slideMatch = el.match(/^([1-8])\*?([a-zA-Z\-\^\<\>]+[A-E1-8C]+)(?:\[(.*?)\])?/);
-                    if (slideMatch) {
-                        let dur = slideMatch[3] ? parseDuration(slideMatch[3], currentBPM) : (240 / currentBPM) / 2;
-                        let startPos = `A${slideMatch[1]}`;
-                        parsedNotes.push({ 
-                            type: 'slide_head', time: currentTime, pos: startPos, pathStr: slideMatch[2], duration: dur, state: 'waiting', isChord: false,
-                            slideData: calculateSlidePoints(slideMatch[2], startPos)
-                        }); 
+
+                    // Slide Path Parse (Multiple segments parsing fix)
+                    let slideHeadMatch = el.match(/^([1-8])/);
+                    if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
+                        let headPos = `A${slideHeadMatch[1]}`;
+                        let slidesStr = el.substring(1);
+                        if (slidesStr.startsWith('*')) slidesStr = slidesStr.substring(1);
+
+                        let slideParts = slidesStr.split('*');
+                        
+                        for (let part of slideParts) {
+                            if (!part) continue;
+                            let durMatch = part.match(/\[(.*?)\]$/);
+                            let durStr = durMatch ? durMatch[1] : null;
+                            let pathStr = durMatch ? part.replace(/\[.*?\]$/, '') : part;
+                            
+                            let dur = durStr ? parseDuration(durStr, currentBPM) : (240 / currentBPM) / 2;
+                            
+                            parsedNotes.push({ 
+                                type: 'slide_head', time: currentTime, pos: headPos, pathStr: pathStr, duration: dur, state: 'waiting', isChord: false,
+                                slideData: calculateSlidePoints(pathStr, headPos)
+                            });
+                        }
                         continue;
                     }
+
                     let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
                     if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
-                    let tapMatch = el.match(/^([1-8])\*?$/);
-                    if (tapMatch) { parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${tapMatch[1]}`, isChord: false, state: 'waiting' }); }
+
+                    // Tap / Chord Parsing fixes e.g "12" translating to both tap 1 and tap 2
+                    let tapMatch = el.match(/^([1-8\*]+)$/);
+                    if (tapMatch) {
+                        let taps = el.replace(/\*/g, '').split('');
+                        for (let t of taps) {
+                            if (/[1-8]/.test(t)) {
+                                parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${t}`, isChord: false, state: 'waiting' });
+                            }
+                        }
+                        continue;
+                    }
                 }
                 currentTime += (240 / currentBPM) / currentDivisor;
             }
 
+            // Flag Chords
             let timeGroups = {};
             parsedNotes.forEach(note => {
                 let t = note.time.toFixed(4); 
@@ -292,86 +321,102 @@
         }
 
         function calculateSlidePoints(pathStr, startPosKey) {
-            let startNode = NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y};
             let cleaned = pathStr.trim();
-            
-            let isLoop = /[pqsz]/.test(cleaned) || cleaned.includes('p') || cleaned.includes('q') || cleaned.includes('s') || cleaned.includes('z');
-            let isArc = cleaned.includes('>') || cleaned.includes('<');
-            let isInward = cleaned.includes('v') || cleaned.includes('^') || cleaned.includes('-C-');
-
-            let regex = /([A-E][1-8]?|C|[1-8])/g;
+            let segments = [];
+            let regex = /([a-zA-Z\-\^\<\>]+)([A-E][1-8]?|C|[1-8])/g;
             let match;
-            let keys = [startPosKey];
-            while ((match = regex.exec(cleaned)) !== null) {
-                let key = match[1];
-                if (/^[1-8]$/.test(key)) key = `A${key}`;
-                keys.push(key);
+
+            // Gather all track shapes and end-nodes in array
+            while((match = regex.exec(cleaned)) !== null) {
+                let shape = match[1];
+                let endKey = match[2];
+                if (/^[1-8]$/.test(endKey)) endKey = `A${endKey}`;
+                segments.push({shape, endKey});
             }
-            if (keys.length < 2) keys.push(startPosKey);
 
-            let detailedPoints = [startNode];
-
-            if (isLoop) {
-                let endKey = keys[keys.length - 1];
-                let endNode = NODE_POSITIONS[endKey] || startNode;
-                let steps = 40;
-                for (let s = 1; s <= steps; s++) {
-                    let t = s / steps;
-                    let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
-                    let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
-                    let x = startNode.x * (1 - t) + endNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
-                    let y = startNode.y * (1 - t) + endNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
-                    detailedPoints.push({ x: x, y: y });
-                }
-            } else if (isArc) {
-                let k1 = keys[0], k2 = keys[keys.length - 1];
-                let idx1 = parseInt(k1.substring(1)) - 1;
-                let idx2 = parseInt(k2.substring(1)) - 1;
-                let angle1 = -90 + idx1 * 45 + 22.5;
-                let angle2 = -90 + idx2 * 45 + 22.5;
-                
-                let diff = angle2 - angle1;
-                if (cleaned.includes('<') && diff > 0) diff -= 360;
-                if (cleaned.includes('>') && diff < 0) diff += 360;
-                if (!cleaned.includes('<') && !cleaned.includes('>')) {
-                    if (diff > 180) diff -= 360;
-                    if (diff < -180) diff += 360;
-                }
-                
-                let steps = 25;
-                for (let s = 1; s <= steps; s++) {
-                    let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
-                    detailedPoints.push({
-                        x: CENTER.x + Math.cos(a) * RING_RADIUS,
-                        y: CENTER.y + Math.sin(a) * RING_RADIUS
-                    });
-                }
-            } else if (isInward) {
-                let endKey = keys[keys.length - 1];
-                let endNode = NODE_POSITIONS[endKey] || startNode;
-                let steps = 25;
-                for (let s = 1; s <= steps; s++) {
-                    let t = s / steps;
-                    let bx = CENTER.x, by = CENTER.y;
-                    let x = (1 - t) * (1 - t) * startNode.x + 2 * (1 - t) * t * bx + t * t * endNode.x;
-                    let y = (1 - t) * (1 - t) * startNode.y + 2 * (1 - t) * t * by + t * t * endNode.y;
-                    detailedPoints.push({ x: x, y: y });
-                }
-            } else {
-                for (let i = 0; i < keys.length - 1; i++) {
-                    let k1 = keys[i], k2 = keys[i+1];
-                    let n1 = NODE_POSITIONS[k1], n2 = NODE_POSITIONS[k2];
-                    if (!n1 || !n2) continue;
-                    detailedPoints.push(n2);
+            if (segments.length === 0) {
+                let fallbackMatch = cleaned.match(/([A-E][1-8]?|C|[1-8])/);
+                if (fallbackMatch) {
+                    let k = fallbackMatch[1];
+                    if (/^[1-8]$/.test(k)) k = `A${k}`;
+                    segments.push({shape: '-', endKey: k});
+                } else {
+                    segments.push({shape: '-', endKey: startPosKey});
                 }
             }
 
-            let segments = [], totalLen = 0;
+            let detailedPoints = [NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y}];
+            let currentStart = startPosKey;
+
+            for (let seg of segments) {
+                let sNode = NODE_POSITIONS[currentStart] || CENTER;
+                let eNode = NODE_POSITIONS[seg.endKey] || CENTER;
+                let shape = seg.shape;
+                
+                if (shape.includes('<') || shape.includes('>')) {
+                    // Geometry parser for < (CCW Arc) and > (CW Arc) 
+                    let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
+                    let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
+                    if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
+                    
+                    let angle1 = -90 + idx1 * 45 + 22.5;
+                    let angle2 = -90 + idx2 * 45 + 22.5;
+                    let diff = angle2 - angle1;
+                    
+                    while(diff > 180) diff -= 360;
+                    while(diff <= -180) diff += 360;
+
+                    if (shape.includes('<')) {
+                        if (diff > 0) diff -= 360;
+                        else if (diff === 0) diff = -360;
+                    } else if (shape.includes('>')) {
+                        if (diff < 0) diff += 360;
+                        else if (diff === 0) diff = 360;
+                    }
+                    
+                    let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
+                    for (let s = 1; s <= steps; s++) {
+                        let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
+                        detailedPoints.push({
+                            x: CENTER.x + Math.cos(a) * RING_RADIUS,
+                            y: CENTER.y + Math.sin(a) * RING_RADIUS
+                        });
+                    }
+                } else if (shape.includes('^') || shape.includes('v')) {
+                    // Inner Curved Lines
+                    let steps = 25;
+                    for (let s = 1; s <= steps; s++) {
+                        let t = s / steps;
+                        let bx = CENTER.x, by = CENTER.y;
+                        let x = (1 - t) * (1 - t) * sNode.x + 2 * (1 - t) * t * bx + t * t * eNode.x;
+                        let y = (1 - t) * (1 - t) * sNode.y + 2 * (1 - t) * t * by + t * t * eNode.y;
+                        detailedPoints.push({ x: x, y: y });
+                    }
+                } else if (/[pqsz]/.test(shape)) {
+                    // Loop Tracks / Zigzag Tracks
+                    let steps = 30;
+                    for (let s = 1; s <= steps; s++) {
+                        let t = s / steps;
+                        let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
+                        let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
+                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
+                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
+                        detailedPoints.push({ x: x, y: y });
+                    }
+                } else {
+                    // Straight Line Fallback
+                    detailedPoints.push({x: eNode.x, y: eNode.y});
+                }
+                
+                currentStart = seg.endKey;
+            }
+
+            let finalSegments = [], totalLen = 0;
             for(let i=0; i<detailedPoints.length-1; i++) {
                 let len = Math.hypot(detailedPoints[i+1].x - detailedPoints[i].x, detailedPoints[i+1].y - detailedPoints[i].y);
-                segments.push(len); totalLen += len;
+                finalSegments.push(len); totalLen += len;
             }
-            return { points: detailedPoints, segments: segments, totalLength: totalLen };
+            return { points: detailedPoints, segments: finalSegments, totalLength: totalLen };
         }
 
         function playClick(isHigh) {
@@ -523,6 +568,7 @@
         }
 
         function spawnClickEffect(x, y, color = '#0ff') { clickEffects.push({ x: x, y: y, radius: BUTTON_RADIUS * 0.5, maxRadius: BUTTON_RADIUS * 1.8, alpha: 1.0, color: color }); }
+        
         function drawClickEffects() {
             for (let i = clickEffects.length - 1; i >= 0; i--) {
                 let eff = clickEffects[i]; eff.radius += 3; eff.alpha -= 0.06;
@@ -536,7 +582,7 @@
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
                 let target = NODE_POSITIONS[note.pos];
-                if (!target && note.type !== 'slide_destination' && note.type !== 'slide_travel') continue;
+                if (!target && note.type !== 'slide_travel') continue;
 
                 let timeUntilHit = note.time - elapsedTime;
 
@@ -556,19 +602,17 @@
                     combo = 0;
                     note.type = 'slide_travel';
                     note.state = 'sliding';
+                    
+                    let lastNode = note.slideData.points[note.slideData.points.length-1];
+                    note.finalX = lastNode.x; note.finalY = lastNode.y;
                     note.time = elapsedTime;
                 }
 
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
                     let travelProgress = (elapsedTime - note.time) / note.duration;
-                    if (travelProgress >= 1.0) {
-                        note.type = 'slide_destination'; note.pos = 'end_placeholder';
-                        let lastNode = note.slideData.points[note.slideData.points.length-1];
-                        note.finalX = lastNode.x; note.finalY = lastNode.y;
-                        note.time = elapsedTime; continue;
-                    }
-
                     let pData = note.slideData;
+                    
+                    // Draw Track Background
                     ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
                     for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
                     ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(0, 180, 255, 0.8)';
@@ -576,6 +620,7 @@
 
                     let currentDist = travelProgress * pData.totalLength;
                     let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
+                    
                     for(let s = 0; s < pData.segments.length; s++) {
                         if (currentDist <= accum + pData.segments[s]) {
                             let localP = (currentDist - accum) / pData.segments[s];
@@ -586,16 +631,48 @@
                         accum += pData.segments[s];
                     }
 
+                    // Slide Hit-Testing Logic (Interact Tracing Tracker)
+                    Object.keys(activeTouches).forEach(id => {
+                        let tx = activeTouches[id].x;
+                        let ty = activeTouches[id].y;
+                        
+                        // Finger near the ending area limits bounds
+                        if (Math.hypot(tx - note.finalX, ty - note.finalY) < BUTTON_RADIUS * 2.5) {
+                            note.reachedEnd = true;
+                        }
+                        // Finger tracing actively over the star 
+                        if (Math.hypot(tx - starX, ty - starY) < BUTTON_RADIUS * 2.5) {
+                            note.traced = true;
+                        }
+                    });
+
+                    // Evaluate Slide Judgement (Resolves Issue #3 entirely)
+                    if (travelProgress >= 1.0) {
+                        if (note.reachedEnd) {
+                            spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
+                            combo++;
+                        } else if (note.traced) {
+                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
+                            combo++;
+                        } else {
+                            spawnJudgement("MISS", "#888", note.finalX, note.finalY);
+                            combo = 0;
+                        }
+                        activeNotes.splice(i, 1);
+                        continue;
+                    }
+
+                    // Draw the Star
                     ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                     drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
                     continue;
                 }
 
-                let missWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
+                let missWindow = 0.16;
                 let isHolding = (note.state === 'holding');
 
                 if (!isHolding && note.type !== 'slide_head' && timeUntilHit < -missWindow) {
-                    spawnJudgement("MISS", "#888", note.finalX || target.x, note.finalY || target.y);
+                    spawnJudgement("MISS", "#888", target.x, target.y);
                     combo = 0; activeNotes.splice(i, 1); continue;
                 }
 
@@ -610,12 +687,7 @@
                     let cy = target ? CENTER.y + (target.y - CENTER.y) * progress : note.finalY;
                     let cYellow = '#ffff00';
 
-                    if (note.type === 'slide_destination') {
-                        ctx.beginPath(); ctx.arc(note.finalX, note.finalY, BUTTON_RADIUS * 0.8, 0, Math.PI * 2);
-                        ctx.fillStyle = note.isChord ? cYellow : '#00aaff'; ctx.fill(); 
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-                    
-                    } else if (note.type === 'touch' || note.type === 'hold_touch') {
+                    if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         let tOutline = note.isChord ? `rgba(255, 255, 0, ${progress})` : `rgba(0, 200, 255, ${progress})`;
                         let tFill = note.isChord ? `rgba(255, 255, 0, ${progress * 0.5})` : `rgba(0, 150, 255, ${progress * 0.5})`;
@@ -657,6 +729,7 @@
         }
 
         function spawnJudgement(text, color, jX, jY) { judgements.push({ text: text, color: color, x: jX, y: jY - 25, spawnTime: audio.currentTime }); }
+        
         function drawJudgements(elapsedTime) {
             for (let i = judgements.length - 1; i >= 0; i--) {
                 let j = judgements[i]; let age = elapsedTime - j.spawnTime;
@@ -671,6 +744,8 @@
         }
 
         let touchState = {}; 
+        let activeTouches = {};
+
         function handleTouches(e) {
             e.preventDefault(); 
             let rect = canvas.getBoundingClientRect();
@@ -682,9 +757,14 @@
                 if (e.type === 'touchend' || e.type === 'touchcancel') {
                     let releasedNodes = touchState[touch.identifier] || new Set();
                     releasedNodes.forEach(nodeKey => checkHoldRelease(nodeKey));
-                    checkSlideDestinationRelease(tx, ty);
-                    delete touchState[touch.identifier]; continue;
+                    
+                    delete activeTouches[touch.identifier];
+                    delete touchState[touch.identifier]; 
+                    continue;
                 }
+
+                // Append actively maintained touch coordinations to memory (used in slide intersection checks)
+                activeTouches[touch.identifier] = { x: tx, y: ty };
 
                 let currentlyTouched = new Set();
                 Object.keys(NODE_POSITIONS).forEach(key => {
@@ -726,6 +806,11 @@
                         } else if (note.type === 'slide_head' && note.state === 'waiting') {
                             note.type = 'slide_travel'; note.state = 'sliding';
                             note.time = elapsedTime; 
+                            
+                            // Initialize trace target node details
+                            let lastNode = note.slideData.points[note.slideData.points.length-1];
+                            note.finalX = lastNode.x; note.finalY = lastNode.y;
+                            
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
                         } else if (note.type === 'tap' || note.type === 'touch') {
                             if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
@@ -735,33 +820,6 @@
                             activeNotes.splice(i, 1); break;
                         }
                     }
-                }
-            }
-        }
-
-        function checkSlideDestinationRelease(tx, ty) {
-            let elapsedTime = audio.currentTime;
-            for (let i = 0; i < activeNotes.length; i++) {
-                let note = activeNotes[i];
-                if (note.type === 'slide_destination') {
-                    let dl = Math.hypot(tx - note.finalX, ty - note.finalY);
-                    let diff = Math.abs(note.time - elapsedTime);
-                    
-                    if (dl <= BUTTON_RADIUS * 1.5) {
-                        if (dl <= BUTTON_RADIUS * 0.4 && diff <= 0.15) {
-                            spawnJudgement("CRITICAL", "#ffd700", note.finalX, note.finalY);
-                        } else if (dl <= BUTTON_RADIUS * 0.8) {
-                            spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
-                        } else {
-                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
-                        }
-                        combo++;
-                    } else {
-                        spawnJudgement("MISS", "#888", note.finalX, note.finalY);
-                        combo = 0;
-                    }
-                    activeNotes.splice(i, 1);
-                    break;
                 }
             }
         }
