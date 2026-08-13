@@ -317,7 +317,6 @@
             return parsedNotes;
         }
 
-        // Corrected Slide Path and Direction Calculator matching rule requirements
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -357,7 +356,6 @@
                 let angle1 = -90 + idx1 * 45 + 22.5;
                 let angle2 = -90 + idx2 * 45 + 22.5;
 
-                // Handle Short Arcs (^ or implicit short span arcs) and explicit direction forces (< and >)
                 if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                     let diff = angle2 - angle1;
                     
@@ -365,16 +363,11 @@
                     while(diff <= -180) diff += 360;
 
                     if (shape.includes('<')) {
-                        // Anticlockwise / Left Curve forces backward traversal through descending button numbers
                         if (diff > 0) diff -= 360;
                         else if (diff === 0) diff = -360;
                     } else if (shape.includes('>')) {
-                        // Clockwise / Right Curve forces forward traversal through ascending button numbers
                         if (diff < 0) diff += 360;
                         else if (diff === 0) diff = 360;
-                    } else if (shape.includes('^')) {
-                        // Short arc rule: Automatically uses the shorter path across the outer ring
-                        // diff is already normalized within [-180, 180] which naturally takes the shorter side.
                     }
                     
                     let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
@@ -683,18 +676,45 @@
 
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
-                        let tOutline = note.isChord ? `rgba(255, 255, 0, ${progress})` : `rgba(0, 200, 255, ${progress})`;
-                        let tFill = note.isChord ? `rgba(255, 255, 0, ${progress * 0.5})` : `rgba(0, 150, 255, ${progress * 0.5})`;
                         
-                        ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
-                        ctx.strokeRect(target.x - size/2, target.y - size/2, size, size);
-                        ctx.fillStyle = tFill;
-                        ctx.fillRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
+                        // Sharp high-visibility neon coloring for touch notes
+                        let tOutline = note.isChord ? '#ffff00' : '#00ffff';
+                        let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
-                        if(note.type === 'hold_touch') {
-                            ctx.strokeStyle = note.isChord ? cYellow : '#ff0000'; ctx.lineWidth = 3;
-                            ctx.strokeRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
+                        ctx.save();
+                        ctx.translate(target.x, target.y);
+                        ctx.rotate(Math.PI / 4); // 45 degree rotated square layout
+                        
+                        if (note.type === 'hold_touch') {
+                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time
+                            let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
+                            let baseSquareSize = BUTTON_RADIUS * 1.5;
+                            let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
+
+                            // 4-Color multi-segment quad rendering around the rotating square border
+                            let quadColors = ['#ff0055', '#00ffcc', '#ffcc00', '#9900ff'];
+                            let angles = [0, Math.PI/2, Math.PI, Math.PI*3/2];
+                            for(let q = 0; q < 4; q++) {
+                                ctx.beginPath();
+                                ctx.arc(0, 0, currentRadius, angles[q], angles[q] + Math.PI/2);
+                                ctx.strokeStyle = quadColors[q];
+                                ctx.lineWidth = 6;
+                                ctx.stroke();
+                            }
+
+                            ctx.fillStyle = tFill;
+                            ctx.fillRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
+                            ctx.strokeStyle = tOutline;
+                            ctx.lineWidth = 4;
+                            ctx.strokeRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
+                        } else {
+                            // Standard Sharp Touch Note (45-degree rotated square)
+                            ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
+                            ctx.strokeRect(-size/2, -size/2, size, size);
+                            ctx.fillStyle = tFill;
+                            ctx.fillRect(-BUTTON_RADIUS/1.2, -BUTTON_RADIUS/1.2, BUTTON_RADIUS*1.5, BUTTON_RADIUS*1.5);
                         }
+                        ctx.restore();
 
                     } else if (note.type === 'hold') {
                         let tailTimeUntil = (note.time + note.duration) - elapsedTime;
