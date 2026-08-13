@@ -317,6 +317,7 @@
             return parsedNotes;
         }
 
+        // Corrected Slide Path and Direction Calculator matching rule requirements
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -349,24 +350,31 @@
                 let eNode = NODE_POSITIONS[seg.endKey] || CENTER;
                 let shape = seg.shape;
                 
-                if (shape.includes('<') || shape.includes('>')) {
-                    let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
-                    let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
-                    if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
-                    
-                    let angle1 = -90 + idx1 * 45 + 22.5;
-                    let angle2 = -90 + idx2 * 45 + 22.5;
+                let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
+                let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
+                if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
+
+                let angle1 = -90 + idx1 * 45 + 22.5;
+                let angle2 = -90 + idx2 * 45 + 22.5;
+
+                // Handle Short Arcs (^ or implicit short span arcs) and explicit direction forces (< and >)
+                if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                     let diff = angle2 - angle1;
                     
                     while(diff > 180) diff -= 360;
                     while(diff <= -180) diff += 360;
 
                     if (shape.includes('<')) {
+                        // Anticlockwise / Left Curve forces backward traversal through descending button numbers
                         if (diff > 0) diff -= 360;
                         else if (diff === 0) diff = -360;
                     } else if (shape.includes('>')) {
+                        // Clockwise / Right Curve forces forward traversal through ascending button numbers
                         if (diff < 0) diff += 360;
                         else if (diff === 0) diff = 360;
+                    } else if (shape.includes('^')) {
+                        // Short arc rule: Automatically uses the shorter path across the outer ring
+                        // diff is already normalized within [-180, 180] which naturally takes the shorter side.
                     }
                     
                     let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
@@ -377,7 +385,7 @@
                             y: CENTER.y + Math.sin(a) * RING_RADIUS
                         });
                     }
-                } else if (shape.includes('^') || shape.includes('v')) {
+                } else if (shape.includes('v')) {
                     let steps = 25;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
