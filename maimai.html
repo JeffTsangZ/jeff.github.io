@@ -143,17 +143,18 @@
             NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
 
             for (let i = 1; i <= 8; i++) {
-                // Precise Polar-to-Cartesian Mapping matching AstroDX/maimai layout math
-                let thetaN = Math.PI / 2 - (i - 1) * (Math.PI / 4);
-                let aAngle = -90 + (i - 1) * 45 + 22.5; 
-                let dAngle = -90 + (i - 1) * 45; 
-                let aRad = aAngle * (Math.PI / 180);
-                let dRad = dAngle * (Math.PI / 180);
+                // Precise angle mapping matching the math specification
+                let index = i - 1;
+                let aAngle = (Math.PI / 2 - Math.PI / 16) - (Math.PI / 8 * index) + (Math.PI / 16); 
+                let dAngle = (Math.PI / 2 - Math.PI / 16) - (Math.PI / 8 * index);
+                
+                let aRad = aAngle;
+                let dRad = dAngle;
 
-                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + RING_RADIUS * Math.cos(thetaN), y: CENTER.y - RING_RADIUS * Math.sin(thetaN), type: 'A', active: false };
-                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aRad) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aRad) * (RING_RADIUS * 0.5), type: 'B', active: false };
-                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.85), type: 'D', active: false };
-                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.4), type: 'E', active: false };
+                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aRad) * RING_RADIUS, y: CENTER.y - Math.sin(aRad) * RING_RADIUS, type: 'A', active: false };
+                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aRad) * (RING_RADIUS * 0.5), y: CENTER.y - Math.sin(aRad) * (RING_RADIUS * 0.5), type: 'B', active: false };
+                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.85), y: CENTER.y - Math.sin(dRad) * (RING_RADIUS * 0.85), type: 'D', active: false };
+                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.4), y: CENTER.y - Math.sin(dRad) * (RING_RADIUS * 0.4), type: 'E', active: false };
             }
         }
         window.addEventListener('resize', resizeCanvas); resizeCanvas();
@@ -319,7 +320,7 @@
             return parsedNotes;
         }
 
-        // Rigorous curve mathematics tessellation implementing vector cross-products, Bézier curves, and sweep directions
+        // Updated Slide Generator incorporating angle spans, trigonometric directional control & arc logic
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -356,29 +357,42 @@
                 let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
                 if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
 
-                let angle1 = Math.PI / 2 - idx1 * (Math.PI / 4);
-                let angle2 = Math.PI / 2 - idx2 * (Math.PI / 4);
+                let startRotation = (Math.PI / 2 - Math.PI / 16) - (Math.PI / 8 * idx1);
+                let endRotation = (Math.PI / 2 - Math.PI / 16) - (Math.PI / 8 * idx2);
+                const TAU = Math.PI * 2;
 
-                if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
-                    let diff = angle2 - angle1;
+                if (shape.includes('<') || shape.includes('>')) {
+                    let span = 0;
+                    let clockwise = shape.includes('>');
                     
-                    while(diff > Math.PI) diff -= 2 * Math.PI;
-                    while(diff <= -Math.PI) diff += 2 * Math.PI;
-
-                    if (shape.includes('<')) {
-                        if (diff > 0) diff -= 2 * Math.PI;
-                        else if (diff === 0) diff = -2 * Math.PI;
-                    } else if (shape.includes('>')) {
-                        if (diff < 0) diff += 2 * Math.PI;
-                        else if (diff === 0) diff = 2 * Math.PI;
+                    if (clockwise) {
+                        span = (startRotation - endRotation + TAU) % TAU;
+                        if (span === 0) span = TAU;
+                    } else {
+                        span = (endRotation - startRotation + TAU) % TAU;
+                        if (span === 0) span = TAU;
                     }
-                    
-                    let steps = Math.max(15, Math.floor(Math.abs(diff) / 0.05));
+
+                    let steps = Math.max(15, Math.floor(span * 10));
                     for (let s = 1; s <= steps; s++) {
-                        let a = angle1 + diff * (s / steps);
+                        let t = s / steps;
+                        let currentAngle = clockwise ? (startRotation - span * t) : (startRotation + span * t);
                         detailedPoints.push({
-                            x: CENTER.x + RING_RADIUS * Math.cos(a),
-                            y: CENTER.y - RING_RADIUS * Math.sin(a)
+                            x: CENTER.x + Math.cos(currentAngle) * RING_RADIUS,
+                            y: CENTER.y - Math.sin(currentAngle) * RING_RADIUS
+                        });
+                    }
+                } else if (shape.includes('^')) {
+                    // Curved arc using trigonometric delta calculation simulation
+                    let span = (endRotation - startRotation + TAU) % TAU;
+                    let steps = 20;
+                    for (let s = 1; s <= steps; s++) {
+                        let t = s / steps;
+                        let currentAngle = startRotation + span * t;
+                        let currentRadius = RING_RADIUS * (1 - Math.sin(t * Math.PI) * 0.3); // inward curve dip
+                        detailedPoints.push({
+                            x: CENTER.x + Math.cos(currentAngle) * currentRadius,
+                            y: CENTER.y - Math.sin(currentAngle) * currentRadius
                         });
                     }
                 } else if (shape.includes('v')) {
@@ -391,30 +405,17 @@
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else if (/[pqsz]/.test(shape)) {
-                    // Cubic Bézier curve implementation for complex loops
-                    let p0 = sNode;
-                    let p3 = eNode;
-                    let p1 = { x: CENTER.x + (p0.x - CENTER.x) * 0.5 - (p0.y - CENTER.y) * 0.5, y: CENTER.y + (p0.y - CENTER.y) * 0.5 + (p0.x - CENTER.x) * 0.5 };
-                    let p2 = { x: CENTER.x + (p3.x - CENTER.x) * 0.5 + (p3.y - CENTER.y) * 0.5, y: CENTER.y + (p3.y - CENTER.y) * 0.5 - (p3.x - CENTER.x) * 0.5 };
-                    
                     let steps = 30;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
-                        let mt = 1 - t;
-                        let x = mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x;
-                        let y = mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y;
+                        let cx = CENTER.x + Math.sin(t * TAU) * (RING_RADIUS * 0.45);
+                        let cy = CENTER.y + Math.cos(t * TAU * 0.5) * (RING_RADIUS * 0.55);
+                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
+                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else {
-                    // Linear interpolation (Straight Line -)
-                    let steps = 10;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        detailedPoints.push({
-                            x: (1 - t) * sNode.x + t * eNode.x,
-                            y: (1 - t) * sNode.y + t * eNode.y
-                        });
-                    }
+                    detailedPoints.push({x: eNode.x, y: eNode.y});
                 }
                 
                 currentStart = seg.endKey;
@@ -503,11 +504,12 @@
 
             ctx.save(); ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
             for (let i = 1; i <= 8; i++) {
-                let angle = -90 + (i - 1) * 45; 
-                let innerX = CENTER.x + Math.cos(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let innerY = CENTER.y + Math.sin(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let outerX = CENTER.x + Math.cos(angle * Math.PI / 180) * RING_RADIUS;
-                let outerY = CENTER.y + Math.sin(angle * Math.PI / 180) * RING_RADIUS;
+                let index = i - 1;
+                let angle = (Math.PI / 2 - Math.PI / 16) - (Math.PI / 8 * index);
+                let innerX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.35);
+                let innerY = CENTER.y - Math.sin(angle) * (RING_RADIUS * 0.35);
+                let outerX = CENTER.x + Math.cos(angle) * RING_RADIUS;
+                let outerY = CENTER.y - Math.sin(angle) * RING_RADIUS;
                 ctx.beginPath(); ctx.moveTo(innerX, innerY); ctx.lineTo(outerX, outerY); ctx.stroke();
             }
             ctx.restore();
@@ -693,21 +695,18 @@
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         
-                        // Sharp high-visibility neon coloring for touch notes
                         let tOutline = note.isChord ? '#ffff00' : '#00ffff';
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
                         ctx.save();
                         ctx.translate(target.x, target.y);
-                        ctx.rotate(Math.PI / 4); // 45 degree rotated square layout
+                        ctx.rotate(Math.PI / 4); 
                         
                         if (note.type === 'hold_touch') {
-                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time
                             let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
                             let baseSquareSize = BUTTON_RADIUS * 1.5;
                             let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
 
-                            // 4-Color multi-segment quad rendering around the rotating square border
                             let quadColors = ['#ff0055', '#00ffcc', '#ffcc00', '#9900ff'];
                             let angles = [0, Math.PI/2, Math.PI, Math.PI*3/2];
                             for(let q = 0; q < 4; q++) {
@@ -724,7 +723,6 @@
                             ctx.lineWidth = 4;
                             ctx.strokeRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
                         } else {
-                            // Standard Sharp Touch Note (45-degree rotated square)
                             ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
                             ctx.strokeRect(-size/2, -size/2, size, size);
                             ctx.fillStyle = tFill;
