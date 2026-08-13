@@ -2,989 +2,811 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Maimai DX Simulator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstroDX Slide Track Simulation Engine</title>
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
         body {
-            margin: 0; padding: 0;
-            background-color: #000; color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            height: 100vh; overflow: hidden;
-            touch-action: none; user-select: none;
+            background-color: #0d0f12;
+            color: #eceff4;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
         }
-        #bgVideo {
-            position: absolute; top: 0; left: 0;
-            width: 100vw; height: 100vh; object-fit: cover;
-            z-index: -2; display: none; opacity: 0.5;
+        #game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
         }
-        #ui {
-            position: absolute; z-index: 10;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 30px; border-radius: 15px;
-            border: 2px solid #0ff; text-align: center;
-            box-shadow: 0 0 20px #0ff;
-            min-width: 300px;
-        }
-        #fullscreenBtn {
-            position: absolute;
-            top: 15px; right: 15px; z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
-            color: #fff; border: 1px solid #0ff;
-            border-radius: 8px; padding: 10px 15px;
-            cursor: pointer; font-weight: bold;
-        }
-        #fullscreenBtn:hover { background: rgba(0, 255, 255, 0.2); }
-        
-        #gameCanvas {
+        canvas {
+            background: #12151c;
             border-radius: 50%;
-            background: rgba(0,0,0,0.6);
-            box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
-            display: none;
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.15), inset 0 0 15px rgba(0, 0, 0, 0.8);
+            cursor: crosshair;
+            touch-action: none;
         }
-        button:not(#fullscreenBtn), input[type="file"], select {
-            padding: 12px; font-size: 16px; margin: 10px;
-            border-radius: 8px; border: none; cursor: pointer;
-            width: 90%; box-sizing: border-box;
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            background: #1a1d24;
+            padding: 14px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            border: 1px solid #2e3440;
+            max-width: 600px;
         }
-        select { background: #222; color: #fff; border: 1px solid #0ff; outline: none; }
-        button:not(#fullscreenBtn) { background: #0ff; color: #000; font-weight: bold; }
-        button:disabled { background: #555; color: #888; }
-        .setting { margin: 15px 0; }
-        input[type="range"] { width: 90%; }
-        
-        #difficultyContainer {
-            display: none;
-            background: rgba(255,255,255,0.1);
-            padding: 10px;
-            border-radius: 8px;
-            margin: 15px 0;
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #88c0d0;
+            font-weight: 600;
+        }
+        select, button, input[type="range"] {
+            background: #2e3440;
+            color: #eceff4;
+            border: 1px solid #4c566a;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        select:hover, button:hover {
+            background: #434c5e;
+            border-color: #88c0d0;
+        }
+        button.active {
+            background: #5e81ac;
+            border-color: #81a1c1;
+        }
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 24px;
+            pointer-events: none;
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 0 0 6px rgba(0,0,0,0.8);
+        }
+        .hud-val {
+            color: #a3be8c;
+        }
+        .hud-judgement {
+            position: absolute;
+            font-size: 24px;
+            font-weight: 900;
+            text-shadow: 0 0 10px currentColor;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
         }
     </style>
 </head>
 <body>
 
-    <video id="bgVideo" autoplay loop muted></video>
-    <button id="fullscreenBtn">⛶ Fullscreen</button>
-
-    <div id="ui">
-        <h2>maimai DX Simulator</h2>
-        <input type="file" id="adxUpload" accept=".adx,.zip" />
-        
-        <div id="difficultyContainer">
-            <label style="font-weight: bold; color: #0ff;">Select Difficulty:</label>
-            <select id="diffSelect"></select>
-        </div>
-
-        <div class="setting">
-            <label>Note Speed: <span id="speedVal">5.0</span></label><br>
-            <input type="range" id="speedSlider" min="1" max="10" step="0.1" value="5">
-            <p style="font-size: 12px; color: #aaa;">(1 = Slow, 10 = Ultra Fast)</p>
-        </div>
-
-        <button id="startBtn" disabled>Upload .adx to Start</button>
-        <p id="statusText" style="color: #0ff;">Waiting for file...</p>
+<div id="game-container">
+    <div class="hud">
+        <div>STATE: <span id="hud-state" class="hud-val">READY</span></div>
+        <div>PROGRESS: <span id="hud-progress" class="hud-val">0%</span></div>
+        <div>JUDGEMENT: <span id="hud-judge" class="hud-val">-</span></div>
     </div>
+    
+    <canvas id="stage" width="500" height="500"></canvas>
 
-    <canvas id="gameCanvas"></canvas>
+    <div class="controls">
+        <div class="control-group">
+            <label for="slide-type">Slide Pattern</label>
+            <select id="slide-type">
+                <option value="Straight">Straight (-)</option>
+                <option value="RingCw">Ring Clockwise (v)</option>
+                <option value="RingCcw">Ring Counter-CW (p)</option>
+                <option value="Fold">Center Fold (v-shape)</option>
+                <option value="CurveCw">Inner Curve CW</option>
+                <option value="Fan">Fan Split (3-Way)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="auto-mode">Autoplay Mode</label>
+            <select id="auto-mode">
+                <option value="off">Manual Touch / Mouse</option>
+                <option value="on" selected>Auto Playback</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="tolerance">Slide Tolerance</label>
+            <input type="range" id="tolerance" min="0" max="3" value="1" step="1">
+        </div>
+        <div class="control-group" style="justify-content: flex-end;">
+            <button id="btn-trigger">Trigger Slide</button>
+        </div>
+    </div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+<script>
+/**
+ * AstroDX Engine Mathematics & Constants
+ * Ported from AstroDX.Utilities.Trigonometry and RenderManager[cite: 1]
+ */
+const TAU = Math.PI * 2;
+const PLAYFIELD_RADIUS = 200;
+const CENTER_RADIUS = 200 * 0.375; // CenterRadius from AstroDX[cite: 1]
+const AREA_A_RADIUS = 200 * 0.65;
+const AREA_B_RADIUS = 200 * 0.85;
+const ARROW_DISTANCE = 24;
+
+class Trigonometry {
+    static rotate(v, angleRad) {
+        const mag = Math.hypot(v.x, v.y);
+        const orig = Math.atan2(v.y, v.x);
+        const nAngle = orig + angleRad;
+        return { x: Math.cos(nAngle) * mag, y: Math.sin(nAngle) * mag };
+    }
+
+    static toPolarAngle(pos, offset = null) {
+        const dx = pos.x - (offset ? offset.x : 0);
+        const dy = pos.y - (offset ? offset.y : 0);
+        return Math.atan2(dy, dx);
+    }
+
+    static getTangentAngleDelta(adjacent, hypotenuse, clockwise) {
+        const angleDiff = Math.acos(Math.min(1, Math.max(-1, adjacent / hypotenuse)));
+        return clockwise ? -angleDiff : angleDiff;
+    }
+
+    static getAngleSpan(startRotation, endRotation, clockwise, wrapThreshold = TAU / 32) {
+        let span = clockwise
+            ? (startRotation - endRotation + 2 * TAU) % TAU
+            : (endRotation - startRotation + 2 * TAU) % TAU;
+
+        if (span <= wrapThreshold) span += TAU;
+        return span;
+    }
+}
+
+function getRotation(location) {
+    const initialAngle = TAU / 4 - TAU / 16;
+    let angle = initialAngle - (TAU / 8) * location.index;
+    if (location.group === 'DSensor' || location.group === 'ESensor') {
+        angle += TAU / 16;
+    }
+    return angle;
+}
+
+function getRadiusFromCenter(location) {
+    switch (location.group) {
+        case 'Tap': return PLAYFIELD_RADIUS;
+        case 'ASensor': return AREA_A_RADIUS;
+        case 'BSensor': return AREA_B_RADIUS;
+        case 'CSensor': return 0;
+        default: return PLAYFIELD_RADIUS;
+    }
+}
+
+function getPositionRadial(rotationRadians, radius = PLAYFIELD_RADIUS) {
+    return {
+        x: Math.cos(rotationRadians) * radius,
+        y: Math.sin(rotationRadians) * radius
+    };
+}
+
+function getPosition(location) {
+    const radius = getRadiusFromCenter(location);
+    return getPositionRadial(getRotation(location), radius);
+}
+
+/**
+ * Slide Generators
+ * Ported from AstroDX.Contexts.Gameplay.SlideGenerators[cite: 1]
+ */
+class SlideGenerator {
+    getLength() { return 0; }
+    getPoint(t) { return { position: { x: 0, y: 0 }, rotation: 0 }; }
+}
+
+class StraightGenerator extends SlideGenerator {
+    constructor(vertices) {
+        super();
+        this.startPoint = getPosition(vertices[0]);
+        this.endPoint = getPosition(vertices[1]);
+        const dx = this.endPoint.x - this.startPoint.x;
+        const dy = this.endPoint.y - this.startPoint.y;
+        this.length = Math.hypot(dx, dy);
+        this.rotation = Math.atan2(dy, dx);
+    }
+
+    getLength() { return this.length; }
+
+    getPoint(t) {
+        const position = {
+            x: this.startPoint.x + (this.endPoint.x - this.startPoint.x) * t,
+            y: this.startPoint.y + (this.endPoint.y - this.startPoint.y) * t
+        };
+        return { position, rotation: this.rotation };
+    }
+}
+
+class RingGenerator extends SlideGenerator {
+    constructor(vertices, clockwise) {
+        super();
+        this.clockwise = clockwise;
+        const inPos = getPosition(vertices[0]);
+        const outPos = getPosition(vertices[1]);
         
-        let CENTER = { x: 0, y: 0 };
-        let RING_RADIUS = 0;
-        let BUTTON_RADIUS = 0;
-        let NODE_POSITIONS = {};
+        this.startRotation = Trigonometry.toPolarAngle(inPos);
+        const outRadians = Trigonometry.toPolarAngle(outPos);
 
-        let availableCharts = {};
-        let globalAudioOffset = 0;
-        let initialBPM = 120;
+        this.angleSpan = Trigonometry.getAngleSpan(this.startRotation, outRadians, clockwise);
+        this.startRadius = getRadiusFromCenter(vertices[0]);
+        this.endRadius = getRadiusFromCenter(vertices[1]);
+        this.length = this.angleSpan * (this.startRadius + this.endRadius) / 2;
+    }
 
-        let notes = [];
-        let activeNotes = [];
-        let judgements = [];
-        let clickEffects = [];
-        let audio = new Audio();
-        let isPlaying = false;
-        let combo = 0;
+    getLength() { return this.length; }
 
-        let gameStartTime = 0;
-        let preRollTime = 2.0;
-        let lastBeatIndex = -1;
-        let audioStarted = false;
-        let audioCtx = null;
+    getPoint(t) {
+        const radiusAtT = this.startRadius + (this.endRadius - this.startRadius) * t;
+        const rotationAtT = this.clockwise
+            ? this.startRotation - this.angleSpan * t
+            : this.startRotation + this.angleSpan * t;
 
-        let APPROACH_TIME = 1.0; 
-        const speedSlider = document.getElementById('speedSlider');
-        speedSlider.addEventListener('input', (e) => {
-            let val = parseFloat(e.target.value);
-            document.getElementById('speedVal').innerText = val.toFixed(1);
-            APPROACH_TIME = 5.0 / val;
-        });
+        const position = {
+            x: Math.cos(rotationAtT) * radiusAtT,
+            y: Math.sin(rotationAtT) * radiusAtT
+        };
+        const rotation = rotationAtT + (this.clockwise ? -TAU / 4 : TAU / 4);
+        return { position, rotation };
+    }
+}
 
-        document.getElementById('fullscreenBtn').addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => console.log(err));
-            } else {
-                document.exitFullscreen();
-            }
-        });
+class FoldGenerator extends SlideGenerator {
+    constructor(vertices) {
+        super();
+        this.startPoint = getPosition(vertices[0]);
+        this.endPoint = getPosition(vertices[1]);
+        this.midPoint = { x: 0, y: 0 };
 
-        function resizeCanvas() {
-            let size = Math.min(window.innerWidth, window.innerHeight) * 0.95;
-            canvas.width = size; canvas.height = size;
-            CENTER = { x: size / 2, y: size / 2 };
-            RING_RADIUS = size * 0.38; BUTTON_RADIUS = size * 0.07;
+        const startSeg = Math.hypot(this.midPoint.x - this.startPoint.x, this.midPoint.y - this.startPoint.y);
+        const endSeg = Math.hypot(this.endPoint.x - this.midPoint.x, this.endPoint.y - this.midPoint.y);
 
-            NODE_POSITIONS = {};
-            NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
+        this.startSegmentLength = startSeg;
+        this.totalLength = startSeg + endSeg;
+        this.startRotation = Math.atan2(this.midPoint.y - this.startPoint.y, this.midPoint.x - this.startPoint.x);
+        this.endRotation = Math.atan2(this.endPoint.y - this.midPoint.y, this.endPoint.x - this.midPoint.x);
+    }
 
-            for (let i = 1; i <= 8; i++) {
-                let aAngle = (-90 + (i - 1) * 45 + 22.5) * (Math.PI / 180);
-                let dAngle = (-90 + (i - 1) * 45) * (Math.PI / 180);
+    getLength() { return this.totalLength; }
 
-                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aAngle) * RING_RADIUS, y: CENTER.y + Math.sin(aAngle) * RING_RADIUS, type: 'A', active: false };
-                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aAngle) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aAngle) * (RING_RADIUS * 0.5), type: 'B', active: false };
-                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.85), type: 'D', active: false };
-                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.4), type: 'E', active: false };
-            }
-        }
-        window.addEventListener('resize', resizeCanvas); resizeCanvas();
-
-        document.getElementById('adxUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            document.getElementById('statusText').innerText = "Unzipping chart...";
-            document.getElementById('difficultyContainer').style.display = 'none';
-            document.getElementById('startBtn').disabled = true;
-
-            JSZip.loadAsync(file).then(async function(zip) {
-                let audioFile = zip.file(/track\.(mp3|ogg|wav)/i)[0];
-                if (audioFile) {
-                    let blob = await audioFile.async("blob");
-                    audio.src = URL.createObjectURL(blob);
-                }
-
-                let pvFile = zip.file(/pv\.mp4/i)[0];
-                let bgFile = zip.file(/bg\.(jpg|png)/i)[0];
-                if (pvFile) {
-                    let blob = await pvFile.async("blob");
-                    document.getElementById('bgVideo').src = URL.createObjectURL(blob);
-                    document.getElementById('bgVideo').style.display = 'block';
-                } else if (bgFile) {
-                    let blob = await bgFile.async("blob");
-                    document.body.style.backgroundImage = `url(${URL.createObjectURL(blob)})`;
-                    document.body.style.backgroundSize = "cover";
-                    document.body.style.backgroundPosition = "center";
-                }
-
-                let maidataFile = zip.file(/maidata\.txt/i)[0];
-                if (maidataFile) {
-                    let text = await maidataFile.async("string");
-                    extractAvailableCharts(text);
-                    
-                    if (Object.keys(availableCharts).length > 0) {
-                        populateDifficultyUI();
-                        document.getElementById('statusText').innerText = "File loaded! Ready to play.";
-                        document.getElementById('startBtn').disabled = false;
-                        document.getElementById('startBtn').innerText = "START GAME";
-                        document.getElementById('difficultyContainer').style.display = 'block';
-                    } else {
-                        document.getElementById('statusText').innerText = "Error: No playable charts found in maidata.txt.";
-                    }
-                }
-            }).catch(err => {
-                document.getElementById('statusText').innerText = "Error loading file!";
-                console.error(err);
-            });
-        });
-
-        function extractAvailableCharts(text) {
-            availableCharts = {};
-            let firstMatch = text.match(/&first=([\d\.\-]+)/);
-            globalAudioOffset = firstMatch ? parseFloat(firstMatch[1]) : 0.0;
-            const diffNames = { 1: "Basic", 2: "Advanced", 3: "Expert", 4: "Master", 5: "Re:Master", 6: "Utage" };
-
-            for (let i = 1; i <= 6; i++) {
-                let regex = new RegExp(`&inote_${i}=([^&]+)`);
-                let match = text.match(regex);
-                if (match) { availableCharts[i] = { name: diffNames[i], data: match[1] }; }
-            }
-        }
-
-        function populateDifficultyUI() {
-            const select = document.getElementById('diffSelect');
-            select.innerHTML = ''; let highestDiff = 1;
-            for (let key in availableCharts) {
-                let option = document.createElement('option');
-                option.value = key; option.text = availableCharts[key].name;
-                select.appendChild(option); highestDiff = key;
-            }
-            select.value = highestDiff; 
-        }
-
-        function parseDuration(str, bpm) {
-            let parts = str.replace(/[\[\]]/g, '').split(':');
-            if (parts.length === 2) return (240 / bpm) / parseFloat(parts[0]) * parseFloat(parts[1]);
-            return 0;
-        }
-
-        function parseChartString(chartStr, offsetTime) {
-            let parsedNotes = [];
-            let currentTime = offsetTime;
-            let cleanStr = chartStr.replace(/\s+/g, ''); 
-            let blocks = cleanStr.split(',');
-            let currentBPM = 120, currentDivisor = 4;
-
-            let firstBpmMatch = chartStr.match(/\(([\d\.]+)\)/);
-            if (firstBpmMatch) initialBPM = parseFloat(firstBpmMatch[1]);
-
-            for (let block of blocks) {
-                if (!block) { currentTime += (240 / currentBPM) / currentDivisor; continue; }
-                let bpmMatch = block.match(/\(([\d\.]+)\)/);
-                if (bpmMatch) { currentBPM = parseFloat(bpmMatch[1]); block = block.replace(/\([\d\.]+\)/, ''); }
-                let divMatch = block.match(/\{([\d\.]+)\}/);
-                if (divMatch) { currentDivisor = parseFloat(divMatch[1]); block = block.replace(/\{[\d\.]+\}/, ''); }
-
-                let elements = block.split('/');
-                for (let el of elements) {
-                    if (!el) continue;
-
-                    let touchHoldMatch = el.match(/^([A-E][1-8]?|C)h\[(.*?)\]/);
-                    if (touchHoldMatch) {
-                        parsedNotes.push({ type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], duration: parseDuration(touchHoldMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
-                    }
-
-                    let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
-                    if (holdMatch) {
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: parseDuration(holdMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
-                    }
-
-                    let slideHeadMatch = el.match(/^([1-8])/);
-                    if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
-                        let headPos = `A${slideHeadMatch[1]}`;
-                        let slidesStr = el.substring(1);
-                        if (slidesStr.startsWith('*')) slidesStr = slidesStr.substring(1);
-
-                        let slideParts = slidesStr.split('*');
-                        
-                        for (let part of slideParts) {
-                            if (!part) continue;
-                            let durMatch = part.match(/\[(.*?)\]$/);
-                            let durStr = durMatch ? durMatch[1] : null;
-                            let pathStr = durMatch ? part.replace(/\[.*?\]$/, '') : part;
-                            
-                            let dur = durStr ? parseDuration(durStr, currentBPM) : (240 / currentBPM) / 2;
-                            
-                            parsedNotes.push({ 
-                                type: 'slide_head', time: currentTime, pos: headPos, pathStr: pathStr, duration: dur, state: 'waiting', isChord: false,
-                                slideData: calculateSlidePoints(pathStr, headPos)
-                            });
-                        }
-                        continue;
-                    }
-
-                    let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
-                    if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
-
-                    let tapMatch = el.match(/^([1-8\*]+)$/);
-                    if (tapMatch) {
-                        let taps = el.replace(/\*/g, '').split('');
-                        for (let t of taps) {
-                            if (/[1-8]/.test(t)) {
-                                parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${t}`, isChord: false, state: 'waiting' });
-                            }
-                        }
-                        continue;
-                    }
-                }
-                currentTime += (240 / currentBPM) / currentDivisor;
-            }
-
-            let timeGroups = {};
-            parsedNotes.forEach(note => {
-                let t = note.time.toFixed(4); 
-                if (!timeGroups[t]) timeGroups[t] = [];
-                timeGroups[t].push(note);
-            });
-            for (let t in timeGroups) { if (timeGroups[t].length > 1) { timeGroups[t].forEach(note => note.isChord = true); } }
-            return parsedNotes;
-        }
-
-        // Helper: Find closest touch sensor node to a given point
-        function getClosestSensorKey(pos) {
-            let closestKey = null;
-            let minDistance = Infinity;
-            Object.keys(NODE_POSITIONS).forEach(key => {
-                let node = NODE_POSITIONS[key];
-                let dist = Math.hypot(pos.x - node.x, pos.y - node.y);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestKey = key;
-                }
-            });
-            return closestKey;
-        }
-
-        // Refactored Slide Track Generator & Arrow/Interaction Path Mapper
-        function calculateSlidePoints(pathStr, startPosKey) {
-            let cleaned = pathStr.trim();
-            let segments = [];
-            let regex = /([a-zA-Z\-\^\<\>]+)([A-E][1-8]?|C|[1-8])/g;
-            let match;
-
-            while((match = regex.exec(cleaned)) !== null) {
-                let shape = match[1];
-                let endKey = match[2];
-                if (/^[1-8]$/.test(endKey)) endKey = `A${endKey}`;
-                segments.push({shape, endKey});
-            }
-
-            if (segments.length === 0) {
-                let fallbackMatch = cleaned.match(/([A-E][1-8]?|C|[1-8])/);
-                if (fallbackMatch) {
-                    let k = fallbackMatch[1];
-                    if (/^[1-8]$/.test(k)) k = `A${k}`;
-                    segments.push({shape: '-', endKey: k});
-                } else {
-                    segments.push({shape: '-', endKey: startPosKey});
-                }
-            }
-
-            let detailedPoints = [NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y}];
-            let currentStart = startPosKey;
-
-            for (let seg of segments) {
-                let sNode = NODE_POSITIONS[currentStart] || CENTER;
-                let eNode = NODE_POSITIONS[seg.endKey] || CENTER;
-                let shape = seg.shape;
-                
-                let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
-                let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
-                if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
-
-                let angle1 = -90 + idx1 * 45 + 22.5;
-                let angle2 = -90 + idx2 * 45 + 22.5;
-
-                let isGrandArc = shape === 'pp' || shape === 'qq';
-                let isCcw = shape === '<' || shape === 'qq';
-                let isCw = shape === '>' || shape === 'pp';
-                let isShortArc = shape === '^';
-                let isStraight = shape === '-';
-                let isVee = shape === 'v';
-                let isCenterCurve = shape === 'p' || shape === 'q';
-                let isZigzag = shape === 's' || shape === 'z';
-
-                if (isShortArc || isCcw || isCw || isGrandArc) {
-                    let diff = angle2 - angle1;
-                    while(diff > 180) diff -= 360;
-                    while(diff <= -180) diff += 360;
-
-                    if (isCcw) {
-                        if (diff > 0) diff -= 360;
-                        else if (diff === 0) diff = -360;
-                    } else if (isCw) {
-                        if (diff < 0) diff += 360;
-                        else if (diff === 0) diff = 360;
-                    }
-                    
-                    let arcRadius = isGrandArc ? RING_RADIUS * 1.3 : RING_RADIUS;
-                    let steps = Math.max(16, Math.floor(Math.abs(diff) / 6));
-                    for (let s = 1; s <= steps; s++) {
-                        let tVal = s / steps;
-                        let currentAngle = (angle1 + diff * tVal) * (Math.PI / 180);
-                        detailedPoints.push({
-                            x: CENTER.x + Math.cos(currentAngle) * arcRadius,
-                            y: CENTER.y + Math.sin(currentAngle) * arcRadius
-                        });
-                    }
-                } else if (isStraight) {
-                    let steps = 15;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        detailedPoints.push({
-                            x: sNode.x + (eNode.x - sNode.x) * t,
-                            y: sNode.y + (eNode.y - sNode.y) * t
-                        });
-                    }
-                } else if (isVee) {
-                    let stepsMid = 12;
-                    for (let s = 1; s <= stepsMid; s++) {
-                        let t = s / stepsMid;
-                        detailedPoints.push({
-                            x: sNode.x + (CENTER.x - sNode.x) * t,
-                            y: sNode.y + (CENTER.y - sNode.y) * t
-                        });
-                    }
-                    for (let s = 1; s <= stepsMid; s++) {
-                        let t = s / stepsMid;
-                        detailedPoints.push({
-                            x: CENTER.x + (eNode.x - CENTER.x) * t,
-                            y: CENTER.y + (eNode.y - CENTER.y) * t
-                        });
-                    }
-                } else if (isCenterCurve) {
-                    let steps = 25;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        let cx = CENTER.x + Math.sin(t * Math.PI) * (RING_RADIUS * 0.4);
-                        let cy = CENTER.y + Math.cos(t * Math.PI * 0.8) * (RING_RADIUS * 0.4);
-                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
-                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
-                        detailedPoints.push({ x: x, y: y });
-                    }
-                } else if (isZigzag) {
-                    let mid1 = { x: CENTER.x + (sNode.x - CENTER.x) * 0.6 - (sNode.y - CENTER.y) * 0.3, y: CENTER.y + (sNode.y - CENTER.y) * 0.6 + (sNode.x - CENTER.x) * 0.3 };
-                    let mid2 = { x: CENTER.x + (eNode.x - CENTER.x) * 0.6 + (eNode.y - CENTER.y) * 0.3, y: CENTER.y + (eNode.y - CENTER.y) * 0.6 - (eNode.x - CENTER.x) * 0.3 };
-                    
-                    let subSteps = 8;
-                    for(let st=1; st<=subSteps; st++) {
-                        let t = st/subSteps;
-                        detailedPoints.push({ x: sNode.x + (mid1.x - sNode.x)*t, y: sNode.y + (mid1.y - sNode.y)*t });
-                    }
-                    for(let st=1; st<=subSteps; st++) {
-                        let t = st/subSteps;
-                        detailedPoints.push({ x: mid1.x + (mid2.x - mid1.x)*t, y: mid1.y + (mid2.y - mid1.y)*t });
-                    }
-                    for(let st=1; st<=subSteps; st++) {
-                        let t = st/subSteps;
-                        detailedPoints.push({ x: mid2.x + (eNode.x - mid2.x)*t, y: mid2.y + (eNode.y - mid2.y)*t });
-                    }
-                } else {
-                    detailedPoints.push({x: eNode.x, y: eNode.y});
-                }
-                
-                currentStart = seg.endKey;
-            }
-
-            let finalSegments = [], totalLen = 0;
-            for(let i=0; i<detailedPoints.length-1; i++) {
-                let len = Math.hypot(detailedPoints[i+1].x - detailedPoints[i].x, detailedPoints[i+1].y - detailedPoints[i].y);
-                finalSegments.push(len); totalLen += len;
-            }
-
-            // Arrow Generation & Sequential Sensor Interaction Path Mapping
-            let arrowDistance = BUTTON_RADIUS * 0.5;
-            let interactionPath = [];
-            let lastSensor = null;
-
-            let currentDist = arrowDistance;
-            let accum = 0;
-
-            for(let s = 0; s < finalSegments.length; s++) {
-                let segLen = finalSegments[s];
-                while (currentDist <= accum + segLen) {
-                    let localP = (currentDist - accum) / segLen;
-                    let arrowPos = {
-                        x: detailedPoints[s].x + (detailedPoints[s+1].x - detailedPoints[s].x) * localP,
-                        y: detailedPoints[s].y + (detailedPoints[s+1].y - detailedPoints[s].y) * localP
-                    };
-                    
-                    let sensorKey = getClosestSensorKey(arrowPos);
-                    if (sensorKey && sensorKey !== lastSensor) {
-                        interactionPath.push(sensorKey);
-                        lastSensor = sensorKey;
-                    }
-                    currentDist += arrowDistance;
-                }
-                accum += segLen;
-            }
-
-            return { 
-                points: detailedPoints, 
-                segments: finalSegments, 
-                totalLength: totalLen, 
-                interactionPath: interactionPath, 
-                initialSensorCount: interactionPath.length 
+    getPoint(t) {
+        const distanceFromStart = t * this.totalLength;
+        if (distanceFromStart < this.startSegmentLength) {
+            const localT = distanceFromStart / this.startSegmentLength;
+            return {
+                position: {
+                    x: this.startPoint.x + (this.midPoint.x - this.startPoint.x) * localT,
+                    y: this.startPoint.y + (this.midPoint.y - this.startPoint.y) * localT
+                },
+                rotation: this.startRotation
+            };
+        } else {
+            const localT = (distanceFromStart - this.startSegmentLength) / (this.totalLength - this.startSegmentLength);
+            return {
+                position: {
+                    x: this.midPoint.x + (this.endPoint.x - this.midPoint.x) * localT,
+                    y: this.midPoint.y + (this.endPoint.y - this.midPoint.y) * localT
+                },
+                rotation: this.endRotation
             };
         }
+    }
+}
 
-        function playClick(isHigh) {
-            try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = isHigh ? 880 : 440;
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.05);
-            } catch(e) {}
+class CurveCwGenerator extends SlideGenerator {
+    constructor(vertices) {
+        super();
+        const startRotation = getRotation(vertices[0]);
+        const endRotation = getRotation(vertices[1]);
+
+        this.tangentInRotation = startRotation + Trigonometry.getTangentAngleDelta(CENTER_RADIUS, PLAYFIELD_RADIUS, true);
+        const tangentOutRotation = endRotation + Trigonometry.getTangentAngleDelta(CENTER_RADIUS, PLAYFIELD_RADIUS, false);
+
+        this.startPoint = getPositionRadial(startRotation, PLAYFIELD_RADIUS);
+        this.tangentInPoint = getPositionRadial(this.tangentInRotation, CENTER_RADIUS);
+        this.tangentOutPoint = getPositionRadial(tangentOutRotation, CENTER_RADIUS);
+        this.endPoint = getPositionRadial(endRotation, PLAYFIELD_RADIUS);
+
+        this.startLength = Math.hypot(this.tangentInPoint.x - this.startPoint.x, this.tangentInPoint.y - this.startPoint.y);
+        this.startForward = Math.atan2(this.tangentInPoint.y - this.startPoint.y, this.tangentInPoint.x - this.startPoint.x);
+
+        this.curveLength = Trigonometry.getAngleSpan(this.tangentInRotation, tangentOutRotation, true) * CENTER_RADIUS;
+        const endLength = Math.hypot(this.endPoint.x - this.tangentOutPoint.x, this.endPoint.y - this.tangentOutPoint.y);
+        this.endForward = Math.atan2(this.endPoint.y - this.tangentOutPoint.y, this.endPoint.x - this.tangentOutPoint.x);
+
+        this.totalLength = this.startLength + this.curveLength + endLength;
+    }
+
+    getLength() { return this.totalLength; }
+
+    getPoint(t) {
+        const dist = t * this.totalLength;
+        if (dist < this.startLength) {
+            const localT = dist / this.startLength;
+            return {
+                position: {
+                    x: this.startPoint.x + (this.tangentInPoint.x - this.startPoint.x) * localT,
+                    y: this.startPoint.y + (this.tangentInPoint.y - this.startPoint.y) * localT
+                },
+                rotation: this.startForward
+            };
+        } else if (dist < this.startLength + this.curveLength) {
+            const localT = (dist - this.startLength) / this.curveLength;
+            const angle = this.tangentInRotation - (this.curveLength / CENTER_RADIUS) * localT;
+            const position = { x: Math.cos(angle) * CENTER_RADIUS, y: Math.sin(angle) * CENTER_RADIUS };
+            const forward = Trigonometry.rotate(position, -TAU / 4);
+            return { position, rotation: Math.atan2(forward.y, forward.x) };
+        } else {
+            const localT = (dist - this.startLength - this.curveLength) / (this.totalLength - this.startLength - this.curveLength);
+            return {
+                position: {
+                    x: this.tangentOutPoint.x + (this.endPoint.x - this.tangentOutPoint.x) * localT,
+                    y: this.tangentOutPoint.y + (this.endPoint.y - this.tangentOutPoint.y) * localT
+                },
+                rotation: this.endForward
+            };
         }
+    }
+}
 
-        document.getElementById('startBtn').addEventListener('click', () => {
-            let selectedDiff = document.getElementById('diffSelect').value;
-            notes = parseChartString(availableCharts[selectedDiff].data, globalAudioOffset);
+/**
+ * Slide Handlers & Judgement Logic
+ * Ported from AstroDX.Contexts.Gameplay.Behaviours.Slide.Handlers[cite: 1]
+ */
+class RegularSlideSegmentHandler {
+    constructor(slideBehaviour, generator, startLocation) {
+        this.parentSlide = slideBehaviour;
+        this.generator = generator;
+        this.cleared = false;
+        this.isJudgementTarget = false;
+        this.interactionPath = [];
+        this.lastCheckedClearIndex = 0;
 
-            document.getElementById('ui').style.display = 'none';
-            canvas.style.display = 'block';
-            
-            activeNotes = JSON.parse(JSON.stringify(notes));
-            activeNotes.forEach(n => {
-                if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
-            });
+        this.generateArrows();
+        this.initialSensorCount = this.interactionPath.length;
+    }
 
-            combo = 0; 
-            preRollTime = 240 / initialBPM; 
-            gameStartTime = performance.now();
-            lastBeatIndex = -1;
-            audioStarted = false;
+    getLength() { return this.generator.getLength(); }
 
-            if (document.getElementById('bgVideo').src) document.getElementById('bgVideo').currentTime = 0;
-            isPlaying = true; 
-            requestAnimationFrame(gameLoop);
-        });
+    generateArrows() {
+        const totalLength = this.getLength();
+        const arrowCount = Math.floor(totalLength / ARROW_DISTANCE);
+        let relevantArrows = [];
+        let relevantSensor = null;
 
-        function gameLoop() {
-            if (!isPlaying) return;
-            let now = performance.now();
-            let elapsedTime = (now - gameStartTime) / 1000 - preRollTime;
+        let index = 0;
+        for (let distance = ARROW_DISTANCE; distance <= totalLength; distance += ARROW_DISTANCE) {
+            const t = distance / totalLength;
+            const pt = this.generator.getPoint(t);
+            const sensor = this.getClosestSensor(pt.position);
 
-            if (elapsedTime < 0) {
-                let beatInterval = 60 / initialBPM;
-                let timeIntoPreRoll = preRollTime + elapsedTime;
-                let beatIndex = Math.floor(timeIntoPreRoll / beatInterval);
-                if (beatIndex > lastBeatIndex && beatIndex < 4) {
-                    lastBeatIndex = beatIndex;
-                    playClick(beatIndex === 0);
+            if (relevantSensor !== sensor) {
+                if (relevantSensor !== null) {
+                    this.interactionPath.push({ sensor: relevantSensor, arrows: relevantArrows });
                 }
-            } else {
-                if (!audioStarted) {
-                    audio.currentTime = 0;
-                    audio.play().catch(e => console.log(e));
-                    audioStarted = true;
-                }
-                elapsedTime = audio.currentTime;
+                relevantArrows = [];
+                relevantSensor = sensor;
             }
-            
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawUI(); drawCombo(); 
-            updateAndDrawNotes(elapsedTime);
-            drawClickEffects(); drawJudgements(elapsedTime);
-            requestAnimationFrame(gameLoop);
+
+            relevantArrows.push({ position: pt.position, rotation: pt.rotation, alpha: 0.8 });
+            index++;
         }
 
-        function drawUI() {
-            ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 3; ctx.stroke();
+        if (relevantArrows.length > 0) {
+            this.interactionPath.push({ sensor: relevantSensor, arrows: relevantArrows });
+        }
+    }
 
-            ctx.save(); ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
-            for (let i = 1; i <= 8; i++) {
-                let angle = -90 + (i - 1) * 45; 
-                let innerX = CENTER.x + Math.cos(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let innerY = CENTER.y + Math.sin(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let outerX = CENTER.x + Math.cos(angle * Math.PI / 180) * RING_RADIUS;
-                let outerY = CENTER.y + Math.sin(angle * Math.PI / 180) * RING_RADIUS;
-                ctx.beginPath(); ctx.moveTo(innerX, innerY); ctx.lineTo(outerX, outerY); ctx.stroke();
+    getClosestSensor(position) {
+        let minDist = Infinity;
+        let closest = null;
+        for (let i = 0; i < 8; i++) {
+            const aPos = getPosition({ group: 'ASensor', index: i });
+            const bPos = getPosition({ group: 'BSensor', index: i });
+            
+            const dA = Math.hypot(position.x - aPos.x, position.y - aPos.y);
+            const dB = Math.hypot(position.x - bPos.x, position.y - bPos.y);
+
+            if (dA < minDist) { minDist = dA; closest = { group: 'ASensor', index: i }; }
+            if (dB < minDist) { minDist = dB; closest = { group: 'BSensor', index: i }; }
+        }
+        return closest;
+    }
+
+    onUpdate(segmentT, isAuto, activeTouches, slideTolerance) {
+        if (this.isJudgementTarget) {
+            this.checkInteraction(segmentT, isAuto, activeTouches, slideTolerance);
+        }
+    }
+
+    checkInteraction(segmentT, isAuto, activeTouches, slideTolerance) {
+        let clearCount = this.getClearCount(segmentT, isAuto, activeTouches, slideTolerance);
+
+        while (clearCount > 0 && this.interactionPath.length > 0) {
+            this.interactionPath.shift();
+            clearCount--;
+        }
+
+        this.cleared = this.interactionPath.length === 0;
+    }
+
+    getClearCount(segmentT, isAuto, activeTouches, slideTolerance) {
+        if (isAuto && segmentT >= 0) {
+            const clearCount = Math.floor(segmentT * this.initialSensorCount);
+            if (this.lastCheckedClearIndex >= clearCount) return 0;
+            const delta = clearCount - this.lastCheckedClearIndex;
+            this.lastCheckedClearIndex = clearCount;
+            return delta;
+        } else {
+            let clearCount = 0;
+            let scanIndex = 0;
+            let tolerance = slideTolerance;
+
+            while (tolerance >= 0 && scanIndex < this.interactionPath.length) {
+                const targetSensor = this.interactionPath[scanIndex].sensor;
+                const isTouched = activeTouches.some(t => t.group === targetSensor.group && t.index === targetSensor.index);
+
+                if (isTouched) {
+                    tolerance = slideTolerance;
+                    clearCount = scanIndex + 1;
+                } else {
+                    tolerance--;
+                }
+                scanIndex++;
+            }
+            return clearCount;
+        }
+    }
+
+    getRemainingLength() {
+        if (this.initialSensorCount === 0) return 0;
+        return (this.interactionPath.length / this.initialSensorCount) * this.getLength();
+    }
+
+    render(ctx, segmentT) {
+        // Draw track arrows
+        for (const group of this.interactionPath) {
+            for (const arrow of group.arrows) {
+                ctx.save();
+                ctx.translate(arrow.position.x, arrow.position.y);
+                ctx.rotate(arrow.rotation);
+                ctx.fillStyle = `rgba(235, 203, 139, ${arrow.alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(8, 0);
+                ctx.lineTo(-6, -6);
+                ctx.lineTo(-2, 0);
+                ctx.lineTo(-6, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Draw Slide Star[cite: 1]
+        if (segmentT >= 0 && segmentT <= 1) {
+            const pt = this.generator.getPoint(Math.min(1, Math.max(0, segmentT)));
+            ctx.save();
+            ctx.translate(pt.position.x, pt.position.y);
+            ctx.rotate(pt.rotation + Math.PI / 2);
+            ctx.fillStyle = "#ebcb8b";
+            ctx.strokeStyle = "#d08770";
+            ctx.lineWidth = 3;
+
+            // Draw 5-pointed star
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * 16, -Math.sin((18 + i * 72) * Math.PI / 180) * 16);
+                ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * 7, -Math.sin((54 + i * 72) * Math.PI / 180) * 7);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+class FanSlideSegmentHandler {
+    constructor(slideBehaviour, startLocation) {
+        this.parentSlide = slideBehaviour;
+        this.cleared = false;
+        this.isJudgementTarget = false;
+        this.startPosition = getPosition(startLocation);
+        
+        const ccwLoc = { group: 'Tap', index: (startLocation.index + 3) % 8 };
+        const centerLoc = { group: 'Tap', index: (startLocation.index + 4) % 8 };
+        const cwLoc = { group: 'Tap', index: (startLocation.index + 5) % 8 };
+
+        this.endPositions = [
+            getPosition(ccwLoc),
+            getPosition(centerLoc),
+            getPosition(cwLoc)
+        ];
+
+        this.interactionReceivedState = 0;
+        this.interactableGroups = [
+            [{ group: 'ASensor', index: startLocation.index }],
+            [
+                { group: 'BSensor', index: (startLocation.index + 2) % 8 },
+                { group: 'BSensor', index: (startLocation.index + 6) % 8 }
+            ],
+            [
+                { group: 'ASensor', index: (startLocation.index + 3) % 8 },
+                { group: 'ASensor', index: (startLocation.index + 4) % 8 },
+                { group: 'ASensor', index: (startLocation.index + 5) % 8 }
+            ]
+        ];
+    }
+
+    getLength() { return PLAYFIELD_RADIUS * 2; }
+
+    onUpdate(segmentT, isAuto, activeTouches) {
+        if (this.isJudgementTarget) {
+            this.checkInteraction(segmentT, isAuto, activeTouches);
+        }
+    }
+
+    checkInteraction(segmentT, isAuto, activeTouches) {
+        if (isAuto) {
+            this.interactionReceivedState = Math.min(3, Math.floor(segmentT * 3));
+        } else {
+            for (let g = this.interactionReceivedState; g < 3; g++) {
+                const group = this.interactableGroups[g];
+                const hit = group.some(sensor => activeTouches.some(t => t.group === sensor.group && t.index === sensor.index));
+                if (hit && g === this.interactionReceivedState) {
+                    this.interactionReceivedState++;
+                }
+            }
+        }
+
+        if (this.interactionReceivedState >= 3) {
+            this.cleared = true;
+        }
+    }
+
+    getRemainingLength() {
+        return ((3 - this.interactionReceivedState) / 3) * this.getLength();
+    }
+
+    render(ctx, segmentT) {
+        // Render 3 diverging paths
+        for (let i = 0; i < 3; i++) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(180, 142, 173, ${0.4 + i * 0.2})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(this.startPosition.x, this.startPosition.y);
+            ctx.lineTo(this.endPositions[i].x, this.endPositions[i].y);
+            ctx.stroke();
+
+            // Render Stars
+            if (segmentT >= 0 && segmentT <= 1) {
+                const curX = this.startPosition.x + (this.endPositions[i].x - this.startPosition.x) * segmentT;
+                const curY = this.startPosition.y + (this.endPositions[i].y - this.startPosition.y) * segmentT;
+
+                ctx.translate(curX, curY);
+                ctx.fillStyle = "#b48ead";
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, TAU);
+                ctx.fill();
             }
             ctx.restore();
+        }
+    }
+}
 
-            ctx.font = `bold ${BUTTON_RADIUS * 0.45}px Arial`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            Object.keys(NODE_POSITIONS).forEach(key => {
-                let node = NODE_POSITIONS[key];
-                if (node.type === 'A' || node.type === 'B') {
-                    ctx.beginPath(); ctx.arc(node.x, node.y, BUTTON_RADIUS * (node.type === 'B' ? 0.7 : 1), 0, Math.PI * 2);
-                    ctx.fillStyle = node.active ? '#0ff' : 'rgba(0, 0, 0, 0.5)'; ctx.fill();
-                    ctx.strokeStyle = '#0ff'; ctx.lineWidth = 1; ctx.stroke();
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillText(key, node.x, node.y);
-                } else if (node.type === 'C') {
-                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
-                    ctx.fillRect(node.x - BUTTON_RADIUS, node.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillText('C', node.x, node.y - BUTTON_RADIUS * 1.5);
-                } else if (node.type === 'D' || node.type === 'E') {
-                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.3)';
-                    ctx.fillText(key, node.x, node.y);
-                }
-            });
+/**
+ * Main Controller: SlideBehaviour
+ * Managing lifetime, timing, auto-play, and scoring[cite: 1]
+ */
+class SlideBehaviour {
+    constructor(type, startLocation, endLocation) {
+        this.duration = 1.2; // Seconds
+        this.delay = 0.2;
+        this.timeSinceStart = -this.delay;
+        this.judged = false;
+        this.cleared = false;
+
+        const vertices = [startLocation, endLocation];
+        let generator;
+
+        if (type === 'Straight') generator = new StraightGenerator(vertices);
+        else if (type === 'RingCw') generator = new RingGenerator(vertices, true);
+        else if (type === 'RingCcw') generator = new RingGenerator(vertices, false);
+        else if (type === 'Fold') generator = new FoldGenerator(vertices);
+        else if (type === 'CurveCw') generator = new CurveCwGenerator(vertices);
+
+        if (type === 'Fan') {
+            this.handler = new FanSlideSegmentHandler(this, startLocation);
+        } else {
+            this.handler = new RegularSlideSegmentHandler(this, generator, startLocation);
         }
 
-        function drawCombo() {
-            if (combo > 0) {
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.font = `bold ${BUTTON_RADIUS * 1.5}px Arial`; ctx.lineWidth = 6;
-                ctx.strokeStyle = '#111'; ctx.strokeText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
-                ctx.fillStyle = '#ffcc00'; ctx.fillText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
-            }
+        this.length = this.handler.getLength();
+    }
+
+    update(dt, isAuto, activeTouches, slideTolerance) {
+        if (this.judged) return;
+
+        this.timeSinceStart += dt;
+        const segmentT = Math.max(0, this.timeSinceStart / this.duration);
+
+        this.handler.isJudgementTarget = this.timeSinceStart >= 0;
+        this.handler.onUpdate(segmentT, isAuto, activeTouches, slideTolerance);
+
+        if (this.handler.cleared) {
+            this.judge(true);
+        } else if (this.timeSinceStart > this.duration + 0.2) {
+            this.judge(false);
+        }
+    }
+
+    judge(success) {
+        if (this.judged) return;
+        this.judged = true;
+        this.cleared = success;
+
+        const remLength = this.handler.getRemainingLength();
+        const ratio = remLength / this.length;
+
+        let result = "CRITICAL PERFECT";
+        if (!success) {
+            if (ratio < 0.2) result = "GREAT";
+            else if (ratio < 0.5) result = "GOOD";
+            else result = "MISS";
         }
 
-        function drawStar(cx, cy, spikes, outerRadius, innerRadius, rotation) {
-            let rot = Math.PI / 2 * 3, x = cx, y = cy, step = Math.PI / spikes;
-            ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius);
-            for (let i = 0; i < spikes; i++) {
-                x = cx + Math.cos(rot + rotation) * outerRadius; y = cy + Math.sin(rot + rotation) * outerRadius; ctx.lineTo(x, y); rot += step;
-                x = cx + Math.cos(rot + rotation) * innerRadius; y = cy + Math.sin(rot + rotation) * innerRadius; ctx.lineTo(x, y); rot += step;
-            }
-            ctx.lineTo(cx, cy - outerRadius); ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
+        document.getElementById('hud-judge').innerText = result;
+        document.getElementById('hud-state').innerText = "FINISHED";
+    }
 
-        function drawHexagonBar(tx, ty, cx, cy, color) {
-            let dx = cx - tx, dy = cy - ty;
-            let L = Math.hypot(dx, dy);
-            let w = BUTTON_RADIUS * 0.65; 
-            
-            ctx.fillStyle = color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-            if (L <= w) { 
-                ctx.beginPath(); ctx.arc(cx, cy, w, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                return;
-            }
-            
-            let nx = dx / L, ny = dy / L, px = -ny, py = nx;
-            let p = w * 0.5; 
-            
-            ctx.beginPath();
-            ctx.moveTo(cx, cy); 
-            ctx.lineTo(cx - nx * p + px * w, cy - ny * p + py * w); 
-            ctx.lineTo(tx + nx * p + px * w, ty + ny * p + py * w); 
-            ctx.lineTo(tx, ty); 
-            ctx.lineTo(tx + nx * p - px * w, ty + ny * p - py * w); 
-            ctx.lineTo(cx - nx * p - px * w, cy - ny * p - py * w); 
-            ctx.closePath();
-            ctx.fill(); ctx.stroke();
-        }
+    render(ctx) {
+        const segmentT = this.timeSinceStart / this.duration;
+        this.handler.render(ctx, segmentT);
+    }
+}
 
-        function spawnClickEffect(x, y, color = '#0ff') { clickEffects.push({ x: x, y: y, radius: BUTTON_RADIUS * 0.5, maxRadius: BUTTON_RADIUS * 1.8, alpha: 1.0, color: color }); }
-        
-        function drawClickEffects() {
-            for (let i = clickEffects.length - 1; i >= 0; i--) {
-                let eff = clickEffects[i]; eff.radius += 3; eff.alpha -= 0.06;
-                if (eff.alpha <= 0) { clickEffects.splice(i, 1); continue; }
-                ctx.save(); ctx.beginPath(); ctx.arc(eff.x, eff.y, eff.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = eff.color; ctx.lineWidth = 3; ctx.globalAlpha = eff.alpha; ctx.stroke(); ctx.restore();
-            }
-        }
+/**
+ * Application Engine & Canvas Renderer
+ */
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const center = { x: 250, y: 250 };
 
-        function updateAndDrawNotes(elapsedTime) {
-            for (let i = activeNotes.length - 1; i >= 0; i--) {
-                let note = activeNotes[i];
-                let target = NODE_POSITIONS[note.pos];
-                if (!target && note.type !== 'slide_travel') continue;
+let slide = null;
+let lastTime = performance.now();
+let activeTouches = [];
 
-                let timeUntilHit = note.time - elapsedTime;
+function initSlide() {
+    const type = document.getElementById('slide-type').value;
+    const startLoc = { group: 'Tap', index: 0 };
+    const endLoc = { group: 'Tap', index: 4 };
 
-                if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
-                    let pData = note.slideData;
-                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
-                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.45)' : 'rgba(0, 150, 255, 0.45)';
-                    ctx.lineWidth = 22; ctx.stroke();
+    slide = new SlideBehaviour(type, startLoc, endLoc);
+    document.getElementById('hud-state').innerText = "RUNNING";
+    document.getElementById('hud-judge').innerText = "-";
+}
 
-                    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
-                    ctx.stroke(); ctx.setLineDash([]);
-                }
+function drawPlayfield() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(center.x, center.y);
 
-                if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
-                    spawnJudgement("MISS", "#888", target.x, target.y);
-                    combo = 0;
-                    note.type = 'slide_travel';
-                    note.state = 'sliding';
-                    
-                    let lastNode = note.slideData.points[note.slideData.points.length-1];
-                    note.finalX = lastNode.x; note.finalY = lastNode.y;
-                    note.time = elapsedTime;
-                    note.remainingPath = [...note.slideData.interactionPath];
-                    note.clearedSensorCount = 0;
-                    note.slideTolerance = 2;
-                }
+    // Outer Ring
+    ctx.strokeStyle = "#4c566a";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, PLAYFIELD_RADIUS, 0, TAU);
+    ctx.stroke();
 
-                // Refactored Slide Segment Handler & Sequential Path Judgment Loop
-                if (note.type === 'slide_travel' && note.state === 'sliding') {
-                    let travelProgress = Math.min(1.0, (elapsedTime - note.time) / note.duration);
-                    let pData = note.slideData;
-                    
-                    if (!note.remainingPath) {
-                        note.remainingPath = [...pData.interactionPath];
-                        note.clearedSensorCount = 0;
-                        note.slideTolerance = 2; // Tolerance window decrements on miss, resets on touch
-                    }
+    // Inner Center Area
+    ctx.strokeStyle = "#3b4252";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, CENTER_RADIUS, 0, TAU);
+    ctx.stroke();
 
-                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
-                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(0, 180, 255, 0.8)';
-                    ctx.lineWidth = 24; ctx.stroke();
+    // 8 Touch Sensors (A/B Nodes)
+    for (let i = 0; i < 8; i++) {
+        const aPos = getPosition({ group: 'ASensor', index: i });
+        const bPos = getPosition({ group: 'BSensor', index: i });
 
-                    let currentDist = travelProgress * pData.totalLength;
-                    let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
-                    
-                    for(let s = 0; s < pData.segments.length; s++) {
-                        if (currentDist <= accum + pData.segments[s]) {
-                            let localP = (currentDist - accum) / pData.segments[s];
-                            starX = pData.points[s].x + (pData.points[s+1].x - pData.points[s].x) * localP;
-                            starY = pData.points[s].y + (pData.points[s+1].y - pData.points[s].y) * localP;
-                            break;
-                        }
-                        accum += pData.segments[s];
-                    }
+        const isATouched = activeTouches.some(t => t.group === 'ASensor' && t.index === i);
+        const isBTouched = activeTouches.some(t => t.group === 'BSensor' && t.index === i);
 
-                    // Continuous Interaction Path checking using slideTolerance
-                    let activeSensorSet = new Set();
-                    Object.keys(activeTouches).forEach(id => {
-                        let tx = activeTouches[id].x;
-                        let ty = activeTouches[id].y;
-                        Object.keys(NODE_POSITIONS).forEach(k => {
-                            let n = NODE_POSITIONS[k];
-                            if (Math.hypot(tx - n.x, ty - n.y) < BUTTON_RADIUS * 1.8) {
-                                activeSensorSet.add(k);
-                            }
-                        });
-                    });
+        ctx.fillStyle = isATouched ? "#88c0d0" : "rgba(76, 86, 106, 0.3)";
+        ctx.beginPath();
+        ctx.arc(aPos.x, aPos.y, 12, 0, TAU);
+        ctx.fill();
 
-                    while (note.remainingPath.length > 0) {
-                        let targetSensor = note.remainingPath[0];
-                        if (activeSensorSet.has(targetSensor)) {
-                            note.remainingPath.shift();
-                            note.clearedSensorCount++;
-                            note.slideTolerance = 2; // Reset tolerance counter on hit
-                        } else {
-                            // Check tolerance window for minor sensor skips
-                            let lookAheadIndex = -1;
-                            for (let step = 1; step <= note.slideTolerance && step < note.remainingPath.length; step++) {
-                                if (activeSensorSet.has(note.remainingPath[step])) {
-                                    lookAheadIndex = step;
-                                    break;
-                                }
-                            }
-                            if (lookAheadIndex !== -1) {
-                                note.remainingPath.splice(0, lookAheadIndex + 1);
-                                note.clearedSensorCount += (lookAheadIndex + 1);
-                                note.slideTolerance--;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
+        ctx.fillStyle = isBTouched ? "#81a1c1" : "rgba(76, 86, 106, 0.2)";
+        ctx.beginPath();
+        ctx.arc(bPos.x, bPos.y, 10, 0, TAU);
+        ctx.fill();
+    }
+    ctx.restore();
+}
 
-                    // Final Segment Judgement evaluation upon path end or duration expiry
-                    if (travelProgress >= 1.0 || note.remainingPath.length === 0) {
-                        let clearRatio = (pData.initialSensorCount > 0) ? (note.clearedSensorCount / pData.initialSensorCount) : 1;
-                        if (clearRatio >= 0.95) {
-                            spawnJudgement("CRITICAL", "#ffd700", note.finalX, note.finalY);
-                            combo++;
-                        } else if (clearRatio >= 0.75) {
-                            spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
-                            combo++;
-                        } else if (clearRatio >= 0.50) {
-                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
-                            combo++;
-                        } else if (clearRatio >= 0.25) {
-                            spawnJudgement("GOOD", "#00ff00", note.finalX, note.finalY);
-                            combo++;
-                        } else {
-                            spawnJudgement("MISS", "#888", note.finalX, note.finalY);
-                            combo = 0;
-                        }
-                        activeNotes.splice(i, 1);
-                        continue;
-                    }
+function loop(now) {
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
 
-                    ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                    drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
-                    continue;
-                }
+    drawPlayfield();
 
-                let missWindow = 0.16;
-                let isHolding = (note.state === 'holding');
+    if (slide) {
+        const isAuto = document.getElementById('auto-mode').value === 'on';
+        const tolerance = parseInt(document.getElementById('tolerance').value, 10);
 
-                if (!isHolding && note.type !== 'slide_head' && timeUntilHit < -missWindow) {
-                    spawnJudgement("MISS", "#888", target.x, target.y);
-                    combo = 0; activeNotes.splice(i, 1); continue;
-                }
+        slide.update(dt, isAuto, activeTouches, tolerance);
 
-                if (isHolding && elapsedTime >= note.time + note.duration) {
-                    spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
-                    combo++; activeNotes.splice(i, 1); continue;
-                }
+        ctx.save();
+        ctx.translate(center.x, center.y);
+        slide.render(ctx);
+        ctx.restore();
 
-                if (timeUntilHit <= APPROACH_TIME || isHolding) {
-                    let progress = isHolding ? 1.0 : Math.max(0, 1 - (timeUntilHit / APPROACH_TIME));
-                    let cx = target ? CENTER.x + (target.x - CENTER.x) * progress : note.finalX;
-                    let cy = target ? CENTER.y + (target.y - CENTER.y) * progress : note.finalY;
-                    let cYellow = '#ffff00';
+        const progress = Math.min(100, Math.max(0, (slide.timeSinceStart / slide.duration) * 100));
+        document.getElementById('hud-progress').innerText = `${Math.floor(progress)}%`;
+    }
 
-                    if (note.type === 'touch' || note.type === 'hold_touch') {
-                        let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
-                        
-                        let tOutline = note.isChord ? '#ffff00' : '#00ffff';
-                        let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
-                        
-                        ctx.save();
-                        ctx.translate(target.x, target.y);
-                        ctx.rotate(Math.PI / 4);
-                        
-                        if (note.type === 'hold_touch') {
-                            let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
-                            let baseSquareSize = BUTTON_RADIUS * 1.5;
-                            let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
+    requestAnimationFrame(loop);
+}
 
-                            let quadColors = ['#ff0055', '#00ffcc', '#ffcc00', '#9900ff'];
-                            let angles = [0, Math.PI/2, Math.PI, Math.PI*3/2];
-                            for(let q = 0; q < 4; q++) {
-                                ctx.beginPath();
-                                ctx.arc(0, 0, currentRadius, angles[q], angles[q] + Math.PI/2);
-                                ctx.strokeStyle = quadColors[q];
-                                ctx.lineWidth = 6;
-                                ctx.stroke();
-                            }
+// Interactive Touch Engine
+function handlePointer(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left - center.x;
+    const y = e.clientY - rect.top - center.y;
 
-                            ctx.fillStyle = tFill;
-                            ctx.fillRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
-                            ctx.strokeStyle = tOutline;
-                            ctx.lineWidth = 4;
-                            ctx.strokeRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
-                        } else {
-                            ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
-                            ctx.strokeRect(-size/2, -size/2, size, size);
-                            ctx.fillStyle = tFill;
-                            ctx.fillRect(-BUTTON_RADIUS/1.2, -BUTTON_RADIUS/1.2, BUTTON_RADIUS*1.5, BUTTON_RADIUS*1.5);
-                        }
-                        ctx.restore();
+    activeTouches = [];
+    for (let i = 0; i < 8; i++) {
+        const aPos = getPosition({ group: 'ASensor', index: i });
+        const bPos = getPosition({ group: 'BSensor', index: i });
 
-                    } else if (note.type === 'hold') {
-                        let tailTimeUntil = (note.time + note.duration) - elapsedTime;
-                        let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
-                        let headP = Math.min(1, progress); let tailP = Math.min(1, tailProgress);
-                        
-                        let headX = CENTER.x + (target.x - CENTER.x) * headP;
-                        let headY = CENTER.y + (target.y - CENTER.y) * headP;
-                        let tailX = CENTER.x + (target.x - CENTER.x) * tailP;
-                        let tailY = CENTER.y + (target.y - CENTER.y) * tailP;
-                        
-                        let holdColor = note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)';
-                        drawHexagonBar(tailX, tailY, headX, headY, holdColor);
-                        
-                    } else if (note.type === 'slide_head' && note.state === 'waiting') {
-                        ctx.fillStyle = note.isChord ? cYellow : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                        drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
-                    
-                    } else if (note.type === 'tap') {
-                        ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                        ctx.fillStyle = note.isChord ? cYellow : '#ff00ff'; ctx.fill(); 
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-                    }
-                }
-            }
-        }
+        if (Math.hypot(x - aPos.x, y - aPos.y) < 25) activeTouches.push({ group: 'ASensor', index: i });
+        if (Math.hypot(x - bPos.x, y - bPos.y) < 25) activeTouches.push({ group: 'BSensor', index: i });
+    }
+}
 
-        function spawnJudgement(text, color, jX, jY) { judgements.push({ text: text, color: color, x: jX, y: jY - 25, spawnTime: audio.currentTime }); }
-        
-        function drawJudgements(elapsedTime) {
-            for (let i = judgements.length - 1; i >= 0; i--) {
-                let j = judgements[i]; let age = elapsedTime - j.spawnTime;
-                if (age > 0.5) { judgements.splice(i, 1); continue; }
-                ctx.fillStyle = j.color; ctx.font = `bold ${BUTTON_RADIUS * 0.8}px Arial`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 2; ctx.strokeStyle = '#000';
-                ctx.globalAlpha = 1 - (age / 0.5); 
-                let dropY = j.y - (age * 30);
-                ctx.strokeText(j.text, j.x, dropY); ctx.fillText(j.text, j.x, dropY); 
-                ctx.globalAlpha = 1.0;
-            }
-        }
+canvas.addEventListener('pointerdown', handlePointer);
+canvas.addEventListener('pointermove', (e) => { if (e.buttons > 0) handlePointer(e); });
+canvas.addEventListener('pointerup', () => { activeTouches = []; });
 
-        let touchState = {}; 
-        let activeTouches = {};
+document.getElementById('btn-trigger').addEventListener('click', initSlide);
+document.getElementById('slide-type').addEventListener('change', initSlide);
 
-        function handleTouches(e) {
-            e.preventDefault(); 
-            let rect = canvas.getBoundingClientRect();
-            
-            for(let i = 0; i < e.changedTouches.length; i++) {
-                let touch = e.changedTouches[i];
-                let tx = touch.clientX - rect.left, ty = touch.clientY - rect.top;
-
-                if (e.type === 'touchend' || e.type === 'touchcancel') {
-                    let releasedNodes = touchState[touch.identifier] || new Set();
-                    releasedNodes.forEach(nodeKey => checkHoldRelease(nodeKey));
-                    
-                    delete activeTouches[touch.identifier];
-                    delete touchState[touch.identifier]; 
-                    continue;
-                }
-
-                activeTouches[touch.identifier] = { x: tx, y: ty };
-
-                let currentlyTouched = new Set();
-                Object.keys(NODE_POSITIONS).forEach(key => {
-                    let node = NODE_POSITIONS[key];
-                    if (Math.hypot(tx - node.x, ty - node.y) < BUTTON_RADIUS * 1.5) currentlyTouched.add(key);
-                });
-
-                let previouslyTouched = touchState[touch.identifier] || new Set();
-                currentlyTouched.forEach(key => {
-                    if (!previouslyTouched.has(key)) {
-                        NODE_POSITIONS[key].active = true;
-                        spawnClickEffect(NODE_POSITIONS[key].x, NODE_POSITIONS[key].y, '#0ff');
-                        checkHit(key);
-                        setTimeout(() => NODE_POSITIONS[key].active = false, 100);
-                    }
-                });
-                touchState[touch.identifier] = currentlyTouched;
-            }
-        }
-
-        canvas.addEventListener('touchstart', handleTouches, {passive: false});
-        canvas.addEventListener('touchmove', handleTouches, {passive: false});
-        canvas.addEventListener('touchend', handleTouches, {passive: false});
-        canvas.addEventListener('touchcancel', handleTouches, {passive: false});
-
-        function checkHit(posKey) {
-            let elapsedTime = audio.currentTime;
-            for (let i = 0; i < activeNotes.length; i++) {
-                let note = activeNotes[i];
-                if (note.pos === posKey) {
-                    let diff = Math.abs(note.time - elapsedTime);
-                    let hitWindow = 0.16;
-                    let target = NODE_POSITIONS[note.pos];
-
-                    if (diff <= hitWindow) {
-                        if (note.type === 'hold' || note.type === 'hold_touch') {
-                            note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
-                            combo++; return; 
-                        } else if (note.type === 'slide_head' && note.state === 'waiting') {
-                            note.type = 'slide_travel'; note.state = 'sliding';
-                            note.time = elapsedTime; 
-                            
-                            let lastNode = note.slideData.points[note.slideData.points.length-1];
-                            note.finalX = lastNode.x; note.finalY = lastNode.y;
-                            note.remainingPath = [...note.slideData.interactionPath];
-                            note.clearedSensorCount = 0;
-                            note.slideTolerance = 2;
-                            
-                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
-                        } else if (note.type === 'tap' || note.type === 'touch' || note.type === 'hold_touch') {
-                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
-                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
-                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
-                            else { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
-                            activeNotes.splice(i, 1); break;
-                        }
-                    }
-                }
-            }
-        }
-
-        function checkHoldRelease(posKey) {
-            let elapsedTime = audio.currentTime;
-            for (let i = activeNotes.length - 1; i >= 0; i--) {
-                let note = activeNotes[i];
-                if ((note.type === 'hold' || note.type === 'hold_touch') && note.pos === posKey && note.state === 'holding') {
-                    let target = NODE_POSITIONS[posKey];
-                    if (elapsedTime < note.time + note.duration - 0.15) {
-                        spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
-                    } else {
-                        spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++;
-                    }
-                    activeNotes.splice(i, 1); break;
-                }
-            }
-        }
-    </script>
+// Bootstrap
+initSlide();
+requestAnimationFrame(loop);
+</script>
 </body>
 </html>
