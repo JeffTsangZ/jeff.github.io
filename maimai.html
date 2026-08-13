@@ -70,7 +70,7 @@
     <button id="fullscreenBtn">⛶ Fullscreen</button>
 
     <div id="ui">
-        <h2>maimai Simulator</h2>
+        <h2>maimai DX Simulator</h2>
         <input type="file" id="adxUpload" accept=".adx,.zip" />
         
         <div id="difficultyContainer">
@@ -97,7 +97,9 @@
         let CENTER = { x: 0, y: 0 };
         let RING_RADIUS = 0;
         let BUTTON_RADIUS = 0;
-        let buttons = [];
+        
+        // Master node dictionary (A1-A8, B1-B8, C, D1-D8, E1-E8)
+        let NODE_POSITIONS = {};
 
         let availableCharts = {};
         let globalAudioOffset = 0;
@@ -110,7 +112,7 @@
         let isPlaying = false;
         let combo = 0;
 
-        let APPROACH_TIME = 3.0; // Increased base display time to show tracks earlier
+        let APPROACH_TIME = 3.0; 
         const speedSlider = document.getElementById('speedSlider');
         speedSlider.addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
@@ -127,7 +129,7 @@
             }
         });
 
-        // --- RESIZE CANVAS TO FIT ANY SCREEN ---
+        // --- RESIZE CANVAS TO FIT ANY SCREEN & GENERATE NODES ---
         function resizeCanvas() {
             let size = Math.min(window.innerWidth, window.innerHeight) * 0.95;
             canvas.width = size;
@@ -136,16 +138,22 @@
             RING_RADIUS = size * 0.38;
             BUTTON_RADIUS = size * 0.07;
 
-            buttons = [];
-            for (let i = 0; i < 8; i++) {
-                let angle = (i * 45 + 22.5) * (Math.PI / 180);
-                buttons.push({
-                    x: CENTER.x + Math.cos(angle) * RING_RADIUS,
-                    y: CENTER.y + Math.sin(angle) * RING_RADIUS,
-                    angle: angle, active: false, type: 'ring'
-                });
+            NODE_POSITIONS = {};
+            NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
+
+            for (let i = 1; i <= 8; i++) {
+                // Top is -90 degrees in Canvas. Maimai A1 is clockwise from top (22.5 deg shift)
+                let aAngle = -90 + (i - 1) * 45 + 22.5; 
+                let dAngle = -90 + (i - 1) * 45; 
+
+                let aRad = aAngle * (Math.PI / 180);
+                let dRad = dAngle * (Math.PI / 180);
+
+                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aRad) * RING_RADIUS, y: CENTER.y + Math.sin(aRad) * RING_RADIUS, type: 'A', active: false };
+                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aRad) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aRad) * (RING_RADIUS * 0.5), type: 'B', active: false };
+                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.85), type: 'D', active: false };
+                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.4), type: 'E', active: false };
             }
-            buttons.push({ x: CENTER.x, y: CENTER.y, angle: 0, active: false, type: 'center' });
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
@@ -205,43 +213,29 @@
             let firstMatch = text.match(/&first=([\d\.\-]+)/);
             globalAudioOffset = firstMatch ? parseFloat(firstMatch[1]) : 0.0;
 
-            const difficultyNames = {
-                1: "Basic (Green)",
-                2: "Advanced (Orange)",
-                3: "Expert (Red)",
-                4: "Master (Purple)",
-                5: "Re:Master (White)",
-                6: "Utage"
-            };
+            const difficultyNames = { 1: "Basic", 2: "Advanced", 3: "Expert", 4: "Master", 5: "Re:Master", 6: "Utage" };
 
             for (let i = 1; i <= 6; i++) {
                 let regex = new RegExp(`&inote_${i}=([^&]+)`);
                 let match = text.match(regex);
-                if (match) {
-                    availableCharts[i] = {
-                        name: difficultyNames[i],
-                        data: match[1]
-                    };
-                }
+                if (match) { availableCharts[i] = { name: difficultyNames[i], data: match[1] }; }
             }
         }
 
         function populateDifficultyUI() {
             const select = document.getElementById('diffSelect');
             select.innerHTML = ''; 
-            
             let highestDiff = 1;
             for (let key in availableCharts) {
                 let option = document.createElement('option');
-                option.value = key;
-                option.text = availableCharts[key].name;
+                option.value = key; option.text = availableCharts[key].name;
                 select.appendChild(option);
                 highestDiff = key;
             }
             select.value = highestDiff; 
         }
 
-        // --- 2. ADVANCED SIMAI PARSER ---
+        // --- 2. ADVANCED SIMAI PARSER & SLIDE PATHING ---
         function parseDuration(str, bpm) {
             let parts = str.replace(/[\[\]]/g, '').split(':');
             if (parts.length === 2) {
@@ -283,44 +277,52 @@
                 for (let el of elements) {
                     if (!el) continue;
 
-                    if (el.includes('C')) {
-                        parsedNotes.push({ type: 'touch', time: currentTime, pos: 8, isChord: false, state: 'waiting' }); 
+                    // 1. Touch Hold: A1h[...], B2h[...], Ch[...]
+                    let touchHoldMatch = el.match(/^([A-E][1-8]?|C)h\[(.*?)\]/);
+                    if (touchHoldMatch) {
+                        let duration = parseDuration(touchHoldMatch[2], currentBPM);
+                        parsedNotes.push({ type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], duration: duration, isChord: false, state: 'waiting' });
                         continue;
                     }
 
-                    let slideMatch = el.match(/^([1-8])([a-zA-Z\-\^\<\>]+)([1-8])(?:\[(.*?)\])?/);
+                    // 2. Standard Hold: 1h[...] -> mapped to A1
+                    let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
+                    if (holdMatch) {
+                        let duration = parseDuration(holdMatch[2], currentBPM);
+                        parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: duration, isChord: false, state: 'waiting' });
+                        continue;
+                    }
+
+                    // 3. Slides (Waypoints & Arcs): 1-5[...], 1-B1-C-B5[...], 1v5[...]
+                    let slideMatch = el.match(/^([1-8])([a-zA-Z\-\^\<\>]+[A-E1-8C]+)(?:\[(.*?)\])?/);
                     if (slideMatch) {
-                        let startPos = parseInt(slideMatch[1]) - 1;
-                        let endPos = parseInt(slideMatch[3]) - 1;
-                        let slideDur = slideMatch[4] ? parseDuration(slideMatch[4], currentBPM) : (240 / currentBPM) / 2;
+                        let startNode = `A${slideMatch[1]}`;
+                        let pathStr = slideMatch[2]; // e.g., "-B1-C", "v4", "^5"
+                        let slideDur = slideMatch[3] ? parseDuration(slideMatch[3], currentBPM) : (240 / currentBPM) / 2;
                         
                         parsedNotes.push({ 
-                            type: 'slide_head', 
-                            time: currentTime, 
-                            pos: startPos, 
-                            endPos: endPos, 
-                            duration: slideDur,
-                            state: 'waiting', 
-                            isChord: false 
+                            type: 'slide_head', time: currentTime, pos: startNode, pathStr: pathStr, duration: slideDur, state: 'waiting', isChord: false 
                         });
                         continue;
                     }
 
-                    let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
-                    if (holdMatch) {
-                        let duration = parseDuration(holdMatch[2], currentBPM);
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: parseInt(holdMatch[1]) - 1, duration: duration, isChord: false, state: 'waiting' });
+                    // 4. Touch Tap: A1, B5, C
+                    let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
+                    if (touchMatch) {
+                        parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' });
                         continue;
                     }
 
-                    let tapMatch = el.match(/^([1-8])/);
+                    // 5. Standard Tap: 1-8 -> mapped to A1-A8
+                    let tapMatch = el.match(/^([1-8])$/);
                     if (tapMatch) {
-                        parsedNotes.push({ type: 'tap', time: currentTime, pos: parseInt(tapMatch[1]) - 1, isChord: false, state: 'waiting' });
+                        parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${tapMatch[1]}`, isChord: false, state: 'waiting' });
                     }
                 }
                 currentTime += (240 / currentBPM) / currentDivisor;
             }
 
+            // Flag Chords
             let timeGroups = {};
             parsedNotes.forEach(note => {
                 let t = note.time.toFixed(4); 
@@ -328,19 +330,43 @@
                 timeGroups[t].push(note);
             });
             for (let t in timeGroups) {
-                if (timeGroups[t].length > 1) {
-                    timeGroups[t].forEach(note => note.isChord = true);
-                }
+                if (timeGroups[t].length > 1) { timeGroups[t].forEach(note => note.isChord = true); }
             }
 
             return parsedNotes;
         }
 
+        // --- PATH GENERATOR ---
+        function calculateSlidePoints(pathStr, startPosKey) {
+            let nodes = [NODE_POSITIONS[startPosKey]];
+            let normalizedStr = pathStr.replace(/v/g, '-C-'); // Convert v-shape to center waypoint
+
+            let regex = /([A-E][1-8]?|C|[1-8])/g;
+            let match;
+            while ((match = regex.exec(normalizedStr)) !== null) {
+                let key = match[1];
+                if (/^[1-8]$/.test(key)) key = `A${key}`; // Map legacy 1-8 to outer ring
+                if (NODE_POSITIONS[key]) nodes.push(NODE_POSITIONS[key]);
+            }
+
+            if (nodes.length === 1) nodes.push(NODE_POSITIONS['C']); // Safe fallback
+
+            let segments = [];
+            let totalLen = 0;
+            for(let i=0; i<nodes.length-1; i++) {
+                let dx = nodes[i+1].x - nodes[i].x;
+                let dy = nodes[i+1].y - nodes[i].y;
+                let len = Math.hypot(dx, dy);
+                segments.push(len);
+                totalLen += len;
+            }
+            return { points: nodes, segments: segments, totalLength: totalLen };
+        }
+
         // --- 3. GAME ENGINE & DRAWING ---
         document.getElementById('startBtn').addEventListener('click', () => {
             let selectedDiff = document.getElementById('diffSelect').value;
-            let chartData = availableCharts[selectedDiff].data;
-            notes = parseChartString(chartData, globalAudioOffset);
+            notes = parseChartString(availableCharts[selectedDiff].data, globalAudioOffset);
 
             document.getElementById('ui').style.display = 'none';
             canvas.style.display = 'block';
@@ -348,9 +374,7 @@
             activeNotes = JSON.parse(JSON.stringify(notes));
             combo = 0; 
             
-            if (document.getElementById('bgVideo').src) {
-                document.getElementById('bgVideo').currentTime = 0;
-            }
+            if (document.getElementById('bgVideo').src) document.getElementById('bgVideo').currentTime = 0;
             audio.play();
             isPlaying = true;
             requestAnimationFrame(gameLoop);
@@ -378,190 +402,145 @@
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Draw Judgment Area Sector Lines (D1-D8 Slices)
+            // Draw Sector Dividers (D1-D8 format based on image)
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
-            for (let i = 0; i < 8; i++) {
-                let angle = (i * 45) * (Math.PI / 180);
-                let innerX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.35);
-                let innerY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.35);
-                let outerX = CENTER.x + Math.cos(angle) * RING_RADIUS;
-                let outerY = CENTER.y + Math.sin(angle) * RING_RADIUS;
-
-                ctx.beginPath();
-                ctx.moveTo(innerX, innerY);
-                ctx.lineTo(outerX, outerY);
-                ctx.stroke();
+            for (let i = 1; i <= 8; i++) {
+                let angle = -90 + (i - 1) * 45; 
+                let innerX = CENTER.x + Math.cos(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
+                let innerY = CENTER.y + Math.sin(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
+                let outerX = CENTER.x + Math.cos(angle * Math.PI / 180) * RING_RADIUS;
+                let outerY = CENTER.y + Math.sin(angle * Math.PI / 180) * RING_RADIUS;
+                ctx.beginPath(); ctx.moveTo(innerX, innerY); ctx.lineTo(outerX, outerY); ctx.stroke();
             }
             ctx.restore();
 
-            // Draw Zone Labels (D1-D8) near the outer rim
-            ctx.font = `bold ${BUTTON_RADIUS * 0.35}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            for (let i = 0; i < 8; i++) {
-                let dAngle = (i * 45 + 22.5) * (Math.PI / 180);
-                let dX = CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.88);
-                let dY = CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.88);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-                ctx.fillText(`D${i + 1}`, dX, dY);
-            }
+            // Draw Nodes
+            ctx.font = `bold ${BUTTON_RADIUS * 0.45}px Arial`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
-            // Draw Buttons (A1-A8 and Center C)
-            buttons.forEach((btn, index) => {
-                if (btn.type === 'ring') {
+            Object.keys(NODE_POSITIONS).forEach(key => {
+                let node = NODE_POSITIONS[key];
+                if (node.type === 'A' || node.type === 'B') {
                     ctx.beginPath();
-                    ctx.arc(btn.x, btn.y, BUTTON_RADIUS, 0, Math.PI * 2);
-                    ctx.fillStyle = btn.active ? '#0ff' : 'rgba(0, 0, 0, 0.5)';
-                    ctx.fill();
-                    ctx.strokeStyle = '#0ff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-
-                    // Button Label (A1-A8)
+                    ctx.arc(node.x, node.y, BUTTON_RADIUS * (node.type === 'B' ? 0.7 : 1), 0, Math.PI * 2);
+                    ctx.fillStyle = node.active ? '#0ff' : 'rgba(0, 0, 0, 0.5)'; ctx.fill();
+                    ctx.strokeStyle = '#0ff'; ctx.lineWidth = 1; ctx.stroke();
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                    ctx.font = `bold ${BUTTON_RADIUS * 0.45}px Arial`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(`A${index + 1}`, btn.x, btn.y);
-
-                } else if (btn.type === 'center') {
-                    ctx.fillStyle = btn.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
-                    ctx.fillRect(btn.x - BUTTON_RADIUS, btn.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
+                    ctx.fillText(key, node.x, node.y);
+                } else if (node.type === 'C') {
+                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
+                    ctx.fillRect(node.x - BUTTON_RADIUS, node.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillText('C', node.x, node.y - BUTTON_RADIUS * 1.5);
+                } else if (node.type === 'D' || node.type === 'E') {
+                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.3)';
+                    ctx.fillText(key, node.x, node.y);
                 }
             });
         }
 
         function drawCombo() {
             if (combo > 0) {
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                
-                ctx.font = `bold ${BUTTON_RADIUS * 1.5}px Arial`;
-                ctx.lineWidth = 6;
-                ctx.strokeStyle = '#111'; 
-                ctx.strokeText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
-                ctx.fillStyle = '#ffcc00'; 
-                ctx.fillText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
-                
-                ctx.font = `bold ${BUTTON_RADIUS * 0.4}px Arial`;
-                ctx.lineWidth = 4;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = `bold ${BUTTON_RADIUS * 1.5}px Arial`; ctx.lineWidth = 6;
+                ctx.strokeStyle = '#111'; ctx.strokeText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
+                ctx.fillStyle = '#ffcc00'; ctx.fillText(combo, CENTER.x, CENTER.y - BUTTON_RADIUS * 0.2);
+                ctx.font = `bold ${BUTTON_RADIUS * 0.4}px Arial`; ctx.lineWidth = 4;
                 ctx.strokeText("COMBO", CENTER.x, CENTER.y + BUTTON_RADIUS * 0.8);
                 ctx.fillText("COMBO", CENTER.x, CENTER.y + BUTTON_RADIUS * 0.8);
             }
         }
 
         function drawStar(cx, cy, spikes, outerRadius, innerRadius, rotation) {
-            let rot = Math.PI / 2 * 3;
-            let x = cx, y = cy;
-            let step = Math.PI / spikes;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy - outerRadius);
+            let rot = Math.PI / 2 * 3, x = cx, y = cy, step = Math.PI / spikes;
+            ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius);
             for (let i = 0; i < spikes; i++) {
-                x = cx + Math.cos(rot + rotation) * outerRadius;
-                y = cy + Math.sin(rot + rotation) * outerRadius;
-                ctx.lineTo(x, y);
-                rot += step;
-                x = cx + Math.cos(rot + rotation) * innerRadius;
-                y = cy + Math.sin(rot + rotation) * innerRadius;
-                ctx.lineTo(x, y);
-                rot += step;
+                x = cx + Math.cos(rot + rotation) * outerRadius; y = cy + Math.sin(rot + rotation) * outerRadius; ctx.lineTo(x, y); rot += step;
+                x = cx + Math.cos(rot + rotation) * innerRadius; y = cy + Math.sin(rot + rotation) * innerRadius; ctx.lineTo(x, y); rot += step;
             }
-            ctx.lineTo(cx, cy - outerRadius);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            ctx.lineTo(cx, cy - outerRadius); ctx.closePath(); ctx.fill(); ctx.stroke();
         }
 
         function spawnClickEffect(x, y, color = '#0ff') {
-            clickEffects.push({
-                x: x, y: y,
-                radius: BUTTON_RADIUS * 0.5,
-                maxRadius: BUTTON_RADIUS * 1.8,
-                alpha: 1.0,
-                color: color
-            });
+            clickEffects.push({ x: x, y: y, radius: BUTTON_RADIUS * 0.5, maxRadius: BUTTON_RADIUS * 1.8, alpha: 1.0, color: color });
         }
 
         function drawClickEffects() {
             for (let i = clickEffects.length - 1; i >= 0; i--) {
                 let eff = clickEffects[i];
-                eff.radius += 3;
-                eff.alpha -= 0.06;
-                if (eff.alpha <= 0) {
-                    clickEffects.splice(i, 1);
-                    continue;
-                }
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(eff.x, eff.y, eff.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = eff.color;
-                ctx.lineWidth = 3;
-                ctx.globalAlpha = eff.alpha;
-                ctx.stroke();
-                ctx.restore();
+                eff.radius += 3; eff.alpha -= 0.06;
+                if (eff.alpha <= 0) { clickEffects.splice(i, 1); continue; }
+                ctx.save(); ctx.beginPath(); ctx.arc(eff.x, eff.y, eff.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = eff.color; ctx.lineWidth = 3; ctx.globalAlpha = eff.alpha; ctx.stroke(); ctx.restore();
             }
         }
 
         function updateAndDrawNotes(elapsedTime) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
-                let target = buttons[note.pos];
+                let target = NODE_POSITIONS[note.pos];
+                if (!target) continue;
 
-                // Hold body stays visible until tail is reached
-                if (note.type === 'hold' && note.state === 'holding') {
+                // Processing ongoing Holds
+                if ((note.type === 'hold' || note.type === 'hold_touch') && note.state === 'holding') {
                     if (elapsedTime >= note.time + note.duration) {
-                        spawnJudgement("CRITICAL", "#ffd700", target.angle);
-                        combo++;
-                        activeNotes.splice(i, 1);
-                        continue;
+                        spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
+                        combo++; activeNotes.splice(i, 1); continue;
                     }
-                    let startBtn = buttons[note.pos];
                     let holdProgress = (elapsedTime - note.time) / note.duration;
-                    let tailDist = RING_RADIUS * (1 - Math.min(1, holdProgress));
-                    let tX = CENTER.x + Math.cos(target.angle) * tailDist;
-                    let tY = CENTER.y + Math.sin(target.angle) * tailDist;
+                    
+                    if (note.type === 'hold') {
+                        let tailDist = RING_RADIUS * (1 - Math.min(1, holdProgress));
+                        let tX = CENTER.x + (target.x - CENTER.x) * (tailDist / RING_RADIUS);
+                        let tY = CENTER.y + (target.y - CENTER.y) * (tailDist / RING_RADIUS);
+                        ctx.beginPath(); ctx.moveTo(target.x, target.y); ctx.lineTo(tX, tY);
+                        ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(255, 0, 255, 0.8)';
+                        ctx.lineWidth = BUTTON_RADIUS; ctx.stroke();
+                    }
 
-                    ctx.beginPath();
-                    ctx.moveTo(startBtn.x, startBtn.y);
-                    ctx.lineTo(tX, tY);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(255, 0, 255, 0.8)';
-                    ctx.lineWidth = BUTTON_RADIUS;
-                    ctx.stroke();
-
-                    ctx.beginPath();
-                    ctx.arc(startBtn.x, startBtn.y, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                    ctx.fillStyle = note.isChord ? '#ffff00' : '#ff00ff';
-                    ctx.fill();
+                    ctx.beginPath(); ctx.arc(target.x, target.y, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
+                    ctx.fillStyle = note.isChord ? '#ffff00' : '#ff00ff'; ctx.fill();
                     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
                     continue;
                 }
 
+                // Processing Multi-node Slide Path
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
                     let travelProgress = (elapsedTime - note.time) / note.duration;
                     if (travelProgress >= 1.0) {
                         note.type = 'slide_destination';
-                        note.pos = note.endPos; 
+                        note.pos = 'end_placeholder';
+                        let lastNode = note.slideData.points[note.slideData.points.length-1];
+                        note.finalX = lastNode.x; note.finalY = lastNode.y;
                         note.time = elapsedTime; 
                         continue;
                     }
 
-                    let startB = buttons[note.pos];
-                    let endB = buttons[note.endPos];
+                    let pData = note.slideData;
+                    
+                    // Draw entire track ahead
                     ctx.beginPath();
-                    ctx.moveTo(startB.x, startB.y);
-                    ctx.lineTo(endB.x, endB.y);
-                    ctx.strokeStyle = 'rgba(0, 170, 255, 0.4)';
-                    ctx.lineWidth = 10;
-                    ctx.stroke();
+                    ctx.moveTo(pData.points[0].x, pData.points[0].y);
+                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
+                    ctx.strokeStyle = 'rgba(0, 170, 255, 0.3)'; ctx.lineWidth = 10; ctx.stroke();
 
-                    let starX = startB.x + (endB.x - startB.x) * travelProgress;
-                    let starY = startB.y + (endB.y - startB.y) * travelProgress;
-                    ctx.fillStyle = '#00aaff';
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
+                    // Calculate interpolated position
+                    let currentDist = travelProgress * pData.totalLength;
+                    let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
+                    
+                    for(let s = 0; s < pData.segments.length; s++) {
+                        if (currentDist <= accum + pData.segments[s]) {
+                            let localP = (currentDist - accum) / pData.segments[s];
+                            starX = pData.points[s].x + (pData.points[s+1].x - pData.points[s].x) * localP;
+                            starY = pData.points[s].y + (pData.points[s+1].y - pData.points[s].y) * localP;
+                            break;
+                        }
+                        accum += pData.segments[s];
+                    }
+
+                    ctx.fillStyle = '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                     drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
                     continue;
                 }
@@ -569,63 +548,55 @@
                 let timeUntilHit = note.time - elapsedTime;
                 let missWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
                 if (timeUntilHit < -missWindow) {
-                    spawnJudgement("MISS", "#888", target.angle);
-                    combo = 0; 
-                    activeNotes.splice(i, 1);
-                    continue;
+                    spawnJudgement("MISS", "#888", note.finalX || target.x, note.finalY || target.y);
+                    combo = 0; activeNotes.splice(i, 1); continue;
                 }
 
+                // Initial Approach Rendering
                 if (timeUntilHit <= APPROACH_TIME) {
                     let progress = 1 - (timeUntilHit / APPROACH_TIME);
-                    let cx, cy;
-                    
                     let tapColor = note.isChord ? '#ffff00' : '#ff00ff';
-                    let slideColor = note.isChord ? '#ffff00' : '#00aaff';
-                    let holdTailColor = note.isChord ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 0, 255, 0.6)';
 
-                    if (note.type === 'touch') {
-                        cx = CENTER.x; cy = CENTER.y;
-                        ctx.fillStyle = note.isChord ? `rgba(255, 255, 0, ${progress})` : `rgba(0, 150, 255, ${progress})`;
-                        ctx.fillRect(cx - BUTTON_RADIUS, cy - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
+                    if (note.type === 'slide_destination') {
+                        ctx.beginPath(); ctx.arc(note.finalX, note.finalY, BUTTON_RADIUS * 0.8, 0, Math.PI * 2);
+                        ctx.fillStyle = '#00aaff'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
                     
+                    } else if (note.type === 'touch' || note.type === 'hold_touch') {
+                        // In-place shrinking ring for DX touch notes
+                        let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
+                        ctx.strokeStyle = `rgba(0, 200, 255, ${progress})`; ctx.lineWidth = 4;
+                        ctx.strokeRect(target.x - size/2, target.y - size/2, size, size);
+                        
+                        ctx.fillStyle = `rgba(0, 150, 255, ${progress * 0.8})`;
+                        ctx.fillRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
+                        if(note.type === 'hold_touch') {
+                            ctx.strokeStyle = '#ff00ff'; ctx.strokeRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
+                        }
+
                     } else {
-                        cx = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * progress);
-                        cy = CENTER.y + Math.sin(target.angle) * (RING_RADIUS * progress);
+                        // Standard notes approaching from center
+                        let cx = CENTER.x + (target.x - CENTER.x) * progress;
+                        let cy = CENTER.y + (target.y - CENTER.y) * progress;
 
                         if (note.type === 'slide_head') {
-                            ctx.fillStyle = slideColor;
-                            ctx.strokeStyle = '#fff';
-                            ctx.lineWidth = 2;
+                            ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                             drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                         
-                        } else if (note.type === 'slide_destination') {
-                            ctx.beginPath();
-                            ctx.arc(cx, cy, BUTTON_RADIUS * 0.8, 0, Math.PI * 2);
-                            ctx.fillStyle = '#00aaff'; ctx.fill();
-                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-
                         } else if (note.type === 'hold') {
                             let tailTimeUntil = (note.time + note.duration) - elapsedTime;
                             let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
-                            let tX = CENTER.x + Math.cos(target.angle) * (RING_RADIUS * tailProgress);
-                            let tY = CENTER.y + Math.sin(target.angle) * (RING_RADIUS * tailProgress);
+                            let tX = CENTER.x + (target.x - CENTER.x) * tailProgress;
+                            let tY = CENTER.y + (target.y - CENTER.y) * tailProgress;
                             
-                            ctx.beginPath();
-                            ctx.moveTo(cx, cy);
-                            ctx.lineTo(tX, tY);
-                            ctx.strokeStyle = holdTailColor;
-                            ctx.lineWidth = BUTTON_RADIUS;
-                            ctx.stroke();
+                            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tX, tY);
+                            ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 0, 255, 0.6)';
+                            ctx.lineWidth = BUTTON_RADIUS; ctx.stroke();
 
-                            ctx.beginPath();
-                            ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
+                            ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
                             ctx.fillStyle = tapColor; ctx.fill();
-                        
                         } else {
-                            ctx.beginPath();
-                            ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                            ctx.fillStyle = tapColor; ctx.fill();
-                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+                            ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
+                            ctx.fillStyle = tapColor; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
                         }
                     }
                 }
@@ -633,45 +604,29 @@
         }
 
         // --- 4. JUDGEMENTS ---
-        function spawnJudgement(text, color, angle) {
-            let jX = CENTER.x + Math.cos(angle) * (RING_RADIUS * 0.65);
-            let jY = CENTER.y + Math.sin(angle) * (RING_RADIUS * 0.65);
-            if (angle === 0) { jX = CENTER.x; jY = CENTER.y - BUTTON_RADIUS * 2; }
-            
-            judgements.push({
-                text: text, color: color, x: jX, y: jY, 
-                spawnTime: audio.currentTime
-            });
+        function spawnJudgement(text, color, jX, jY) {
+            // Push text up slightly so it doesn't block the button
+            judgements.push({ text: text, color: color, x: jX, y: jY - 25, spawnTime: audio.currentTime });
         }
 
         function drawJudgements(elapsedTime) {
             for (let i = judgements.length - 1; i >= 0; i--) {
                 let j = judgements[i];
                 let age = elapsedTime - j.spawnTime;
-                
-                if (age > 0.5) { 
-                    judgements.splice(i, 1);
-                    continue;
-                }
+                if (age > 0.5) { judgements.splice(i, 1); continue; }
 
-                ctx.fillStyle = j.color;
-                ctx.font = `bold ${BUTTON_RADIUS * 0.8}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = '#000';
+                ctx.fillStyle = j.color; ctx.font = `bold ${BUTTON_RADIUS * 0.8}px Arial`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.lineWidth = 2; ctx.strokeStyle = '#000';
                 ctx.globalAlpha = 1 - (age / 0.5); 
                 
                 let dropY = j.y - (age * 30);
-                ctx.strokeText(j.text, j.x, dropY); 
-                ctx.fillText(j.text, j.x, dropY); 
-                
+                ctx.strokeText(j.text, j.x, dropY); ctx.fillText(j.text, j.x, dropY); 
                 ctx.globalAlpha = 1.0;
             }
         }
 
-        // --- 5. TOUCH & HOLD / SLIDE LOGIC ---
+        // --- 5. TOUCH COLLISION ---
         let touchState = {}; 
 
         function handleTouches(e) {
@@ -684,30 +639,27 @@
                 let ty = touch.clientY - rect.top;
 
                 if (e.type === 'touchend' || e.type === 'touchcancel') {
-                    let releasedButtons = touchState[touch.identifier] || new Set();
-                    releasedButtons.forEach(posIndex => {
-                        checkHoldRelease(posIndex);
-                    });
+                    let releasedNodes = touchState[touch.identifier] || new Set();
+                    releasedNodes.forEach(nodeKey => checkHoldRelease(nodeKey));
                     delete touchState[touch.identifier];
                     continue;
                 }
 
                 let currentlyTouched = new Set();
-                buttons.forEach((btn, index) => {
-                    let dist = Math.hypot(tx - btn.x, ty - btn.y);
-                    if (dist < BUTTON_RADIUS * 2.5) {
-                        currentlyTouched.add(index);
+                Object.keys(NODE_POSITIONS).forEach(key => {
+                    let node = NODE_POSITIONS[key];
+                    if (Math.hypot(tx - node.x, ty - node.y) < BUTTON_RADIUS * 1.5) {
+                        currentlyTouched.add(key);
                     }
                 });
 
                 let previouslyTouched = touchState[touch.identifier] || new Set();
-
-                currentlyTouched.forEach(index => {
-                    if (!previouslyTouched.has(index)) {
-                        buttons[index].active = true;
-                        spawnClickEffect(buttons[index].x, buttons[index].y, '#0ff');
-                        checkHit(index);
-                        setTimeout(() => buttons[index].active = false, 100);
+                currentlyTouched.forEach(key => {
+                    if (!previouslyTouched.has(key)) {
+                        NODE_POSITIONS[key].active = true;
+                        spawnClickEffect(NODE_POSITIONS[key].x, NODE_POSITIONS[key].y, '#0ff');
+                        checkHit(key);
+                        setTimeout(() => NODE_POSITIONS[key].active = false, 100);
                     }
                 });
 
@@ -720,66 +672,57 @@
         canvas.addEventListener('touchend', handleTouches, {passive: false});
         canvas.addEventListener('touchcancel', handleTouches, {passive: false});
 
-        function checkHit(posIndex) {
+        function checkHit(posKey) {
             let elapsedTime = audio.currentTime;
             for (let i = 0; i < activeNotes.length; i++) {
                 let note = activeNotes[i];
-                if (note.pos === posIndex) {
+                if (note.pos === posKey) {
                     let diff = Math.abs(note.time - elapsedTime);
                     let hitWindow = (note.type === 'slide_destination') ? 0.3 : 0.16;
+                    let target = NODE_POSITIONS[note.pos] || {x: note.finalX, y: note.finalY};
 
                     if (diff <= hitWindow) {
-                        let target = buttons[note.pos];
-
-                        if (note.type === 'hold') {
+                        if (note.type === 'hold' || note.type === 'hold_touch') {
                             note.state = 'holding';
-                            spawnJudgement("PERFECT", "#ffeb3b", target.angle);
-                            combo++;
-                            return; 
+                            spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
+                            combo++; return; 
                         } 
                         else if (note.type === 'slide_head') {
-                            note.type = 'slide_travel';
-                            note.state = 'sliding';
+                            note.type = 'slide_travel'; note.state = 'sliding';
+                            note.slideData = calculateSlidePoints(note.pathStr, note.pos);
                             note.time = elapsedTime; 
-                            spawnJudgement("GREAT", "#ff8c00", target.angle);
-                            combo++;
-                            return;
+                            spawnJudgement("GREAT", "#ff8c00", target.x, target.y);
+                            combo++; return;
                         } 
                         else if (note.type === 'slide_destination') {
-                            spawnJudgement("CRITICAL", "#ffd700", target.angle);
-                            combo++;
-                            activeNotes.splice(i, 1);
-                            break;
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
+                            combo++; activeNotes.splice(i, 1); break;
                         }
                         else {
-                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.angle); combo++; }
-                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.angle); combo++; }
-                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.angle); combo++; }
-                            else { spawnJudgement("GOOD", "#00ff00", target.angle); combo++; }
+                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
+                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
+                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
+                            else { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
                             
-                            activeNotes.splice(i, 1);
-                            break;
+                            activeNotes.splice(i, 1); break;
                         }
                     }
                 }
             }
         }
 
-        function checkHoldRelease(posIndex) {
+        function checkHoldRelease(posKey) {
             let elapsedTime = audio.currentTime;
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
-                if (note.type === 'hold' && note.pos === posIndex && note.state === 'holding') {
-                    let target = buttons[note.pos];
+                if ((note.type === 'hold' || note.type === 'hold_touch') && note.pos === posKey && note.state === 'holding') {
+                    let target = NODE_POSITIONS[note.pos];
                     if (elapsedTime < note.time + note.duration - 0.15) {
-                        spawnJudgement("MISS", "#888", target.angle);
-                        combo = 0;
+                        spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
                     } else {
-                        spawnJudgement("PERFECT", "#ffeb3b", target.angle);
-                        combo++;
+                        spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++;
                     }
-                    activeNotes.splice(i, 1);
-                    break;
+                    activeNotes.splice(i, 1); break;
                 }
             }
         }
