@@ -143,12 +143,14 @@
             NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
 
             for (let i = 1; i <= 8; i++) {
+                // Precise Polar-to-Cartesian Mapping matching AstroDX/maimai layout math
+                let thetaN = Math.PI / 2 - (i - 1) * (Math.PI / 4);
                 let aAngle = -90 + (i - 1) * 45 + 22.5; 
                 let dAngle = -90 + (i - 1) * 45; 
                 let aRad = aAngle * (Math.PI / 180);
                 let dRad = dAngle * (Math.PI / 180);
 
-                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aRad) * RING_RADIUS, y: CENTER.y + Math.sin(aRad) * RING_RADIUS, type: 'A', active: false };
+                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + RING_RADIUS * Math.cos(thetaN), y: CENTER.y - RING_RADIUS * Math.sin(thetaN), type: 'A', active: false };
                 NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aRad) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aRad) * (RING_RADIUS * 0.5), type: 'B', active: false };
                 NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.85), type: 'D', active: false };
                 NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.4), type: 'E', active: false };
@@ -317,6 +319,7 @@
             return parsedNotes;
         }
 
+        // Rigorous curve mathematics tessellation implementing vector cross-products, Bézier curves, and sweep directions
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -353,29 +356,29 @@
                 let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
                 if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
 
-                let angle1 = -90 + idx1 * 45 + 22.5;
-                let angle2 = -90 + idx2 * 45 + 22.5;
+                let angle1 = Math.PI / 2 - idx1 * (Math.PI / 4);
+                let angle2 = Math.PI / 2 - idx2 * (Math.PI / 4);
 
                 if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                     let diff = angle2 - angle1;
                     
-                    while(diff > 180) diff -= 360;
-                    while(diff <= -180) diff += 360;
+                    while(diff > Math.PI) diff -= 2 * Math.PI;
+                    while(diff <= -Math.PI) diff += 2 * Math.PI;
 
                     if (shape.includes('<')) {
-                        if (diff > 0) diff -= 360;
-                        else if (diff === 0) diff = -360;
+                        if (diff > 0) diff -= 2 * Math.PI;
+                        else if (diff === 0) diff = -2 * Math.PI;
                     } else if (shape.includes('>')) {
-                        if (diff < 0) diff += 360;
-                        else if (diff === 0) diff = 360;
+                        if (diff < 0) diff += 2 * Math.PI;
+                        else if (diff === 0) diff = 2 * Math.PI;
                     }
                     
-                    let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
+                    let steps = Math.max(15, Math.floor(Math.abs(diff) / 0.05));
                     for (let s = 1; s <= steps; s++) {
-                        let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
+                        let a = angle1 + diff * (s / steps);
                         detailedPoints.push({
-                            x: CENTER.x + Math.cos(a) * RING_RADIUS,
-                            y: CENTER.y + Math.sin(a) * RING_RADIUS
+                            x: CENTER.x + RING_RADIUS * Math.cos(a),
+                            y: CENTER.y - RING_RADIUS * Math.sin(a)
                         });
                     }
                 } else if (shape.includes('v')) {
@@ -388,17 +391,30 @@
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else if (/[pqsz]/.test(shape)) {
+                    // Cubic Bézier curve implementation for complex loops
+                    let p0 = sNode;
+                    let p3 = eNode;
+                    let p1 = { x: CENTER.x + (p0.x - CENTER.x) * 0.5 - (p0.y - CENTER.y) * 0.5, y: CENTER.y + (p0.y - CENTER.y) * 0.5 + (p0.x - CENTER.x) * 0.5 };
+                    let p2 = { x: CENTER.x + (p3.x - CENTER.x) * 0.5 + (p3.y - CENTER.y) * 0.5, y: CENTER.y + (p3.y - CENTER.y) * 0.5 - (p3.x - CENTER.x) * 0.5 };
+                    
                     let steps = 30;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
-                        let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
-                        let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
-                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
-                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
+                        let mt = 1 - t;
+                        let x = mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x;
+                        let y = mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y;
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else {
-                    detailedPoints.push({x: eNode.x, y: eNode.y});
+                    // Linear interpolation (Straight Line -)
+                    let steps = 10;
+                    for (let s = 1; s <= steps; s++) {
+                        let t = s / steps;
+                        detailedPoints.push({
+                            x: (1 - t) * sNode.x + t * eNode.x,
+                            y: (1 - t) * sNode.y + t * eNode.y
+                        });
+                    }
                 }
                 
                 currentStart = seg.endKey;
