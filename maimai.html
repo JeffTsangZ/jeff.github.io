@@ -143,14 +143,15 @@
             NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
 
             for (let i = 1; i <= 8; i++) {
-                // Precise angle mapping matching standard engine layout
-                let aAngle = (-90 + (i - 1) * 45 + 22.5) * (Math.PI / 180);
-                let dAngle = (-90 + (i - 1) * 45) * (Math.PI / 180);
+                let aAngle = -90 + (i - 1) * 45 + 22.5; 
+                let dAngle = -90 + (i - 1) * 45; 
+                let aRad = aAngle * (Math.PI / 180);
+                let dRad = dAngle * (Math.PI / 180);
 
-                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aAngle) * RING_RADIUS, y: CENTER.y + Math.sin(aAngle) * RING_RADIUS, type: 'A', active: false };
-                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aAngle) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aAngle) * (RING_RADIUS * 0.5), type: 'B', active: false };
-                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.85), type: 'D', active: false };
-                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dAngle) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dAngle) * (RING_RADIUS * 0.4), type: 'E', active: false };
+                NODE_POSITIONS[`A${i}`] = { x: CENTER.x + Math.cos(aRad) * RING_RADIUS, y: CENTER.y + Math.sin(aRad) * RING_RADIUS, type: 'A', active: false };
+                NODE_POSITIONS[`B${i}`] = { x: CENTER.x + Math.cos(aRad) * (RING_RADIUS * 0.5), y: CENTER.y + Math.sin(aRad) * (RING_RADIUS * 0.5), type: 'B', active: false };
+                NODE_POSITIONS[`D${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.85), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.85), type: 'D', active: false };
+                NODE_POSITIONS[`E${i}`] = { x: CENTER.x + Math.cos(dRad) * (RING_RADIUS * 0.4), y: CENTER.y + Math.sin(dRad) * (RING_RADIUS * 0.4), type: 'E', active: false };
             }
         }
         window.addEventListener('resize', resizeCanvas); resizeCanvas();
@@ -316,7 +317,6 @@
             return parsedNotes;
         }
 
-        // Trigonometric & Angular Span Slide Geometry Builder based on engine specifications
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -356,32 +356,26 @@
                 let angle1 = -90 + idx1 * 45 + 22.5;
                 let angle2 = -90 + idx2 * 45 + 22.5;
 
-                // Implement angular span & trigonometric directional curve control (Clockwise vs Counter-Clockwise math)
-                let isCcw = shape.includes('<');
-                let isCw = shape.includes('>');
-                let isArc = isCcw || isCw || shape.includes('^');
-
-                if (isArc) {
+                if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                     let diff = angle2 - angle1;
+                    
                     while(diff > 180) diff -= 360;
                     while(diff <= -180) diff += 360;
 
-                    if (isCcw) {
+                    if (shape.includes('<')) {
                         if (diff > 0) diff -= 360;
                         else if (diff === 0) diff = -360;
-                    } else if (isCw) {
+                    } else if (shape.includes('>')) {
                         if (diff < 0) diff += 360;
                         else if (diff === 0) diff = 360;
                     }
                     
-                    let steps = Math.max(12, Math.floor(Math.abs(diff) / 8));
+                    let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
                     for (let s = 1; s <= steps; s++) {
-                        let tVal = s / steps;
-                        // Rotation interpolation applying directional sign application logic
-                        let currentAngle = (angle1 + diff * tVal) * (Math.PI / 180);
+                        let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
                         detailedPoints.push({
-                            x: CENTER.x + Math.cos(currentAngle) * RING_RADIUS,
-                            y: CENTER.y + Math.sin(currentAngle) * RING_RADIUS
+                            x: CENTER.x + Math.cos(a) * RING_RADIUS,
+                            y: CENTER.y + Math.sin(a) * RING_RADIUS
                         });
                     }
                 } else if (shape.includes('v')) {
@@ -683,7 +677,7 @@
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         
-                        // Ultra-sharp high-visibility neon styling for touch notes
+                        // Sharp high-visibility neon coloring for touch notes
                         let tOutline = note.isChord ? '#ffff00' : '#00ffff';
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
@@ -692,11 +686,12 @@
                         ctx.rotate(Math.PI / 4); // 45 degree rotated square layout
                         
                         if (note.type === 'hold_touch') {
-                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time with 4 distinct colors
+                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time
                             let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
                             let baseSquareSize = BUTTON_RADIUS * 1.5;
                             let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
 
+                            // 4-Color multi-segment quad rendering around the rotating square border
                             let quadColors = ['#ff0055', '#00ffcc', '#ffcc00', '#9900ff'];
                             let angles = [0, Math.PI/2, Math.PI, Math.PI*3/2];
                             for(let q = 0; q < 4; q++) {
@@ -822,14 +817,14 @@
                             note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
                             combo++; return; 
                         } else if (note.type === 'slide_head' && note.state === 'waiting') {
-                            note.type = 'slide_travel'; note.state === 'sliding';
+                            note.type = 'slide_travel'; note.state = 'sliding';
                             note.time = elapsedTime; 
                             
                             let lastNode = note.slideData.points[note.slideData.points.length-1];
                             note.finalX = lastNode.x; note.finalY = lastNode.y;
                             
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
-                        } else if (note.type === 'tap' || note.type === 'touch' || note.type === 'hold_touch') {
+                        } else if (note.type === 'tap' || note.type === 'touch') {
                             if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
                             else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
                             else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
@@ -846,7 +841,7 @@
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
                 if ((note.type === 'hold' || note.type === 'hold_touch') && note.pos === posKey && note.state === 'holding') {
-                    let target = NODE_POSITIONS[posKey];
+                    let target = NODE_POSITIONS[note.pos];
                     if (elapsedTime < note.time + note.duration - 0.15) {
                         spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
                     } else {
