@@ -266,7 +266,6 @@
                         parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: parseDuration(holdMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
                     }
 
-                    // Slide Path Parse (Multiple segments parsing fix)
                     let slideHeadMatch = el.match(/^([1-8])/);
                     if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
@@ -294,7 +293,6 @@
                     let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
                     if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
 
-                    // Tap / Chord Parsing fixes e.g "12" translating to both tap 1 and tap 2
                     let tapMatch = el.match(/^([1-8\*]+)$/);
                     if (tapMatch) {
                         let taps = el.replace(/\*/g, '').split('');
@@ -309,7 +307,6 @@
                 currentTime += (240 / currentBPM) / currentDivisor;
             }
 
-            // Flag Chords
             let timeGroups = {};
             parsedNotes.forEach(note => {
                 let t = note.time.toFixed(4); 
@@ -326,7 +323,6 @@
             let regex = /([a-zA-Z\-\^\<\>]+)([A-E][1-8]?|C|[1-8])/g;
             let match;
 
-            // Gather all track shapes and end-nodes in array
             while((match = regex.exec(cleaned)) !== null) {
                 let shape = match[1];
                 let endKey = match[2];
@@ -354,7 +350,6 @@
                 let shape = seg.shape;
                 
                 if (shape.includes('<') || shape.includes('>')) {
-                    // Geometry parser for < (CCW Arc) and > (CW Arc) 
                     let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
                     let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
                     if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
@@ -383,7 +378,6 @@
                         });
                     }
                 } else if (shape.includes('^') || shape.includes('v')) {
-                    // Inner Curved Lines
                     let steps = 25;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
@@ -393,7 +387,6 @@
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else if (/[pqsz]/.test(shape)) {
-                    // Loop Tracks / Zigzag Tracks
                     let steps = 30;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
@@ -404,7 +397,6 @@
                         detailedPoints.push({ x: x, y: y });
                     }
                 } else {
-                    // Straight Line Fallback
                     detailedPoints.push({x: eNode.x, y: eNode.y});
                 }
                 
@@ -612,7 +604,6 @@
                     let travelProgress = (elapsedTime - note.time) / note.duration;
                     let pData = note.slideData;
                     
-                    // Draw Track Background
                     ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
                     for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
                     ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(0, 180, 255, 0.8)';
@@ -631,22 +622,18 @@
                         accum += pData.segments[s];
                     }
 
-                    // Slide Hit-Testing Logic (Interact Tracing Tracker)
                     Object.keys(activeTouches).forEach(id => {
                         let tx = activeTouches[id].x;
                         let ty = activeTouches[id].y;
                         
-                        // Finger near the ending area limits bounds
                         if (Math.hypot(tx - note.finalX, ty - note.finalY) < BUTTON_RADIUS * 2.5) {
                             note.reachedEnd = true;
                         }
-                        // Finger tracing actively over the star 
                         if (Math.hypot(tx - starX, ty - starY) < BUTTON_RADIUS * 2.5) {
                             note.traced = true;
                         }
                     });
 
-                    // Evaluate Slide Judgement (Resolves Issue #3 entirely)
                     if (travelProgress >= 1.0) {
                         if (note.reachedEnd) {
                             spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
@@ -662,7 +649,6 @@
                         continue;
                     }
 
-                    // Draw the Star
                     ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                     drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
                     continue;
@@ -763,7 +749,6 @@
                     continue;
                 }
 
-                // Append actively maintained touch coordinations to memory (used in slide intersection checks)
                 activeTouches[touch.identifier] = { x: tx, y: ty };
 
                 let currentlyTouched = new Set();
@@ -807,7 +792,6 @@
                             note.type = 'slide_travel'; note.state = 'sliding';
                             note.time = elapsedTime; 
                             
-                            // Initialize trace target node details
                             let lastNode = note.slideData.points[note.slideData.points.length-1];
                             note.finalX = lastNode.x; note.finalY = lastNode.y;
                             
