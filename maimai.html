@@ -143,7 +143,7 @@
             NODE_POSITIONS['C'] = { x: CENTER.x, y: CENTER.y, type: 'C', active: false };
 
             for (let i = 1; i <= 8; i++) {
-                // Precise angle mapping matching standard engine layout
+                // Button mapping starts at 1 o'clock position (button 1) and increments clockwise
                 let aAngle = (-90 + (i - 1) * 45 + 22.5) * (Math.PI / 180);
                 let dAngle = (-90 + (i - 1) * 45) * (Math.PI / 180);
 
@@ -316,7 +316,7 @@
             return parsedNotes;
         }
 
-        // Trigonometric & Angular Span Slide Geometry Builder based on engine specifications
+        // Slide Geometry & Directional Routing Engine based on provided specification logic
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -356,52 +356,98 @@
                 let angle1 = -90 + idx1 * 45 + 22.5;
                 let angle2 = -90 + idx2 * 45 + 22.5;
 
-                // Implement angular span & trigonometric directional curve control (Clockwise vs Counter-Clockwise math)
-                let isCcw = shape.includes('<');
-                let isCw = shape.includes('>');
-                let isArc = isCcw || isCw || shape.includes('^');
+                let isGrandArc = shape === 'pp' || shape === 'qq';
+                let isCcw = shape === '<' || shape === 'qq';
+                let isCw = shape === '>' || shape === 'pp';
+                let isShortArc = shape === '^';
+                let isStraight = shape === '-';
+                let isVee = shape === 'v';
+                let isCenterCurve = shape === 'p' || shape === 'q';
+                let isZigzag = shape === 's' || shape === 'z';
 
-                if (isArc) {
+                if (isShortArc || isCcw || isCw || isGrandArc) {
                     let diff = angle2 - angle1;
                     while(diff > 180) diff -= 360;
                     while(diff <= -180) diff += 360;
 
-                    if (isCcw) {
+                    if (isShortArc) {
+                        // Short Arcs automatically select the shorter path across the outer ring
+                        // handled naturally by diff calculation
+                    } else if (isCcw) {
+                        // Anticlockwise / Left Curve (<) or qq
                         if (diff > 0) diff -= 360;
                         else if (diff === 0) diff = -360;
                     } else if (isCw) {
+                        // Clockwise / Right Curve (>) or pp
                         if (diff < 0) diff += 360;
                         else if (diff === 0) diff = 360;
                     }
                     
-                    let steps = Math.max(12, Math.floor(Math.abs(diff) / 8));
+                    let arcRadius = isGrandArc ? RING_RADIUS * 1.3 : RING_RADIUS; // Grand arcs extend past center/playfield radius
+                    let steps = Math.max(16, Math.floor(Math.abs(diff) / 6));
                     for (let s = 1; s <= steps; s++) {
                         let tVal = s / steps;
-                        // Rotation interpolation applying directional sign application logic
                         let currentAngle = (angle1 + diff * tVal) * (Math.PI / 180);
                         detailedPoints.push({
-                            x: CENTER.x + Math.cos(currentAngle) * RING_RADIUS,
-                            y: CENTER.y + Math.sin(currentAngle) * RING_RADIUS
+                            x: CENTER.x + Math.cos(currentAngle) * arcRadius,
+                            y: CENTER.y + Math.sin(currentAngle) * arcRadius
                         });
                     }
-                } else if (shape.includes('v')) {
+                } else if (isStraight) {
+                    // Straight Line (-) links start directly to destination via chord cutting across center
+                    let steps = 15;
+                    for (let s = 1; s <= steps; s++) {
+                        let t = s / steps;
+                        detailedPoints.push({
+                            x: sNode.x + (eNode.x - sNode.x) * t,
+                            y: sNode.y + (eNode.y - sNode.y) * t
+                        });
+                    }
+                } else if (isVee) {
+                    // V-Shape (v) links start and end via straight lines intersecting precisely at center C-sensor
+                    let stepsMid = 12;
+                    for (let s = 1; s <= stepsMid; s++) {
+                        let t = s / stepsMid;
+                        detailedPoints.push({
+                            x: sNode.x + (CENTER.x - sNode.x) * t,
+                            y: sNode.y + (CENTER.y - sNode.y) * t
+                        });
+                    }
+                    for (let s = 1; s <= stepsMid; s++) {
+                        let t = s / stepsMid;
+                        detailedPoints.push({
+                            x: CENTER.x + (eNode.x - CENTER.x) * t,
+                            y: CENTER.y + (eNode.y - CENTER.y) * t
+                        });
+                    }
+                } else if (isCenterCurve) {
+                    // Center-Curved Shapes (p and q) loop or bend fluidly around center point
                     let steps = 25;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
-                        let bx = CENTER.x, by = CENTER.y;
-                        let x = (1 - t) * (1 - t) * sNode.x + 2 * (1 - t) * t * bx + t * t * eNode.x;
-                        let y = (1 - t) * (1 - t) * sNode.y + 2 * (1 - t) * t * by + t * t * eNode.y;
-                        detailedPoints.push({ x: x, y: y });
-                    }
-                } else if (/[pqsz]/.test(shape)) {
-                    let steps = 30;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
-                        let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
+                        let cx = CENTER.x + Math.sin(t * Math.PI) * (RING_RADIUS * 0.4);
+                        let cy = CENTER.y + Math.cos(t * Math.PI * 0.8) * (RING_RADIUS * 0.4);
                         let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
                         let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
                         detailedPoints.push({ x: x, y: y });
+                    }
+                } else if (isZigzag) {
+                    // Thunderbolt / Zigzag (s and z) construct a sharp, 3-segment angular trajectory
+                    let mid1 = { x: CENTER.x + (sNode.x - CENTER.x) * 0.6 - (sNode.y - CENTER.y) * 0.3, y: CENTER.y + (sNode.y - CENTER.y) * 0.6 + (sNode.x - CENTER.x) * 0.3 };
+                    let mid2 = { x: CENTER.x + (eNode.x - CENTER.x) * 0.6 + (eNode.y - CENTER.y) * 0.3, y: CENTER.y + (eNode.y - CENTER.y) * 0.6 - (eNode.x - CENTER.x) * 0.3 };
+                    
+                    let subSteps = 8;
+                    for(let st=1; st<=subSteps; st++) {
+                        let t = st/subSteps;
+                        detailedPoints.push({ x: sNode.x + (mid1.x - sNode.x)*t, y: sNode.y + (mid1.y - sNode.y)*t });
+                    }
+                    for(let st=1; st<=subSteps; st++) {
+                        let t = st/subSteps;
+                        detailedPoints.push({ x: mid1.x + (mid2.x - mid1.x)*t, y: mid1.y + (mid2.y - mid1.y)*t });
+                    }
+                    for(let st=1; st<=subSteps; st++) {
+                        let t = st/subSteps;
+                        detailedPoints.push({ x: mid2.x + (eNode.x - mid2.x)*t, y: mid2.y + (eNode.y - mid2.y)*t });
                     }
                 } else {
                     detailedPoints.push({x: eNode.x, y: eNode.y});
@@ -683,16 +729,14 @@
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         
-                        // Ultra-sharp high-visibility neon styling for touch notes
                         let tOutline = note.isChord ? '#ffff00' : '#00ffff';
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
                         ctx.save();
                         ctx.translate(target.x, target.y);
-                        ctx.rotate(Math.PI / 4); // 45 degree rotated square layout
+                        ctx.rotate(Math.PI / 4);
                         
                         if (note.type === 'hold_touch') {
-                            // Touch-Hold Note: Outer border shrinks/forms a circle over duration time with 4 distinct colors
                             let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
                             let baseSquareSize = BUTTON_RADIUS * 1.5;
                             let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
@@ -713,7 +757,6 @@
                             ctx.lineWidth = 4;
                             ctx.strokeRect(-baseSquareSize/2, -baseSquareSize/2, baseSquareSize, baseSquareSize);
                         } else {
-                            // Standard Sharp Touch Note (45-degree rotated square)
                             ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
                             ctx.strokeRect(-size/2, -size/2, size, size);
                             ctx.fillStyle = tFill;
