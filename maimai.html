@@ -81,7 +81,6 @@
         <div class="setting">
             <label>Note Speed: <span id="speedVal">5.0</span></label><br>
             <input type="range" id="speedSlider" min="1" max="10" step="0.1" value="5">
-            <p style="font-size: 12px; color: #aaa;">(1 = Slow, 10 = Ultra Fast)</p>
         </div>
 
         <button id="startBtn" disabled>Upload .adx to Start</button>
@@ -218,6 +217,17 @@
             }
         }
 
+        function populateDifficultyUI() {
+            const select = document.getElementById('diffSelect');
+            select.innerHTML = ''; let highestDiff = 1;
+            for (let key in availableCharts) {
+                let option = document.createElement('option');
+                option.value = key; option.text = availableCharts[key].name;
+                select.appendChild(option); highestDiff = key;
+            }
+            select.value = highestDiff; 
+        }
+
         function parseDuration(str, bpm) {
             let parts = str.replace(/[\[\]]/g, '').split(':');
             if (parts.length === 2) return (240 / bpm) / parseFloat(parts[0]) * parseFloat(parts[1]);
@@ -245,23 +255,20 @@
                 for (let el of elements) {
                     if (!el) continue;
 
-                    // 1. Touch Hold
-                    let touchHoldMatch = el.match(/^([A-E][1-8]?|C)[bxfm]*h\[(.*?)\]/);
+                    let touchHoldMatch = el.match(/^([A-E][1-8]?|C)h\[(.*?)\]/);
                     if (touchHoldMatch) {
                         parsedNotes.push({ type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], duration: parseDuration(touchHoldMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
                     }
 
-                    // 2. Standard Hold
-                    let holdMatch = el.match(/^([1-8])[bxfm]*h\[(.*?)\]/);
+                    let holdMatch = el.match(/^([1-8])(b?)h\[(.*?)\]/);
                     if (holdMatch) {
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: parseDuration(holdMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
+                        parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, isBreak: !!holdMatch[2], duration: parseDuration(holdMatch[3], currentBPM), isChord: false, state: 'waiting' }); continue;
                     }
 
-                    // 3. Slides (Accepts break b, ex x, fire f, mine m modifiers before track string)
-                    let slideHeadMatch = el.match(/^([1-8])[bxfm\*]*([a-zA-Z\-\^\<\>].*)/);
+                    let slideHeadMatch = el.match(/^([1-8])/);
                     if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
-                        let slidesStr = slideHeadMatch[2];
+                        let slidesStr = el.substring(1);
                         if (slidesStr.startsWith('*')) slidesStr = slidesStr.substring(1);
 
                         let slideParts = slidesStr.split('*');
@@ -280,17 +287,20 @@
                         continue;
                     }
 
-                    // 4. Center / Inner Touch
-                    let touchMatch = el.match(/^([A-E][1-8]?|C)[bxfm]*$/);
+                    let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
                     if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
 
-                    // 5. Taps and Break Notes (e.g. 12b -> Taps on 1 and 2, Break enabled)
-                    let tapMatch = el.match(/^([1-8]+)([bxfm\*]*)$/);
+                    // Tap / Break / Chords parsing
+                    let tapMatch = el.match(/^([1-8b\*]+)$/);
                     if (tapMatch) {
-                        let taps = tapMatch[1].split('');
-                        let isBreak = tapMatch[2].includes('b'); 
-                        for (let t of taps) {
-                            parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${t}`, isChord: false, state: 'waiting', isBreak: isBreak });
+                        let subElements = el.split(/(?=[1-8])/);
+                        for (let sub of subElements) {
+                            if (!sub) continue;
+                            let tNum = sub.match(/[1-8]/);
+                            if (tNum) {
+                                let isBreak = sub.includes('b');
+                                parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${tNum[0]}`, isBreak: isBreak, isChord: false, state: 'waiting' });
+                            }
                         }
                         continue;
                     }
@@ -308,34 +318,7 @@
             return parsedNotes;
         }
 
-        // Logic for chunking path coordinates into interactable chevron blocks 
-        function generateSlideBlocks(points) {
-            let blocks = [];
-            let spacing = BUTTON_RADIUS * 1.0; 
-            let accum = 0;
-            
-            for (let i = 0; i < points.length - 1; i++) {
-                let p1 = points[i], p2 = points[i+1];
-                let dx = p2.x - p1.x, dy = p2.y - p1.y;
-                let dist = Math.hypot(dx, dy);
-                let angle = Math.atan2(dy, dx);
-                
-                let stepX = dx / dist, stepY = dy / dist;
-                let leftover = dist;
-                let cx = p1.x, cy = p1.y;
-                
-                while (leftover >= (spacing - accum)) {
-                    let move = spacing - accum;
-                    cx += stepX * move; cy += stepY * move;
-                    blocks.push({ x: cx, y: cy, angle: angle, active: true });
-                    leftover -= move;
-                    accum = 0;
-                }
-                accum += leftover;
-            }
-            return blocks;
-        }
-
+        // Strict geometric slide path processor ensuring correct clock orientations (< and >)
         function calculateSlidePoints(pathStr, startPosKey) {
             let cleaned = pathStr.trim();
             let segments = [];
@@ -368,8 +351,7 @@
                 let eNode = NODE_POSITIONS[seg.endKey] || CENTER;
                 let shape = seg.shape;
                 
-                if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
-                    // ^ is Outer Arc (Shortest Path), < is CCW Arc, > is CW Arc
+                if (shape.includes('<') || shape.includes('>')) {
                     let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
                     let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
                     if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
@@ -381,16 +363,15 @@
                     while(diff > 180) diff -= 360;
                     while(diff <= -180) diff += 360;
 
-                    if (shape.includes('<')) {
+                    if (shape.includes('<')) { // Counter-clockwise
                         if (diff > 0) diff -= 360;
                         else if (diff === 0) diff = -360;
-                    } else if (shape.includes('>')) {
+                    } else if (shape.includes('>')) { // Clockwise
                         if (diff < 0) diff += 360;
                         else if (diff === 0) diff = 360;
-                    } 
-                    // If shape is '^', diff evaluates to the mathematically shortest angular distance natively
+                    }
                     
-                    let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
+                    let steps = Math.max(12, Math.floor(Math.abs(diff) / 8));
                     for (let s = 1; s <= steps; s++) {
                         let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
                         detailedPoints.push({
@@ -398,8 +379,7 @@
                             y: CENTER.y + Math.sin(a) * RING_RADIUS
                         });
                     }
-                } else if (shape.includes('v')) {
-                    // V-Curve / Center pull
+                } else if (shape.includes('^') || shape.includes('v')) {
                     let steps = 25;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
@@ -408,19 +388,15 @@
                         let y = (1 - t) * (1 - t) * sNode.y + 2 * (1 - t) * t * by + t * t * eNode.y;
                         detailedPoints.push({ x: x, y: y });
                     }
-                } else if (/[pqsz]/.test(shape)) {
-                    // Loop Tracks / Zigzag Tracks
-                    let steps = 30;
+                } else {
+                    let steps = 15;
                     for (let s = 1; s <= steps; s++) {
                         let t = s / steps;
-                        let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
-                        let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
-                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
-                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
-                        detailedPoints.push({ x: x, y: y });
+                        detailedPoints.push({
+                            x: sNode.x + (eNode.x - sNode.x) * t,
+                            y: sNode.y + (eNode.y - sNode.y) * t
+                        });
                     }
-                } else {
-                    detailedPoints.push({x: eNode.x, y: eNode.y});
                 }
                 currentStart = seg.endKey;
             }
@@ -430,9 +406,7 @@
                 let len = Math.hypot(detailedPoints[i+1].x - detailedPoints[i].x, detailedPoints[i+1].y - detailedPoints[i].y);
                 finalSegments.push(len); totalLen += len;
             }
-            
-            let blocks = generateSlideBlocks(detailedPoints);
-            return { points: detailedPoints, segments: finalSegments, totalLength: totalLen, blocks: blocks };
+            return { points: detailedPoints, segments: finalSegments, totalLength: totalLen };
         }
 
         function playClick(isHigh) {
@@ -497,8 +471,6 @@
                 elapsedTime = audio.currentTime;
             }
             
-            checkSlideInteractions(elapsedTime); // Validates user swiping block collision
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawUI(); drawCombo(); 
             updateAndDrawNotes(elapsedTime);
@@ -510,17 +482,6 @@
             ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, RING_RADIUS, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 3; ctx.stroke();
 
-            ctx.save(); ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
-            for (let i = 1; i <= 8; i++) {
-                let angle = -90 + (i - 1) * 45; 
-                let innerX = CENTER.x + Math.cos(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let innerY = CENTER.y + Math.sin(angle * Math.PI / 180) * (RING_RADIUS * 0.35);
-                let outerX = CENTER.x + Math.cos(angle * Math.PI / 180) * RING_RADIUS;
-                let outerY = CENTER.y + Math.sin(angle * Math.PI / 180) * RING_RADIUS;
-                ctx.beginPath(); ctx.moveTo(innerX, innerY); ctx.lineTo(outerX, outerY); ctx.stroke();
-            }
-            ctx.restore();
-
             ctx.font = `bold ${BUTTON_RADIUS * 0.45}px Arial`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             Object.keys(NODE_POSITIONS).forEach(key => {
@@ -530,13 +491,6 @@
                     ctx.fillStyle = node.active ? '#0ff' : 'rgba(0, 0, 0, 0.5)'; ctx.fill();
                     ctx.strokeStyle = '#0ff'; ctx.lineWidth = 1; ctx.stroke();
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillText(key, node.x, node.y);
-                } else if (node.type === 'C') {
-                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(0,0,0,0)';
-                    ctx.fillRect(node.x - BUTTON_RADIUS, node.y - BUTTON_RADIUS, BUTTON_RADIUS*2, BUTTON_RADIUS*2);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; ctx.fillText('C', node.x, node.y - BUTTON_RADIUS * 1.5);
-                } else if (node.type === 'D' || node.type === 'E') {
-                    ctx.fillStyle = node.active ? 'rgba(0, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.3)';
-                    ctx.fillText(key, node.x, node.y);
                 }
             });
         }
@@ -560,35 +514,13 @@
             ctx.lineTo(cx, cy - outerRadius); ctx.closePath(); ctx.fill(); ctx.stroke();
         }
 
-        function drawArrowBlock(ctx, x, y, angle, radius, isChord) {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle);
-            ctx.beginPath();
-            ctx.moveTo(-radius * 0.4, -radius * 0.5);
-            ctx.lineTo(radius * 0.4, 0);
-            ctx.lineTo(-radius * 0.4, radius * 0.5);
-            ctx.lineTo(-radius * 0.1, 0);
-            ctx.closePath();
-            ctx.fillStyle = isChord ? 'rgba(255, 255, 0, 0.95)' : 'rgba(0, 180, 255, 0.95)';
-            ctx.fill();
-            ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
-            ctx.restore();
-        }
-
         function drawHexagonBar(tx, ty, cx, cy, color) {
             let dx = cx - tx, dy = cy - ty;
             let L = Math.hypot(dx, dy);
             let w = BUTTON_RADIUS * 0.65; 
-            
             ctx.fillStyle = color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-            if (L <= w) { 
-                ctx.beginPath(); ctx.arc(cx, cy, w, 0, Math.PI*2); ctx.fill(); ctx.stroke(); return;
-            }
-            
-            let nx = dx / L, ny = dy / L, px = -ny, py = nx;
-            let p = w * 0.5; 
-            
+            if (L <= w) { ctx.beginPath(); ctx.arc(cx, cy, w, 0, Math.PI*2); ctx.fill(); ctx.stroke(); return; }
+            let nx = dx / L, ny = dy / L, px = -ny, py = nx, p = w * 0.5; 
             ctx.beginPath();
             ctx.moveTo(cx, cy); 
             ctx.lineTo(cx - nx * p + px * w, cy - ny * p + py * w); 
@@ -619,65 +551,98 @@
 
                 let timeUntilHit = note.time - elapsedTime;
 
+                // Render approaching slide track lines before star movement triggers
                 if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
                     let pData = note.slideData;
-                    // Draw continuous track shadow
                     ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
                     for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.25)' : 'rgba(0, 150, 255, 0.25)';
-                    ctx.lineWidth = 14; ctx.stroke();
-                    
-                    // Render blocks indicating path
-                    for (let b of pData.blocks) { drawArrowBlock(ctx, b.x, b.y, b.angle, BUTTON_RADIUS * 0.7, note.isChord); }
+                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.45)' : 'rgba(0, 150, 255, 0.45)';
+                    ctx.lineWidth = 20; ctx.stroke();
                 }
 
                 if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
-                    spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
-                    note.type = 'slide_travel'; note.state = 'sliding';
+                    spawnJudgement("MISS", "#888", target.x, target.y);
+                    combo = 0;
+                    note.type = 'slide_travel';
+                    note.state = 'sliding';
                     
-                    let lastNode = note.slideData.points[note.slideData.points.length-1];
+                    let pData = note.slideData;
+                    // Initialize block array for block-by-block track interaction
+                    note.blocks = [];
+                    let stepDist = BUTTON_RADIUS * 0.8;
+                    let accum = 0;
+                    for (let s = 0; s < pData.segments.length; s++) {
+                        let segLen = pData.segments[s];
+                        let segP1 = pData.points[s];
+                        let segP2 = pData.points[s+1];
+                        let count = Math.max(1, Math.floor(segLen / stepDist));
+                        for (let c = 0; c < count; c++) {
+                            let ratio = c / count;
+                            note.blocks.push({
+                                x: segP1.x + (segP2.x - segP1.x) * ratio,
+                                y: segP1.y + (segP2.y - segP1.y) * ratio,
+                                cleared: false
+                            });
+                        }
+                    }
+                    let lastNode = pData.points[pData.points.length-1];
                     note.finalX = lastNode.x; note.finalY = lastNode.y;
                     note.time = elapsedTime;
                 }
 
+                // Block-by-block interactive slide traversal loop
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
                     let travelProgress = (elapsedTime - note.time) / note.duration;
                     let pData = note.slideData;
-                    
-                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
-                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
-                    ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.2)' : 'rgba(0, 180, 255, 0.2)';
-                    ctx.lineWidth = 15; ctx.stroke();
 
-                    // Render active interaction blocks
-                    for (let b of pData.blocks) {
-                        if (b.active) drawArrowBlock(ctx, b.x, b.y, b.angle, BUTTON_RADIUS * 0.7, note.isChord);
-                    }
-
-                    // Slide Evaluation (Wiping blocks / Reaching target evaluation)
-                    if (travelProgress >= 1.0) {
-                        let totalBlocks = pData.blocks.length;
-                        let activeBlocks = pData.blocks.filter(b => b.active).length;
-                        let clearedRatio = totalBlocks > 0 ? (totalBlocks - activeBlocks) / totalBlocks : 1;
-
-                        // Check end target presence implicitly mimicking Maimai end node intersection
-                        let reachedEnd = false;
-                        Object.keys(activeTouches).forEach(id => {
-                            let tx = activeTouches[id].x; let ty = activeTouches[id].y;
-                            if (Math.hypot(tx - note.finalX, ty - note.finalY) < BUTTON_RADIUS * 2.0) reachedEnd = true;
+                    // Evaluate player finger collision against active track blocks
+                    if (note.blocks) {
+                        let remainingBlocks = 0;
+                        note.blocks.forEach(block => {
+                            if (!block.cleared) {
+                                remainingBlocks++;
+                                Object.keys(activeTouches).forEach(id => {
+                                    let tx = activeTouches[id].x;
+                                    let ty = activeTouches[id].y;
+                                    if (Math.hypot(tx - block.x, ty - block.y) < BUTTON_RADIUS * 1.2) {
+                                        block.cleared = true;
+                                    }
+                                });
+                            }
                         });
 
-                        if (clearedRatio >= 0.85 || reachedEnd) {
-                            spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY); combo++;
-                        } else if (clearedRatio >= 0.45) {
-                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY); combo++;
-                        } else {
-                            spawnJudgement("MISS", "#888", note.finalX, note.finalY); combo = 0;
+                        // Draw remaining uncleared blocks as blue arrow blocks
+                        note.blocks.forEach(block => {
+                            if (!block.cleared) {
+                                ctx.beginPath();
+                                ctx.arc(block.x, block.y, BUTTON_RADIUS * 0.55, 0, Math.PI * 2);
+                                ctx.fillStyle = 'rgba(0, 150, 255, 0.75)';
+                                ctx.fill();
+                                ctx.strokeStyle = '#ffffff';
+                                ctx.lineWidth = 2;
+                                ctx.stroke();
+                            }
+                        });
+
+                        if (travelProgress >= 1.0 || remainingBlocks === 0) {
+                            let clearedCount = note.blocks.filter(b => b.cleared).length;
+                            let ratio = clearedCount / note.blocks.length;
+                            if (ratio > 0.85) {
+                                spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
+                                combo++;
+                            } else if (ratio > 0.4) {
+                                spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
+                                combo++;
+                            } else {
+                                spawnJudgement("MISS", "#888", note.finalX, note.finalY);
+                                combo = 0;
+                            }
+                            activeNotes.splice(i, 1);
+                            continue;
                         }
-                        activeNotes.splice(i, 1);
-                        continue;
                     }
 
+                    // Render animated tracer star
                     let currentDist = travelProgress * pData.totalLength;
                     let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
                     for(let s = 0; s < pData.segments.length; s++) {
@@ -714,32 +679,15 @@
                     let cy = target ? CENTER.y + (target.y - CENTER.y) * progress : note.finalY;
                     let cYellow = '#ffff00';
 
-                    if (note.type === 'touch' || note.type === 'hold_touch') {
-                        let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
-                        let tOutline = note.isChord ? `rgba(255, 255, 0, ${progress})` : `rgba(0, 200, 255, ${progress})`;
-                        let tFill = note.isChord ? `rgba(255, 255, 0, ${progress * 0.5})` : `rgba(0, 150, 255, ${progress * 0.5})`;
-                        
-                        ctx.strokeStyle = tOutline; ctx.lineWidth = 4;
-                        ctx.strokeRect(target.x - size/2, target.y - size/2, size, size);
-                        ctx.fillStyle = tFill;
-                        ctx.fillRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
-                        
-                        if(note.type === 'hold_touch') {
-                            ctx.strokeStyle = note.isChord ? cYellow : '#ff0000'; ctx.lineWidth = 3;
-                            ctx.strokeRect(target.x - BUTTON_RADIUS/1.5, target.y - BUTTON_RADIUS/1.5, BUTTON_RADIUS*1.3, BUTTON_RADIUS*1.3);
-                        }
-
-                    } else if (note.type === 'hold') {
+                    if (note.type === 'hold') {
                         let tailTimeUntil = (note.time + note.duration) - elapsedTime;
                         let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
                         let headP = Math.min(1, progress); let tailP = Math.min(1, tailProgress);
-                        
                         let headX = CENTER.x + (target.x - CENTER.x) * headP;
                         let headY = CENTER.y + (target.y - CENTER.y) * headP;
                         let tailX = CENTER.x + (target.x - CENTER.x) * tailP;
                         let tailY = CENTER.y + (target.y - CENTER.y) * tailP;
-                        
-                        let holdColor = note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)';
+                        let holdColor = note.isBreak ? 'rgba(255, 215, 0, 0.9)' : (note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)');
                         drawHexagonBar(tailX, tailY, headX, headY, holdColor);
                         
                     } else if (note.type === 'slide_head' && note.state === 'waiting') {
@@ -748,10 +696,8 @@
                     
                     } else if (note.type === 'tap') {
                         ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                        // Visually distinguish Break notes with a red/orange coloring
-                        let fillCol = note.isBreak ? '#ff4400' : (note.isChord ? cYellow : '#ff00ff');
-                        ctx.fillStyle = fillCol; ctx.fill(); 
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+                        ctx.fillStyle = note.isBreak ? '#ff3300' : (note.isChord ? cYellow : '#ff00ff'); 
+                        ctx.fill(); ctx.strokeStyle = note.isBreak ? '#ffd700' : '#fff'; ctx.lineWidth = 3; ctx.stroke();
                     }
                 }
             }
@@ -786,7 +732,6 @@
                 if (e.type === 'touchend' || e.type === 'touchcancel') {
                     let releasedNodes = touchState[touch.identifier] || new Set();
                     releasedNodes.forEach(nodeKey => checkHoldRelease(nodeKey));
-                    
                     delete activeTouches[touch.identifier];
                     delete touchState[touch.identifier]; 
                     continue;
@@ -828,23 +773,40 @@
                     let target = NODE_POSITIONS[note.pos];
 
                     if (diff <= hitWindow) {
-                        if (note.type === 'hold' || note.type === 'hold_touch') {
-                            note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
+                        if (note.type === 'hold') {
+                            note.state = 'holding'; spawnJudgement(note.isBreak ? "CRITICAL" : "PERFECT", "#ffeb3b", target.x, target.y);
                             combo++; return; 
                         } else if (note.type === 'slide_head' && note.state === 'waiting') {
                             note.type = 'slide_travel'; note.state = 'sliding';
                             note.time = elapsedTime; 
                             
-                            let lastNode = note.slideData.points[note.slideData.points.length-1];
+                            let pData = note.slideData;
+                            note.blocks = [];
+                            let stepDist = BUTTON_RADIUS * 0.8;
+                            for (let s = 0; s < pData.segments.length; s++) {
+                                let segLen = pData.segments[s];
+                                let segP1 = pData.points[s];
+                                let segP2 = pData.points[s+1];
+                                let count = Math.max(1, Math.floor(segLen / stepDist));
+                                for (let c = 0; c < count; c++) {
+                                    let ratio = c / count;
+                                    note.blocks.push({
+                                        x: segP1.x + (segP2.x - segP1.x) * ratio,
+                                        y: segP1.y + (segP2.y - segP1.y) * ratio,
+                                        cleared: false
+                                    });
+                                }
+                            }
+                            let lastNode = pData.points[pData.points.length-1];
                             note.finalX = lastNode.x; note.finalY = lastNode.y;
                             
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
-                        } else if (note.type === 'tap' || note.type === 'touch') {
-                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
-                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
-                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
-                            else { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
-                            activeNotes.splice(i, 1); break;
+                        } else if (note.type === 'tap') {
+                            let label = note.isBreak ? "BREAK" : "CRITICAL";
+                            spawnJudgement(label, "#ffd700", target.x, target.y); 
+                            combo++; 
+                            activeNotes.splice(i, 1); 
+                            break;
                         }
                     }
                 }
@@ -855,7 +817,7 @@
             let elapsedTime = audio.currentTime;
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
-                if ((note.type === 'hold' || note.type === 'hold_touch') && note.pos === posKey && note.state === 'holding') {
+                if (note.type === 'hold' && note.pos === posKey && note.state === 'holding') {
                     let target = NODE_POSITIONS[note.pos];
                     if (elapsedTime < note.time + note.duration - 0.15) {
                         spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
@@ -863,29 +825,6 @@
                         spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++;
                     }
                     activeNotes.splice(i, 1); break;
-                }
-            }
-        }
-        
-        // Wipe Blocks Interception Process 
-        function checkSlideInteractions(elapsedTime) {
-            let activeTouchKeys = Object.keys(activeTouches);
-            if (activeTouchKeys.length === 0) return;
-
-            for (let note of activeNotes) {
-                if (note.type === 'slide_travel' && note.state === 'sliding') {
-                    if (note.slideData && note.slideData.blocks) {
-                        for (let block of note.slideData.blocks) {
-                            if (!block.active) continue;
-                            for (let id of activeTouchKeys) {
-                                let tx = activeTouches[id].x;
-                                let ty = activeTouches[id].y;
-                                if (Math.hypot(tx - block.x, ty - block.y) < BUTTON_RADIUS * 1.5) {
-                                    block.active = false;
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
