@@ -356,19 +356,28 @@
                 if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                     let angle1 = -90 + idx1 * 45 + 22.5;
                     let angle2 = -90 + idx2 * 45 + 22.5;
-                    let diff = angle2 - angle1;
+                    
+                    let diff1 = angle2 - angle1;
+                    while (diff1 <= -180) diff1 += 360;
+                    while (diff1 > 180) diff1 -= 360; 
+                    
+                    let diff2 = diff1 > 0 ? diff1 - 360 : diff1 + 360; 
 
-                    if (shape.includes('<')) {
-                        // Anti-clockwise (CCW): angle must strictly decrease
-                        while (diff > 0) diff -= 360;
-                        if (diff === 0) diff = -360;
-                    } else if (shape.includes('>')) {
-                        // Clockwise (CW): angle must strictly increase
-                        while (diff < 0) diff += 360;
-                        if (diff === 0) diff = 360;
-                    } else { // '^'
-                        while (diff > 180) diff -= 360;
-                        while (diff <= -180) diff += 360;
+                    let mid1 = angle1 + diff1 / 2;
+                    let mid2 = angle1 + diff2 / 2;
+
+                    let x1 = Math.cos(mid1 * (Math.PI / 180));
+                    let x2 = Math.cos(mid2 * (Math.PI / 180));
+
+                    let diff = diff1;
+                    
+                    // > forces right side of the circumference (max X). < forces left side (min X).
+                    if (shape.includes('>')) {
+                        if (x1 > x2 + 0.001) diff = diff1;
+                        else if (x2 > x1 + 0.001) diff = diff2;
+                    } else if (shape.includes('<')) {
+                        if (x1 < x2 - 0.001) diff = diff1;
+                        else if (x2 < x1 - 0.001) diff = diff2;
                     }
 
                     let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
@@ -380,11 +389,10 @@
                         });
                     }
                 } else if (shape.includes('pp') || shape.includes('qq')) {
-                    // pp / qq: Straight line with a central circular loop tangent to the line
                     let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
                     let dist = Math.hypot(dx, dy) || 1;
                     let ux = dx / dist, uy = dy / dist;
-                    let px = -uy, py = ux; // Perpendicular vector
+                    let px = -uy, py = ux; 
 
                     let M = { x: CENTER.x, y: CENTER.y };
                     let rLoop = RING_RADIUS * 0.22;
@@ -393,56 +401,71 @@
                     let O = { x: M.x + px * rLoop * loopSide, y: M.y + py * rLoop * loopSide };
                     let baseAngle = Math.atan2(M.y - O.y, M.x - O.x);
 
-                    // 1. Line to center
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
                         detailedPoints.push({ x: sNode.x + (M.x - sNode.x) * t, y: sNode.y + (M.y - sNode.y) * t });
                     }
-                    // 2. 360-degree loop
                     let loopSteps = 24;
                     let dir = shape.includes('pp') ? 1 : -1;
                     for (let i = 1; i <= loopSteps; i++) {
                         let ang = baseAngle + dir * (Math.PI * 2) * (i / loopSteps);
                         detailedPoints.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
                     }
-                    // 3. Line to end
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
                         detailedPoints.push({ x: M.x + (eNode.x - M.x) * t, y: M.y + (eNode.y - M.y) * t });
                     }
                 } else if (shape.includes('p') || shape.includes('q')) {
-                    // p / q: Straight line at ends with a inner arc curve connecting them
+                    // Mathematically smooth Tangent paths
                     let rInner = RING_RADIUS * 0.45;
-                    let a1 = Math.atan2(sNode.y - CENTER.y, sNode.x - CENTER.x);
-                    let a2 = Math.atan2(eNode.y - CENTER.y, eNode.x - CENTER.x);
+                    let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
+                    let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
+                    let R1 = Math.hypot(dx1, dy1) || 1;
+                    let R2 = Math.hypot(dx2, dy2) || 1;
+                    
+                    let As = Math.atan2(dy1, dx1);
+                    let Ae = Math.atan2(dy2, dx2);
 
-                    let P1 = { x: CENTER.x + Math.cos(a1) * rInner, y: CENTER.y + Math.sin(a1) * rInner };
-                    let P2 = { x: CENTER.x + Math.cos(a2) * rInner, y: CENTER.y + Math.sin(a2) * rInner };
+                    let r1_safe = Math.min(rInner, R1 * 0.99);
+                    let r2_safe = Math.min(rInner, R2 * 0.99);
 
-                    // Start line
+                    let alpha1 = Math.acos(r1_safe / R1);
+                    let alpha2 = Math.acos(r2_safe / R2);
+
+                    let isCCW = shape.includes('p');
+                    
+                    let t1_angle = isCCW ? As + alpha1 : As - alpha1;
+                    let t2_angle = isCCW ? Ae - alpha2 : Ae + alpha2;
+
+                    let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
+                    let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
+
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
-                        detailedPoints.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
+                        detailedPoints.push({ x: sNode.x + (T1.x - sNode.x) * t, y: sNode.y + (T1.y - sNode.y) * t });
                     }
-                    // Inner curve
-                    let aDiff = (a2 - a1) * (180 / Math.PI);
-                    if (shape.includes('p')) {
-                        while (aDiff < 0) aDiff += 360;
+                    
+                    let aDiff = t2_angle - t1_angle;
+                    if (isCCW) {
+                        while (aDiff <= 0) aDiff += Math.PI * 2;
+                        while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
                     } else {
-                        while (aDiff > 0) aDiff -= 360;
+                        while (aDiff >= 0) aDiff -= Math.PI * 2;
+                        while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
                     }
-                    let steps = Math.max(10, Math.floor(Math.abs(aDiff) / 10));
+                    
+                    let steps = Math.max(10, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
                     for (let i = 1; i <= steps; i++) {
-                        let ang = a1 + (aDiff * (Math.PI / 180)) * (i / steps);
-                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
+                        let ang = t1_angle + aDiff * (i / steps);
+                        let curR = r1_safe + (r2_safe - r1_safe) * (i / steps);
+                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * curR, y: CENTER.y + Math.sin(ang) * curR });
                     }
-                    // End line
+
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
-                        detailedPoints.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
+                        detailedPoints.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
                     }
                 } else if (shape.includes('s') || shape.includes('z')) {
-                    // s / z: 3 straight line segments
                     let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
                     let dist = Math.hypot(dx, dy) || 1;
                     let ux = dx / dist, uy = dy / dist;
@@ -483,7 +506,6 @@
                         detailedPoints.push({ x: CENTER.x + (eNode.x - CENTER.x) * t, y: CENTER.y + (eNode.y - CENTER.y) * t });
                     }
                 } else {
-                    // Straight line '-'
                     let steps = 20;
                     for (let i = 1; i <= steps; i++) {
                         let t = i / steps;
