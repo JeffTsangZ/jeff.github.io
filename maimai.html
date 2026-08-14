@@ -353,24 +353,25 @@
                 let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
                 if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
 
-                let angle1 = -90 + idx1 * 45 + 22.5;
-                let angle2 = -90 + idx2 * 45 + 22.5;
-
                 if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
+                    let angle1 = -90 + idx1 * 45 + 22.5;
+                    let angle2 = -90 + idx2 * 45 + 22.5;
                     let diff = angle2 - angle1;
-                    
-                    while(diff > 180) diff -= 360;
-                    while(diff <= -180) diff += 360;
 
                     if (shape.includes('<')) {
-                        if (diff > 0) diff -= 360;
-                        else if (diff === 0) diff = -360;
+                        // Anti-clockwise (CCW): angle must strictly decrease
+                        while (diff > 0) diff -= 360;
+                        if (diff === 0) diff = -360;
                     } else if (shape.includes('>')) {
-                        if (diff < 0) diff += 360;
-                        else if (diff === 0) diff = 360;
+                        // Clockwise (CW): angle must strictly increase
+                        while (diff < 0) diff += 360;
+                        if (diff === 0) diff = 360;
+                    } else { // '^'
+                        while (diff > 180) diff -= 360;
+                        while (diff <= -180) diff += 360;
                     }
-                    
-                    let steps = Math.max(10, Math.floor(Math.abs(diff) / 10));
+
+                    let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
                     for (let s = 1; s <= steps; s++) {
                         let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
                         detailedPoints.push({
@@ -378,27 +379,116 @@
                             y: CENTER.y + Math.sin(a) * RING_RADIUS
                         });
                     }
-                } else if (shape.includes('v')) {
-                    let steps = 25;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        let bx = CENTER.x, by = CENTER.y;
-                        let x = (1 - t) * (1 - t) * sNode.x + 2 * (1 - t) * t * bx + t * t * eNode.x;
-                        let y = (1 - t) * (1 - t) * sNode.y + 2 * (1 - t) * t * by + t * t * eNode.y;
-                        detailedPoints.push({ x: x, y: y });
+                } else if (shape.includes('pp') || shape.includes('qq')) {
+                    // pp / qq: Straight line with a central circular loop tangent to the line
+                    let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
+                    let dist = Math.hypot(dx, dy) || 1;
+                    let ux = dx / dist, uy = dy / dist;
+                    let px = -uy, py = ux; // Perpendicular vector
+
+                    let M = { x: CENTER.x, y: CENTER.y };
+                    let rLoop = RING_RADIUS * 0.22;
+                    let loopSide = shape.includes('pp') ? 1 : -1;
+
+                    let O = { x: M.x + px * rLoop * loopSide, y: M.y + py * rLoop * loopSide };
+                    let baseAngle = Math.atan2(M.y - O.y, M.x - O.x);
+
+                    // 1. Line to center
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: sNode.x + (M.x - sNode.x) * t, y: sNode.y + (M.y - sNode.y) * t });
                     }
-                } else if (/[pqsz]/.test(shape)) {
-                    let steps = 30;
-                    for (let s = 1; s <= steps; s++) {
-                        let t = s / steps;
-                        let cx = CENTER.x + Math.sin(t * Math.PI * 2) * (RING_RADIUS * 0.45);
-                        let cy = CENTER.y + Math.cos(t * Math.PI * 2 * 0.5) * (RING_RADIUS * 0.55);
-                        let x = sNode.x * (1 - t) + eNode.x * t + (cx - CENTER.x) * Math.sin(t * Math.PI);
-                        let y = sNode.y * (1 - t) + eNode.y * t + (cy - CENTER.y) * Math.sin(t * Math.PI);
-                        detailedPoints.push({ x: x, y: y });
+                    // 2. 360-degree loop
+                    let loopSteps = 24;
+                    let dir = shape.includes('pp') ? 1 : -1;
+                    for (let i = 1; i <= loopSteps; i++) {
+                        let ang = baseAngle + dir * (Math.PI * 2) * (i / loopSteps);
+                        detailedPoints.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
+                    }
+                    // 3. Line to end
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: M.x + (eNode.x - M.x) * t, y: M.y + (eNode.y - M.y) * t });
+                    }
+                } else if (shape.includes('p') || shape.includes('q')) {
+                    // p / q: Straight line at ends with a inner arc curve connecting them
+                    let rInner = RING_RADIUS * 0.45;
+                    let a1 = Math.atan2(sNode.y - CENTER.y, sNode.x - CENTER.x);
+                    let a2 = Math.atan2(eNode.y - CENTER.y, eNode.x - CENTER.x);
+
+                    let P1 = { x: CENTER.x + Math.cos(a1) * rInner, y: CENTER.y + Math.sin(a1) * rInner };
+                    let P2 = { x: CENTER.x + Math.cos(a2) * rInner, y: CENTER.y + Math.sin(a2) * rInner };
+
+                    // Start line
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
+                    }
+                    // Inner curve
+                    let aDiff = (a2 - a1) * (180 / Math.PI);
+                    if (shape.includes('p')) {
+                        while (aDiff < 0) aDiff += 360;
+                    } else {
+                        while (aDiff > 0) aDiff -= 360;
+                    }
+                    let steps = Math.max(10, Math.floor(Math.abs(aDiff) / 10));
+                    for (let i = 1; i <= steps; i++) {
+                        let ang = a1 + (aDiff * (Math.PI / 180)) * (i / steps);
+                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
+                    }
+                    // End line
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
+                    }
+                } else if (shape.includes('s') || shape.includes('z')) {
+                    // s / z: 3 straight line segments
+                    let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
+                    let dist = Math.hypot(dx, dy) || 1;
+                    let ux = dx / dist, uy = dy / dist;
+                    let px = -uy, py = ux;
+
+                    let offsetDist = RING_RADIUS * 0.35;
+                    let side = shape.includes('s') ? 1 : -1;
+
+                    let P1 = {
+                        x: sNode.x + ux * (dist * 0.3) + px * (offsetDist * side),
+                        y: sNode.y + uy * (dist * 0.3) + py * (offsetDist * side)
+                    };
+                    let P2 = {
+                        x: sNode.x + ux * (dist * 0.7) - px * (offsetDist * side),
+                        y: sNode.y + uy * (dist * 0.7) - py * (offsetDist * side)
+                    };
+
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
+                    }
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: P1.x + (P2.x - P1.x) * t, y: P1.y + (P2.y - P1.y) * t });
+                    }
+                    for (let i = 1; i <= 10; i++) {
+                        let t = i / 10;
+                        detailedPoints.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
+                    }
+                } else if (shape.includes('v')) {
+                    let steps = 15;
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        detailedPoints.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                    }
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        detailedPoints.push({ x: CENTER.x + (eNode.x - CENTER.x) * t, y: CENTER.y + (eNode.y - CENTER.y) * t });
                     }
                 } else {
-                    detailedPoints.push({x: eNode.x, y: eNode.y});
+                    // Straight line '-'
+                    let steps = 20;
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        detailedPoints.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
+                    }
                 }
                 
                 currentStart = seg.endKey;
@@ -430,7 +520,7 @@
         }
 
         function playHitSFX(judgement) {
-            if (judgement === 'MISS') return; // Miss has no sound effect
+            if (judgement === 'MISS') return;
 
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -440,17 +530,15 @@
                 let gain = audioCtx.createGain();
 
                 if (judgement === 'CRITICAL' || judgement === 'PERFECT') {
-                    // Type 1 Sound Effect: High bright chime
                     osc.type = 'sine';
-                    osc.frequency.setValueAtTime(1056, audioCtx.currentTime); // C6
+                    osc.frequency.setValueAtTime(1056, audioCtx.currentTime); 
                     osc.frequency.exponentialRampToValueAtTime(1584, audioCtx.currentTime + 0.06);
 
                     gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
                 } else {
-                    // Type 2 Sound Effect: Other judgements (GREAT, GOOD)
                     osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
                     osc.frequency.exponentialRampToValueAtTime(392, audioCtx.currentTime + 0.07);
 
                     gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
