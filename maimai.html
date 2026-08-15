@@ -357,27 +357,25 @@
                     let angle1 = -90 + idx1 * 45 + 22.5;
                     let angle2 = -90 + idx2 * 45 + 22.5;
                     
-                    let diff1 = angle2 - angle1;
-                    while (diff1 <= -180) diff1 += 360;
-                    while (diff1 > 180) diff1 -= 360; 
+                    let diff = angle2 - angle1;
+                    while (diff <= -180) diff += 360;
+                    while (diff > 180) diff -= 360; 
                     
-                    let diff2 = diff1 > 0 ? diff1 - 360 : diff1 + 360; 
+                    let startNodeNum = parseInt(currentStart.replace(/[^0-9]/g, ''));
+                    if (isNaN(startNodeNum)) startNodeNum = 1;
+                    // Top half starts dictate rules
+                    let isTopHalf = [7, 8, 1, 2].includes(startNodeNum);
 
-                    let mid1 = angle1 + diff1 / 2;
-                    let mid2 = angle1 + diff2 / 2;
-
-                    let x1 = Math.cos(mid1 * (Math.PI / 180));
-                    let x2 = Math.cos(mid2 * (Math.PI / 180));
-
-                    let diff = diff1;
-                    
-                    // > forces right side of the circumference (max X). < forces left side (min X).
                     if (shape.includes('>')) {
-                        if (x1 > x2 + 0.001) diff = diff1;
-                        else if (x2 > x1 + 0.001) diff = diff2;
+                        // > means CW for Top Half, CCW for Bottom Half
+                        let isCW = isTopHalf ? true : false;
+                        if (isCW) { while (diff <= 0) diff += 360; }
+                        else { while (diff >= 0) diff -= 360; }
                     } else if (shape.includes('<')) {
-                        if (x1 < x2 - 0.001) diff = diff1;
-                        else if (x2 < x1 - 0.001) diff = diff2;
+                        // < means CCW for Top Half, CW for Bottom Half
+                        let isCW = isTopHalf ? false : true;
+                        if (isCW) { while (diff <= 0) diff += 360; }
+                        else { while (diff >= 0) diff -= 360; }
                     }
 
                     let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
@@ -388,36 +386,58 @@
                             y: CENTER.y + Math.sin(a) * RING_RADIUS
                         });
                     }
+
                 } else if (shape.includes('pp') || shape.includes('qq')) {
-                    let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
-                    let dist = Math.hypot(dx, dy) || 1;
-                    let ux = dx / dist, uy = dy / dist;
-                    let px = -uy, py = ux; 
+                    // Rule 3: pp and qq (Loop connected to center tangent)
+                    let isCW = shape.includes('qq'); // qq = CW, pp = CCW
+                    let rLoop = RING_RADIUS * 0.5; // Loop radius is Half Chart Radius (Diameter = Chart Radius)
 
-                    let M = { x: CENTER.x, y: CENTER.y };
-                    let rLoop = RING_RADIUS * 0.22;
-                    let loopSide = shape.includes('pp') ? 1 : -1;
-
-                    let O = { x: M.x + px * rLoop * loopSide, y: M.y + py * rLoop * loopSide };
-                    let baseAngle = Math.atan2(M.y - O.y, M.x - O.x);
+                    // Line from S to Center
+                    let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
+                    let O_angle = isCW ? A_in + Math.PI/2 : A_in - Math.PI/2;
+                    let O = { x: CENTER.x + Math.cos(O_angle) * rLoop, y: CENTER.y + Math.sin(O_angle) * rLoop };
 
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
-                        detailedPoints.push({ x: sNode.x + (M.x - sNode.x) * t, y: sNode.y + (M.y - sNode.y) * t });
+                        detailedPoints.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
                     }
-                    let loopSteps = 24;
-                    let dir = shape.includes('pp') ? 1 : -1;
-                    for (let i = 1; i <= loopSteps; i++) {
-                        let ang = baseAngle + dir * (Math.PI * 2) * (i / loopSteps);
+
+                    // Arc from Center around O to tangent
+                    let arc_start = Math.atan2(CENTER.y - O.y, CENTER.x - O.x);
+                    let phi = Math.atan2(eNode.y - O.y, eNode.x - O.x);
+                    let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
+                    
+                    let arc_end = phi;
+                    if (D >= rLoop) {
+                        let theta = Math.acos(Math.max(-1, Math.min(1, rLoop / D)));
+                        arc_end = isCW ? phi - theta : phi + theta;
+                    }
+
+                    let aDiff = arc_end - arc_start;
+                    if (isCW) {
+                        while (aDiff <= 0) aDiff += Math.PI * 2;
+                        while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                    } else {
+                        while (aDiff >= 0) aDiff -= Math.PI * 2;
+                        while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                    }
+
+                    let steps = Math.max(20, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                    for (let i = 1; i <= steps; i++) {
+                        let ang = arc_start + aDiff * (i / steps);
                         detailedPoints.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
                     }
+
+                    // Tangent from loop to E
+                    let T_end = detailedPoints[detailedPoints.length - 1];
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
-                        detailedPoints.push({ x: M.x + (eNode.x - M.x) * t, y: M.y + (eNode.y - M.y) * t });
+                        detailedPoints.push({ x: T_end.x + (eNode.x - T_end.x) * t, y: T_end.y + (eNode.y - T_end.y) * t });
                     }
+
                 } else if (shape.includes('p') || shape.includes('q')) {
-                    // Mathematically smooth Tangent paths
-                    let rInner = RING_RADIUS * 0.45;
+                    // Rule 2: p and q (Center crossing arc)
+                    let rInner = RING_RADIUS * 0.5; // Diameter = radius of chart
                     let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
                     let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
                     let R1 = Math.hypot(dx1, dy1) || 1;
@@ -432,10 +452,10 @@
                     let alpha1 = Math.acos(r1_safe / R1);
                     let alpha2 = Math.acos(r2_safe / R2);
 
-                    let isCCW = shape.includes('p');
+                    let isCW = shape.includes('q'); // q = CW, p = CCW
                     
-                    let t1_angle = isCCW ? As + alpha1 : As - alpha1;
-                    let t2_angle = isCCW ? Ae - alpha2 : Ae + alpha2;
+                    let t1_angle = isCW ? As + alpha1 : As - alpha1;
+                    let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
 
                     let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
                     let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
@@ -446,7 +466,7 @@
                     }
                     
                     let aDiff = t2_angle - t1_angle;
-                    if (isCCW) {
+                    if (isCW) {
                         while (aDiff <= 0) aDiff += Math.PI * 2;
                         while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
                     } else {
@@ -457,14 +477,14 @@
                     let steps = Math.max(10, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
                     for (let i = 1; i <= steps; i++) {
                         let ang = t1_angle + aDiff * (i / steps);
-                        let curR = r1_safe + (r2_safe - r1_safe) * (i / steps);
-                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * curR, y: CENTER.y + Math.sin(ang) * curR });
+                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
                     }
 
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
                         detailedPoints.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
                     }
+                    
                 } else if (shape.includes('s') || shape.includes('z')) {
                     let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
                     let dist = Math.hypot(dx, dy) || 1;
