@@ -26,17 +26,67 @@
             padding: 30px; border-radius: 15px;
             border: 2px solid #0ff; text-align: center;
             box-shadow: 0 0 20px #0ff;
-            min-width: 300px;
+            min-width: 320px;
+            max-height: 90vh; overflow-y: auto;
         }
-        #fullscreenBtn {
+
+        /* Top Right Toolbar */
+        #topBar {
             position: absolute;
             top: 15px; right: 15px; z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
+            display: flex; gap: 10px;
+        }
+        #topBar button {
+            background: rgba(0, 0, 0, 0.6);
             color: #fff; border: 1px solid #0ff;
             border-radius: 8px; padding: 10px 15px;
             cursor: pointer; font-weight: bold;
+            width: auto; margin: 0;
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
         }
-        #fullscreenBtn:hover { background: rgba(0, 255, 255, 0.2); }
+        #topBar button:hover { background: rgba(0, 255, 255, 0.3); }
+
+        /* Pause Modal Overlay */
+        #pauseOverlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 200;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .pause-box {
+            background: rgba(15, 15, 25, 0.95);
+            border: 2px solid #0ff;
+            box-shadow: 0 0 25px #0ff;
+            padding: 35px 40px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 280px;
+        }
+        .pause-box h2 {
+            margin-top: 0; margin-bottom: 20px;
+            color: #0ff; font-size: 28px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #0ff;
+        }
+        .pause-box button {
+            margin: 10px 0;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.1s;
+        }
+        .pause-box button:active { transform: scale(0.98); }
+        #resumeBtn { background: #00ffcc; color: #000; }
+        #resetBtn { background: #ffaa00; color: #000; }
+        #exitBtn { background: #ff3366; color: #fff; }
         
         #gameCanvas {
             border-radius: 50%;
@@ -44,16 +94,16 @@
             box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
             display: none;
         }
-        button:not(#fullscreenBtn), input[type="file"], select {
-            padding: 12px; font-size: 16px; margin: 10px;
+        button:not(#topBar button):not(.pause-box button), input[type="file"], select {
+            padding: 12px; font-size: 16px; margin: 10px 0;
             border-radius: 8px; border: none; cursor: pointer;
-            width: 90%; box-sizing: border-box;
+            width: 100%; box-sizing: border-box;
         }
         select { background: #222; color: #fff; border: 1px solid #0ff; outline: none; }
-        button:not(#fullscreenBtn) { background: #0ff; color: #000; font-weight: bold; }
+        button:not(#topBar button):not(.pause-box button) { background: #0ff; color: #000; font-weight: bold; }
         button:disabled { background: #555; color: #888; }
         .setting { margin: 15px 0; }
-        input[type="range"] { width: 90%; }
+        input[type="range"] { width: 100%; }
         
         #difficultyContainer {
             display: none;
@@ -62,12 +112,33 @@
             border-radius: 8px;
             margin: 15px 0;
         }
+
+        .controls-info {
+            font-size: 12px; color: #aaa; text-align: left;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px; border-radius: 6px; margin-top: 10px;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
 
     <video id="bgVideo" autoplay loop muted></video>
-    <button id="fullscreenBtn">⛶ Fullscreen</button>
+
+    <div id="topBar">
+        <button id="pauseBtn">⏸ Pause (x2)</button>
+        <button id="fullscreenBtn">⛶ Fullscreen</button>
+    </div>
+
+    <!-- Pause Modal -->
+    <div id="pauseOverlay">
+        <div class="pause-box">
+            <h2>GAME PAUSED</h2>
+            <button id="resumeBtn">Resume</button>
+            <button id="resetBtn">Reset</button>
+            <button id="exitBtn">Exit (Song Selection)</button>
+        </div>
+    </div>
 
     <div id="ui">
         <h2>maimai DX Simulator</h2>
@@ -82,6 +153,14 @@
             <label>Note Speed: <span id="speedVal">5.0</span></label><br>
             <input type="range" id="speedSlider" min="1" max="10" step="0.1" value="5">
             <p style="font-size: 12px; color: #aaa;">(1 = Slow, 10 = Ultra Fast)</p>
+        </div>
+
+        <div class="controls-info">
+            <strong style="color: #0ff;">Controls:</strong><br>
+            • <strong>Touch / Mouse:</strong> Tap or drag across buttons<br>
+            • <strong>Keyboard (1-8):</strong> Keys <code>1</code> to <code>8</code> or Ring Keys <code>E D C X Z A Q W</code><br>
+            • <strong>Center (C):</strong> <code>Space</code> or <code>S</code><br>
+            • <strong>Pause:</strong> Double Press <code>⏸ Pause</code> Button
         </div>
 
         <button id="startBtn" disabled>Upload .adx to Start</button>
@@ -107,8 +186,11 @@
         let activeNotes = [];
         let judgements = [];
         let clickEffects = [];
+        let fireworks = [];
         let audio = new Audio();
         let isPlaying = false;
+        let isPaused = false;
+        let pauseStartTime = 0;
         let combo = 0;
 
         let gameStartTime = 0;
@@ -125,6 +207,7 @@
             APPROACH_TIME = 5.0 / val;
         });
 
+        // Top Bar Controls
         document.getElementById('fullscreenBtn').addEventListener('click', () => {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(err => console.log(err));
@@ -132,6 +215,98 @@
                 document.exitFullscreen();
             }
         });
+
+        // Double Click Pause Logic
+        let lastPauseClick = 0;
+        document.getElementById('pauseBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            const now = performance.now();
+            if (now - lastPauseClick < 400) {
+                if (isPlaying && !isPaused) {
+                    pauseGame();
+                }
+            }
+            lastPauseClick = now;
+        });
+
+        // Pause Menu Actions
+        document.getElementById('resumeBtn').addEventListener('click', resumeGame);
+        document.getElementById('resetBtn').addEventListener('click', resetGame);
+        document.getElementById('exitBtn').addEventListener('click', exitGame);
+
+        function pauseGame() {
+            if (!isPlaying || isPaused) return;
+            isPaused = true;
+            pauseStartTime = performance.now();
+            
+            if (audioStarted) audio.pause();
+            let bgVid = document.getElementById('bgVideo');
+            if (bgVid && bgVid.src) bgVid.pause();
+
+            document.getElementById('pauseOverlay').style.display = 'flex';
+        }
+
+        function resumeGame() {
+            if (!isPaused) return;
+            let pauseDuration = (performance.now() - pauseStartTime);
+            gameStartTime += pauseDuration;
+
+            if (audioStarted) audio.play().catch(e => console.log(e));
+            let bgVid = document.getElementById('bgVideo');
+            if (bgVid && bgVid.src) bgVid.play().catch(e => console.log(e));
+
+            document.getElementById('pauseOverlay').style.display = 'none';
+            isPaused = false;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resetGame() {
+            document.getElementById('pauseOverlay').style.display = 'none';
+            isPaused = false;
+            
+            let selectedDiff = document.getElementById('diffSelect').value;
+            activeNotes = JSON.parse(JSON.stringify(notes));
+            activeNotes.forEach(n => {
+                if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
+            });
+
+            combo = 0;
+            judgements = [];
+            clickEffects = [];
+            fireworks = [];
+            preRollTime = 240 / initialBPM;
+            gameStartTime = performance.now();
+            lastBeatIndex = -1;
+            audioStarted = false;
+
+            audio.pause();
+            audio.currentTime = 0;
+
+            let bgVid = document.getElementById('bgVideo');
+            if (bgVid && bgVid.src) {
+                bgVid.currentTime = 0;
+            }
+
+            if (!isPlaying) {
+                isPlaying = true;
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function exitGame() {
+            isPaused = false;
+            isPlaying = false;
+
+            audio.pause();
+            audio.currentTime = 0;
+
+            let bgVid = document.getElementById('bgVideo');
+            if (bgVid) bgVid.pause();
+
+            document.getElementById('pauseOverlay').style.display = 'none';
+            canvas.style.display = 'none';
+            document.getElementById('ui').style.display = 'block';
+        }
 
         function resizeCanvas() {
             let size = Math.min(window.innerWidth, window.innerHeight) * 0.95;
@@ -256,16 +431,30 @@
                 for (let el of elements) {
                     if (!el) continue;
 
+                    let isBonus = el.includes('x');
+                    let isFirework = el.includes('f');
+
+                    // Touch Hold Note
                     let touchHoldMatch = el.match(/^([A-E][1-8]?|C)h\[(.*?)\]/);
                     if (touchHoldMatch) {
-                        parsedNotes.push({ type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], duration: parseDuration(touchHoldMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
+                        parsedNotes.push({ 
+                            type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], 
+                            duration: parseDuration(touchHoldMatch[2], currentBPM), 
+                            isChord: false, isBonus: isBonus, isFirework: isFirework, state: 'waiting' 
+                        }); continue;
                     }
 
+                    // Standard Hold Note
                     let holdMatch = el.match(/^([1-8])h\[(.*?)\]/);
                     if (holdMatch) {
-                        parsedNotes.push({ type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, duration: parseDuration(holdMatch[2], currentBPM), isChord: false, state: 'waiting' }); continue;
+                        parsedNotes.push({ 
+                            type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, 
+                            duration: parseDuration(holdMatch[2], currentBPM), 
+                            isChord: false, isBonus: isBonus, isFirework: isFirework, state: 'waiting' 
+                        }); continue;
                     }
 
+                    // Slide Head / Track Note
                     let slideHeadMatch = el.match(/^([1-8])/);
                     if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
@@ -279,27 +468,37 @@
                             let durMatch = part.match(/\[(.*?)\]$/);
                             let durStr = durMatch ? durMatch[1] : null;
                             let pathStr = durMatch ? part.replace(/\[.*?\]$/, '') : part;
-                            
                             let dur = durStr ? parseDuration(durStr, currentBPM) : (240 / currentBPM) / 2;
                             
                             parsedNotes.push({ 
-                                type: 'slide_head', time: currentTime, pos: headPos, pathStr: pathStr, duration: dur, state: 'waiting', isChord: false,
+                                type: 'slide_head', time: currentTime, pos: headPos, pathStr: pathStr, 
+                                duration: dur, state: 'waiting', isChord: false, isBonus: isBonus, isFirework: isFirework,
                                 slideData: calculateSlidePoints(pathStr, headPos)
                             });
                         }
                         continue;
                     }
 
-                    let touchMatch = el.match(/^([A-E][1-8]?|C)$/);
-                    if (touchMatch) { parsedNotes.push({ type: 'touch', time: currentTime, pos: touchMatch[1], isChord: false, state: 'waiting' }); continue; }
+                    // Touch Note (Letter First, e.g. E2f, Cf)
+                    let touchMatch = el.match(/^([A-E][1-8]?|C)([bxf]*)$/i);
+                    if (touchMatch) {
+                        let mods = touchMatch[2] || '';
+                        parsedNotes.push({ 
+                            type: 'touch', time: currentTime, pos: touchMatch[1], 
+                            isChord: false, isBonus: mods.includes('x'), isFirework: mods.includes('f'), state: 'waiting' 
+                        }); continue;
+                    }
 
-                    let tapMatch = el.match(/^([1-8\*]+)$/);
-                    if (tapMatch) {
-                        let taps = el.replace(/\*/g, '').split('');
-                        for (let t of taps) {
-                            if (/[1-8]/.test(t)) {
-                                parsedNotes.push({ type: 'tap', time: currentTime, pos: `A${t}`, isChord: false, state: 'waiting' });
-                            }
+                    // Tap Note (Number First, e.g. 3x, 8x, 2bx, 1bx, 21)
+                    let tapMatches = [...el.matchAll(/([1-8])([bxf]*)/gi)];
+                    if (tapMatches.length > 0) {
+                        for (let m of tapMatches) {
+                            let posNum = m[1];
+                            let mods = m[2] || '';
+                            parsedNotes.push({ 
+                                type: 'tap', time: currentTime, pos: `A${posNum}`, 
+                                isChord: false, isBonus: mods.includes('x'), isFirework: mods.includes('f'), state: 'waiting' 
+                            });
                         }
                         continue;
                     }
@@ -363,16 +562,13 @@
                     
                     let startNodeNum = parseInt(currentStart.replace(/[^0-9]/g, ''));
                     if (isNaN(startNodeNum)) startNodeNum = 1;
-                    // Top half starts dictate rules
                     let isTopHalf = [7, 8, 1, 2].includes(startNodeNum);
 
                     if (shape.includes('>')) {
-                        // > means CW for Top Half, CCW for Bottom Half
                         let isCW = isTopHalf ? true : false;
                         if (isCW) { while (diff <= 0) diff += 360; }
                         else { while (diff >= 0) diff -= 360; }
                     } else if (shape.includes('<')) {
-                        // < means CCW for Top Half, CW for Bottom Half
                         let isCW = isTopHalf ? false : true;
                         if (isCW) { while (diff <= 0) diff += 360; }
                         else { while (diff >= 0) diff -= 360; }
@@ -388,11 +584,9 @@
                     }
 
                 } else if (shape.includes('pp') || shape.includes('qq')) {
-                    // Rule 3: pp and qq (Loop connected to center tangent)
-                    let isCW = shape.includes('qq'); // qq = CW, pp = CCW
-                    let rLoop = RING_RADIUS * 0.5; // Loop radius is Half Chart Radius (Diameter = Chart Radius)
+                    let isCW = shape.includes('qq');
+                    let rLoop = RING_RADIUS * 0.5;
 
-                    // Line from S to Center
                     let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
                     let O_angle = isCW ? A_in + Math.PI/2 : A_in - Math.PI/2;
                     let O = { x: CENTER.x + Math.cos(O_angle) * rLoop, y: CENTER.y + Math.sin(O_angle) * rLoop };
@@ -402,7 +596,6 @@
                         detailedPoints.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
                     }
 
-                    // Arc from Center around O to tangent
                     let arc_start = Math.atan2(CENTER.y - O.y, CENTER.x - O.x);
                     let phi = Math.atan2(eNode.y - O.y, eNode.x - O.x);
                     let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
@@ -428,7 +621,6 @@
                         detailedPoints.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
                     }
 
-                    // Tangent from loop to E
                     let T_end = detailedPoints[detailedPoints.length - 1];
                     for (let i = 1; i <= 10; i++) {
                         let t = i / 10;
@@ -436,8 +628,7 @@
                     }
 
                 } else if (shape.includes('p') || shape.includes('q')) {
-                    // Rule 2: p and q (Center crossing arc)
-                    let rInner = RING_RADIUS * 0.5; // Diameter = radius of chart
+                    let rInner = RING_RADIUS * 0.5;
                     let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
                     let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
                     let R1 = Math.hypot(dx1, dy1) || 1;
@@ -452,7 +643,7 @@
                     let alpha1 = Math.acos(r1_safe / R1);
                     let alpha2 = Math.acos(r2_safe / R2);
 
-                    let isCW = shape.includes('q'); // q = CW, p = CCW
+                    let isCW = shape.includes('q');
                     
                     let t1_angle = isCW ? As + alpha1 : As - alpha1;
                     let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
@@ -611,6 +802,7 @@
             gameStartTime = performance.now();
             lastBeatIndex = -1;
             audioStarted = false;
+            isPaused = false;
 
             if (document.getElementById('bgVideo').src) document.getElementById('bgVideo').currentTime = 0;
             isPlaying = true; 
@@ -618,7 +810,7 @@
         });
 
         function gameLoop() {
-            if (!isPlaying) return;
+            if (!isPlaying || isPaused) return;
             let now = performance.now();
             let elapsedTime = (now - gameStartTime) / 1000 - preRollTime;
 
@@ -642,7 +834,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawUI(); drawCombo(); 
             updateAndDrawNotes(elapsedTime);
-            drawClickEffects(); drawJudgements(elapsedTime);
+            drawClickEffects(); drawFireworks(); drawJudgements(elapsedTime);
             requestAnimationFrame(gameLoop);
         }
 
@@ -736,6 +928,46 @@
             }
         }
 
+        // Firework Particle Generator
+        function spawnFireworkEffect(x, y) {
+            const count = 28;
+            const colors = ['#ff0055', '#00ffff', '#ffcc00', '#ff3399', '#00ff66', '#ffffff', '#ff9900'];
+            for (let i = 0; i < count; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let speed = 2 + Math.random() * 6;
+                fireworks.push({
+                    x: x, y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    alpha: 1.0,
+                    size: 3 + Math.random() * 4,
+                    decay: 0.02 + Math.random() * 0.02
+                });
+            }
+        }
+
+        function drawFireworks() {
+            for (let i = fireworks.length - 1; i >= 0; i--) {
+                let p = fireworks[i];
+                p.x += p.vx; p.y += p.vy;
+                p.vx *= 0.96; p.vy *= 0.96;
+                p.alpha -= p.decay;
+
+                if (p.alpha <= 0) { fireworks.splice(i, 1); continue; }
+
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
         function updateAndDrawNotes(elapsedTime) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
@@ -801,8 +1033,9 @@
                     });
 
                     if (travelProgress >= 1.0) {
-                        if (note.reachedEnd) {
-                            spawnJudgement("PERFECT", "#ffeb3b", note.finalX, note.finalY);
+                        if (note.isFirework) spawnFireworkEffect(note.finalX, note.finalY);
+                        if (note.reachedEnd || note.isBonus) {
+                            spawnJudgement("CRITICAL", "#ffd700", note.finalX, note.finalY);
                             combo++;
                         } else if (note.traced) {
                             spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
@@ -829,6 +1062,7 @@
                 }
 
                 if (isHolding && elapsedTime >= note.time + note.duration) {
+                    if (note.isFirework) spawnFireworkEffect(target.x, target.y);
                     spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
                     combo++; activeNotes.splice(i, 1); continue;
                 }
@@ -841,13 +1075,17 @@
 
                     if (note.type === 'touch' || note.type === 'hold_touch') {
                         let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
-                        
-                        let tOutline = note.isChord ? '#ffff00' : '#00ffff';
+                        let tOutline = note.isBonus ? '#ffd700' : (note.isChord ? '#ffff00' : '#00ffff');
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
                         ctx.save();
                         ctx.translate(target.x, target.y);
                         ctx.rotate(Math.PI / 4);
+
+                        if (note.isBonus) {
+                            ctx.shadowColor = '#ffe600';
+                            ctx.shadowBlur = 15;
+                        }
                         
                         if (note.type === 'hold_touch') {
                             let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
@@ -887,17 +1125,35 @@
                         let tailX = CENTER.x + (target.x - CENTER.x) * tailP;
                         let tailY = CENTER.y + (target.y - CENTER.y) * tailP;
                         
-                        let holdColor = note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)';
+                        let holdColor = note.isBonus ? 'rgba(255, 215, 0, 0.9)' : (note.isChord ? 'rgba(255, 255, 0, 0.85)' : 'rgba(255, 0, 0, 0.85)');
                         drawHexagonBar(tailX, tailY, headX, headY, holdColor);
                         
                     } else if (note.type === 'slide_head' && note.state === 'waiting') {
-                        ctx.fillStyle = note.isChord ? cYellow : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                        ctx.fillStyle = note.isBonus ? '#ffe600' : (note.isChord ? cYellow : '#00aaff'); 
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                         drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                     
                     } else if (note.type === 'tap') {
-                        ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
-                        ctx.fillStyle = note.isChord ? cYellow : '#ff00ff'; ctx.fill(); 
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+                        if (note.isBonus) { // Bonus Note Visuals
+                            ctx.save();
+                            ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.85, 0, Math.PI * 2);
+                            ctx.fillStyle = '#ffe600';
+                            ctx.shadowColor = '#ffea00'; ctx.shadowBlur = 12;
+                            ctx.fill();
+
+                            ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.65, 0, Math.PI * 2);
+                            ctx.fillStyle = note.isChord ? cYellow : '#ff00ff';
+                            ctx.fill();
+                            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.stroke();
+
+                            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 1;
+                            drawStar(cx, cy, 5, BUTTON_RADIUS * 0.35, BUTTON_RADIUS * 0.18, elapsedTime * 3);
+                            ctx.restore();
+                        } else {
+                            ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.7, 0, Math.PI * 2);
+                            ctx.fillStyle = note.isChord ? cYellow : '#ff00ff'; ctx.fill(); 
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+                        }
                     }
                 }
             }
@@ -921,10 +1177,15 @@
             }
         }
 
+        // ================= INPUT HANDLING =================
         let touchState = {}; 
         let activeTouches = {};
+        let isMouseDown = false;
+        let mouseTouchSet = new Set();
 
+        // 1. TOUCH CONTROLS
         function handleTouches(e) {
+            if (isPaused) return;
             e.preventDefault(); 
             let rect = canvas.getBoundingClientRect();
             
@@ -946,7 +1207,8 @@
                 let currentlyTouched = new Set();
                 Object.keys(NODE_POSITIONS).forEach(key => {
                     let node = NODE_POSITIONS[key];
-                    if (Math.hypot(tx - node.x, ty - node.y) < BUTTON_RADIUS * 1.5) currentlyTouched.add(key);
+                    let radius = (node.type === 'C') ? BUTTON_RADIUS * 1.5 : BUTTON_RADIUS * 1.5;
+                    if (Math.hypot(tx - node.x, ty - node.y) < radius) currentlyTouched.add(key);
                 });
 
                 let previouslyTouched = touchState[touch.identifier] || new Set();
@@ -967,6 +1229,89 @@
         canvas.addEventListener('touchend', handleTouches, {passive: false});
         canvas.addEventListener('touchcancel', handleTouches, {passive: false});
 
+        // 2. MOUSE CONTROLS
+        function handleMousePos(x, y) {
+            if (isPaused) return;
+            activeTouches['mouse'] = { x: x, y: y };
+            let currentlyTouched = new Set();
+
+            Object.keys(NODE_POSITIONS).forEach(key => {
+                let node = NODE_POSITIONS[key];
+                let radius = (node.type === 'C') ? BUTTON_RADIUS * 1.5 : BUTTON_RADIUS * 1.5;
+                if (Math.hypot(x - node.x, y - node.y) < radius) {
+                    currentlyTouched.add(key);
+                }
+            });
+
+            currentlyTouched.forEach(key => {
+                if (!mouseTouchSet.has(key)) {
+                    NODE_POSITIONS[key].active = true;
+                    spawnClickEffect(NODE_POSITIONS[key].x, NODE_POSITIONS[key].y, '#0ff');
+                    checkHit(key);
+                    setTimeout(() => NODE_POSITIONS[key].active = false, 100);
+                }
+            });
+
+            mouseTouchSet = currentlyTouched;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (isPaused) return;
+            isMouseDown = true;
+            let rect = canvas.getBoundingClientRect();
+            handleMousePos(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isMouseDown || isPaused) return;
+            let rect = canvas.getBoundingClientRect();
+            handleMousePos(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isMouseDown) return;
+            isMouseDown = false;
+            mouseTouchSet.forEach(nodeKey => checkHoldRelease(nodeKey));
+            mouseTouchSet.clear();
+            delete activeTouches['mouse'];
+        });
+
+        // 3. KEYBOARD CONTROLS
+        const KEY_MAP = {
+            'Digit1': 'A1', 'Digit2': 'A2', 'Digit3': 'A3', 'Digit4': 'A4',
+            'Digit5': 'A5', 'Digit6': 'A6', 'Digit7': 'A7', 'Digit8': 'A8',
+            'KeyE': 'A1', 'KeyD': 'A2', 'KeyC': 'A3', 'KeyX': 'A4',
+            'KeyZ': 'A5', 'KeyA': 'A6', 'KeyQ': 'A7', 'KeyW': 'A8',
+            'Space': 'C', 'KeyS': 'C', 'Numpad5': 'C'
+        };
+
+        const activeKeys = {};
+
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat || isPaused) return;
+            let posKey = KEY_MAP[e.code];
+            if (posKey && NODE_POSITIONS[posKey]) {
+                activeKeys[e.code] = posKey;
+                
+                NODE_POSITIONS[posKey].active = true;
+                spawnClickEffect(NODE_POSITIONS[posKey].x, NODE_POSITIONS[posKey].y, '#0ff');
+                checkHit(posKey);
+
+                activeTouches[`key_${e.code}`] = { x: NODE_POSITIONS[posKey].x, y: NODE_POSITIONS[posKey].y };
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            let posKey = activeKeys[e.code];
+            if (posKey) {
+                NODE_POSITIONS[posKey].active = false;
+                checkHoldRelease(posKey);
+                delete activeTouches[`key_${e.code}`];
+                delete activeKeys[e.code];
+            }
+        });
+
+        // HIT LOGIC
         function checkHit(posKey) {
             let elapsedTime = audio.currentTime;
             for (let i = 0; i < activeNotes.length; i++) {
@@ -977,7 +1322,14 @@
                     let target = NODE_POSITIONS[note.pos];
 
                     if (diff <= hitWindow) {
-                        if (note.type === 'hold' || note.type === 'hold_touch') {
+                        if (note.isFirework) {
+                            spawnFireworkEffect(target.x, target.y);
+                        }
+
+                        if (note.isBonus) {
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
+                            combo++; activeNotes.splice(i, 1); break;
+                        } else if (note.type === 'hold' || note.type === 'hold_touch') {
                             note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
                             combo++; return; 
                         } else if (note.type === 'slide_head' && note.state === 'waiting') {
@@ -1009,7 +1361,8 @@
                     if (elapsedTime < note.time + note.duration - 0.15) {
                         spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
                     } else {
-                        spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++;
+                        if (note.isFirework) spawnFireworkEffect(target.x, target.y);
+                        spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++;
                     }
                     activeNotes.splice(i, 1); break;
                 }
