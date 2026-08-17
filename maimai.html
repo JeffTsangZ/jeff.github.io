@@ -453,7 +453,7 @@
                         }); continue;
                     }
 
-                    // Slide Head / Track Note (handles V shapes, multi-line, sequential shapes)
+                    // Slide Head / Track Note
                     let slideHeadMatch = el.match(/^([1-8])/);
                     if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || el.includes('V') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
@@ -1022,9 +1022,11 @@
                 if (!target && note.type !== 'slide_travel') continue;
 
                 let timeUntilHit = note.time - elapsedTime;
+                let oneBeat = 60 / (note.bpm || 120);
+                let slideStartTime = note.time + oneBeat;
 
                 // DRAW SLIDE PATH BACKGROUND
-                if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
+                if (note.slideData && (timeUntilHit <= APPROACH_TIME || note.state === 'waiting_slide' || note.state === 'sliding')) {
                     ctx.beginPath();
                     let first = true;
                     for (let seg of note.slideData.segments) {
@@ -1040,21 +1042,28 @@
                     ctx.stroke(); ctx.setLineDash([]);
                 }
 
+                // STAR HEAD MISSED -> DISAPPEAR & WAIT FOR 1-BEAT SLIDE TIMING
                 if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
                     spawnJudgement("MISS", "#888", target.x, target.y);
                     combo = 0;
+                    note.headHit = false;
+                    note.state = 'waiting_slide';
+                }
+
+                // TRANSITION: AFTER 1 BEAT DELAY, STAR REAPPEARS & MOVES
+                if (note.type === 'slide_head' && note.state === 'waiting_slide' && elapsedTime >= slideStartTime) {
                     note.type = 'slide_travel';
                     note.state = 'sliding';
+                    note.slideActualStartTime = slideStartTime;
                     
                     let lastSeg = note.slideData.segments[note.slideData.segments.length-1];
                     let lastNode = lastSeg.points[lastSeg.points.length-1];
                     note.finalX = lastNode.x; note.finalY = lastNode.y;
-                    note.time = elapsedTime;
                 }
 
                 // SLIDE TRAVELING ANIMATION
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
-                    let tTravel = elapsedTime - note.time;
+                    let tTravel = elapsedTime - note.slideActualStartTime;
                     let travelProgress = Math.min(1.0, Math.max(0, tTravel / note.slideData.totalDuration));
                     
                     ctx.beginPath();
@@ -1126,7 +1135,7 @@
                     }
 
                     ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                    drawStar(starX, starY, 5, BUTTON_RADIUS * 0.7, BUTTON_RADIUS * 0.35, elapsedTime * 4);
+                    drawStar(starX, starY, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                     continue;
                 }
 
@@ -1406,14 +1415,11 @@
                             note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
                             combo++; return; 
                         } else if (note.type === 'slide_head' && note.state === 'waiting') {
-                            note.type = 'slide_travel'; note.state = 'sliding';
-                            note.time = elapsedTime; 
-                            
-                            let lastSeg = note.slideData.segments[note.slideData.segments.length-1];
-                            let lastNode = lastSeg.points[lastSeg.points.length-1];
-                            note.finalX = lastNode.x; note.finalY = lastNode.y;
-                            
-                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
+                            note.headHit = true;
+                            note.state = 'waiting_slide';
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); 
+                            combo++; 
+                            return;
                         } else if (note.type === 'tap' || note.type === 'touch') {
                             if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
                             else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
