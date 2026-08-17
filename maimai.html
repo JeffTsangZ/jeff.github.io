@@ -264,10 +264,9 @@
             document.getElementById('pauseOverlay').style.display = 'none';
             isPaused = false;
             
-            let selectedDiff = document.getElementById('diffSelect').value;
             activeNotes = JSON.parse(JSON.stringify(notes));
             activeNotes.forEach(n => {
-                if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
+                if (n.pathStr) n.slideData = calculateSlideData(n.pathStr, n.pos, n.bpm || 120);
             });
 
             combo = 0;
@@ -454,32 +453,33 @@
                         }); continue;
                     }
 
-                    // Slide Head / Track Note
+                    // Slide Head / Track Note (handles V shapes, multi-line, sequential shapes)
                     let slideHeadMatch = el.match(/^([1-8])/);
-                    if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || /[pqszw]/.test(el))) {
+                    if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || el.includes('V') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
-                        let slidesStr = el.substring(1);
-                        if (slidesStr.startsWith('*')) slidesStr = slidesStr.substring(1);
-
-                        let slideParts = slidesStr.split('*');
                         
-                        for (let part of slideParts) {
-                            if (!part) continue;
-                            let durMatch = part.match(/\[(.*?)\]$/);
-                            let durStr = durMatch ? durMatch[1] : null;
-                            let pathStr = durMatch ? part.replace(/\[.*?\]$/, '') : part;
-                            let dur = durStr ? parseDuration(durStr, currentBPM) : (240 / currentBPM) / 2;
+                        let bodyMatch = el.match(/^[1-8][xfb]*(.+)$/i);
+                        if (bodyMatch) {
+                            let slideBody = bodyMatch[1];
+                            let slideParts = slideBody.split('*');
                             
-                            parsedNotes.push({ 
-                                type: 'slide_head', time: currentTime, pos: headPos, pathStr: pathStr, 
-                                duration: dur, state: 'waiting', isChord: false, isBonus: isBonus, isFirework: isFirework,
-                                slideData: calculateSlidePoints(pathStr, headPos)
-                            });
+                            for (let part of slideParts) {
+                                if (!part) continue;
+                                let slideData = calculateSlideData(part, headPos, currentBPM);
+                                if (slideData) {
+                                    parsedNotes.push({ 
+                                        type: 'slide_head', time: currentTime, pos: headPos, 
+                                        duration: slideData.totalDuration, state: 'waiting', 
+                                        isChord: false, isBonus: isBonus, isFirework: isFirework,
+                                        slideData: slideData, pathStr: part, bpm: currentBPM
+                                    });
+                                }
+                            }
                         }
                         continue;
                     }
 
-                    // Touch Note (Letter First, e.g. E2f, Cf)
+                    // Touch Note
                     let touchMatch = el.match(/^([A-E][1-8]?|C)([bxf]*)$/i);
                     if (touchMatch) {
                         let mods = touchMatch[2] || '';
@@ -489,7 +489,7 @@
                         }); continue;
                     }
 
-                    // Tap Note (Number First, e.g. 3x, 8x, 2bx, 1bx, 21)
+                    // Tap Note
                     let tapMatches = [...el.matchAll(/([1-8])([bxf]*)/gi)];
                     if (tapMatches.length > 0) {
                         for (let m of tapMatches) {
@@ -516,223 +516,271 @@
             return parsedNotes;
         }
 
-        function calculateSlidePoints(pathStr, startPosKey) {
-            let cleaned = pathStr.trim();
-            let segments = [];
-            let regex = /([a-zA-Z\-\^\<\>]+)([A-E][1-8]?|C|[1-8])/g;
+        // SLIDE PARSER & CALCULATOR
+        function calculateSlideData(slideTrackStr, headPosKey, bpm) {
+            const segmentRegex = /([a-zA-Z\-\^\<\>]+?)([1-8]+)[xbf]*(\[(.*?)\])?/g;
             let match;
+            let segments = [];
+            let totalDuration = 0;
+            let currentStartKey = headPosKey;
 
-            while((match = regex.exec(cleaned)) !== null) {
+            while ((match = segmentRegex.exec(slideTrackStr)) !== null) {
                 let shape = match[1];
-                let endKey = match[2];
-                if (/^[1-8]$/.test(endKey)) endKey = `A${endKey}`;
-                segments.push({shape, endKey});
-            }
+                let targetDigits = match[2];
+                let durStr = match[4];
+                let duration = durStr ? parseDuration(durStr, bpm) : (240 / bpm) / 2;
 
-            if (segments.length === 0) {
-                let fallbackMatch = cleaned.match(/([A-E][1-8]?|C|[1-8])/);
-                if (fallbackMatch) {
-                    let k = fallbackMatch[1];
-                    if (/^[1-8]$/.test(k)) k = `A${k}`;
-                    segments.push({shape: '-', endKey: k});
-                } else {
-                    segments.push({shape: '-', endKey: startPosKey});
+                let segResult = generatePointsForSegment(shape, targetDigits, currentStartKey);
+                let pts = segResult.points;
+                currentStartKey = segResult.finalKey;
+
+                let subLengths = [];
+                let segTotalLen = 0;
+                for (let i = 0; i < pts.length - 1; i++) {
+                    let len = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+                    subLengths.push(len);
+                    segTotalLen += len;
                 }
+
+                segments.push({
+                    shape: shape,
+                    duration: duration,
+                    points: pts,
+                    subLengths: subLengths,
+                    totalLength: segTotalLen
+                });
+                totalDuration += duration;
             }
 
-            let detailedPoints = [NODE_POSITIONS[startPosKey] || {x: CENTER.x, y: CENTER.y}];
-            let currentStart = startPosKey;
+            if (segments.length === 0) return null;
 
-            for (let seg of segments) {
-                let sNode = NODE_POSITIONS[currentStart] || CENTER;
-                let eNode = NODE_POSITIONS[seg.endKey] || CENTER;
-                let shape = seg.shape;
-                
-                let idx1 = parseInt(currentStart.replace(/[^0-9]/g, '')) - 1;
-                let idx2 = parseInt(seg.endKey.replace(/[^0-9]/g, '')) - 1;
-                if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
+            return {
+                segments: segments,
+                totalDuration: totalDuration
+            };
+        }
 
-                if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
-                    let angle1 = -90 + idx1 * 45 + 22.5;
-                    let angle2 = -90 + idx2 * 45 + 22.5;
-                    
-                    let diff = angle2 - angle1;
-                    while (diff <= -180) diff += 360;
-                    while (diff > 180) diff -= 360; 
-                    
-                    let startNodeNum = parseInt(currentStart.replace(/[^0-9]/g, ''));
-                    if (isNaN(startNodeNum)) startNodeNum = 1;
-                    let isTopHalf = [7, 8, 1, 2].includes(startNodeNum);
+        function generatePointsForSegment(shape, targetDigitsStr, startKey) {
+            let currentKey = startKey;
+            let sNode = NODE_POSITIONS[currentKey] || CENTER;
+            let points = [sNode];
 
-                    if (shape.includes('>')) {
-                        let isCW = isTopHalf ? true : false;
-                        if (isCW) { while (diff <= 0) diff += 360; }
-                        else { while (diff >= 0) diff -= 360; }
-                    } else if (shape.includes('<')) {
-                        let isCW = isTopHalf ? false : true;
-                        if (isCW) { while (diff <= 0) diff += 360; }
-                        else { while (diff >= 0) diff -= 360; }
-                    }
+            let isVShape = (shape === 'V' || shape === 'v') && targetDigitsStr.length > 1;
 
-                    let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
-                    for (let s = 1; s <= steps; s++) {
-                        let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
-                        detailedPoints.push({
-                            x: CENTER.x + Math.cos(a) * RING_RADIUS,
-                            y: CENTER.y + Math.sin(a) * RING_RADIUS
-                        });
-                    }
-
-                } else if (shape.includes('pp') || shape.includes('qq')) {
-                    let isCW = shape.includes('qq');
-                    let rLoop = RING_RADIUS * 0.5;
-
-                    let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
-                    let O_angle = isCW ? A_in + Math.PI/2 : A_in - Math.PI/2;
-                    let O = { x: CENTER.x + Math.cos(O_angle) * rLoop, y: CENTER.y + Math.sin(O_angle) * rLoop };
-
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
-                    }
-
-                    let arc_start = Math.atan2(CENTER.y - O.y, CENTER.x - O.x);
-                    let phi = Math.atan2(eNode.y - O.y, eNode.x - O.x);
-                    let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
-                    
-                    let arc_end = phi;
-                    if (D >= rLoop) {
-                        let theta = Math.acos(Math.max(-1, Math.min(1, rLoop / D)));
-                        arc_end = isCW ? phi - theta : phi + theta;
-                    }
-
-                    let aDiff = arc_end - arc_start;
-                    if (isCW) {
-                        while (aDiff <= 0) aDiff += Math.PI * 2;
-                        while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
-                    } else {
-                        while (aDiff >= 0) aDiff -= Math.PI * 2;
-                        while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
-                    }
-
-                    let steps = Math.max(20, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
-                    for (let i = 1; i <= steps; i++) {
-                        let ang = arc_start + aDiff * (i / steps);
-                        detailedPoints.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
-                    }
-
-                    let T_end = detailedPoints[detailedPoints.length - 1];
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: T_end.x + (eNode.x - T_end.x) * t, y: T_end.y + (eNode.y - T_end.y) * t });
-                    }
-
-                } else if (shape.includes('p') || shape.includes('q')) {
-                    let rInner = RING_RADIUS * 0.5;
-                    let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
-                    let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
-                    let R1 = Math.hypot(dx1, dy1) || 1;
-                    let R2 = Math.hypot(dx2, dy2) || 1;
-                    
-                    let As = Math.atan2(dy1, dx1);
-                    let Ae = Math.atan2(dy2, dx2);
-
-                    let r1_safe = Math.min(rInner, R1 * 0.99);
-                    let r2_safe = Math.min(rInner, R2 * 0.99);
-
-                    let alpha1 = Math.acos(r1_safe / R1);
-                    let alpha2 = Math.acos(r2_safe / R2);
-
-                    let isCW = shape.includes('q');
-                    
-                    let t1_angle = isCW ? As + alpha1 : As - alpha1;
-                    let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
-
-                    let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
-                    let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
-
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: sNode.x + (T1.x - sNode.x) * t, y: sNode.y + (T1.y - sNode.y) * t });
-                    }
-                    
-                    let aDiff = t2_angle - t1_angle;
-                    if (isCW) {
-                        while (aDiff <= 0) aDiff += Math.PI * 2;
-                        while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
-                    } else {
-                        while (aDiff >= 0) aDiff -= Math.PI * 2;
-                        while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
-                    }
-                    
-                    let steps = Math.max(10, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
-                    for (let i = 1; i <= steps; i++) {
-                        let ang = t1_angle + aDiff * (i / steps);
-                        detailedPoints.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
-                    }
-
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
-                    }
-                    
-                } else if (shape.includes('s') || shape.includes('z')) {
-                    let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
-                    let dist = Math.hypot(dx, dy) || 1;
-                    let ux = dx / dist, uy = dy / dist;
-                    let px = -uy, py = ux;
-
-                    let offsetDist = RING_RADIUS * 0.35;
-                    let side = shape.includes('s') ? 1 : -1;
-
-                    let P1 = {
-                        x: sNode.x + ux * (dist * 0.3) + px * (offsetDist * side),
-                        y: sNode.y + uy * (dist * 0.3) + py * (offsetDist * side)
-                    };
-                    let P2 = {
-                        x: sNode.x + ux * (dist * 0.7) - px * (offsetDist * side),
-                        y: sNode.y + uy * (dist * 0.7) - py * (offsetDist * side)
-                    };
-
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
-                    }
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: P1.x + (P2.x - P1.x) * t, y: P1.y + (P2.y - P1.y) * t });
-                    }
-                    for (let i = 1; i <= 10; i++) {
-                        let t = i / 10;
-                        detailedPoints.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
-                    }
-                } else if (shape.includes('v')) {
+            if (isVShape || shape === '-') {
+                for (let d of targetDigitsStr) {
+                    let endKey = `A${d}`;
+                    let eNode = NODE_POSITIONS[endKey] || CENTER;
+                    let lastPt = points[points.length - 1];
                     let steps = 15;
                     for (let i = 1; i <= steps; i++) {
                         let t = i / steps;
-                        detailedPoints.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                        points.push({
+                            x: lastPt.x + (eNode.x - lastPt.x) * t,
+                            y: lastPt.y + (eNode.y - lastPt.y) * t
+                        });
                     }
-                    for (let i = 1; i <= steps; i++) {
-                        let t = i / steps;
-                        detailedPoints.push({ x: CENTER.x + (eNode.x - CENTER.x) * t, y: CENTER.y + (eNode.y - CENTER.y) * t });
-                    }
-                } else {
-                    let steps = 20;
-                    for (let i = 1; i <= steps; i++) {
-                        let t = i / steps;
-                        detailedPoints.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
-                    }
+                    currentKey = endKey;
                 }
-                
-                currentStart = seg.endKey;
+            } else {
+                for (let d of targetDigitsStr) {
+                    let endKey = `A${d}`;
+                    let segPts = buildSingleShapePoints(shape, currentKey, endKey);
+                    for (let i = 1; i < segPts.length; i++) {
+                        points.push(segPts[i]);
+                    }
+                    currentKey = endKey;
+                }
             }
 
-            let finalSegments = [], totalLen = 0;
-            for(let i=0; i<detailedPoints.length-1; i++) {
-                let len = Math.hypot(detailedPoints[i+1].x - detailedPoints[i].x, detailedPoints[i+1].y - detailedPoints[i].y);
-                finalSegments.push(len); totalLen += len;
+            return { points: points, finalKey: currentKey };
+        }
+
+        function buildSingleShapePoints(shape, startKey, endKey) {
+            let sNode = NODE_POSITIONS[startKey] || CENTER;
+            let eNode = NODE_POSITIONS[endKey] || CENTER;
+            let pts = [sNode];
+
+            let idx1 = parseInt(startKey.replace(/[^0-9]/g, '')) - 1;
+            let idx2 = parseInt(endKey.replace(/[^0-9]/g, '')) - 1;
+            if (isNaN(idx1)) idx1 = 0; if (isNaN(idx2)) idx2 = 0;
+
+            if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
+                let angle1 = -90 + idx1 * 45 + 22.5;
+                let angle2 = -90 + idx2 * 45 + 22.5;
+
+                let diff = angle2 - angle1;
+                while (diff <= -180) diff += 360;
+                while (diff > 180) diff -= 360;
+
+                let startNodeNum = parseInt(startKey.replace(/[^0-9]/g, '')) || 1;
+                let isTopHalf = [7, 8, 1, 2].includes(startNodeNum);
+
+                if (shape.includes('>')) {
+                    let isCW = isTopHalf;
+                    if (isCW) { while (diff <= 0) diff += 360; }
+                    else { while (diff >= 0) diff -= 360; }
+                } else if (shape.includes('<')) {
+                    let isCW = !isTopHalf;
+                    if (isCW) { while (diff <= 0) diff += 360; }
+                    else { while (diff >= 0) diff -= 360; }
+                }
+
+                let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
+                for (let s = 1; s <= steps; s++) {
+                    let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
+                    pts.push({
+                        x: CENTER.x + Math.cos(a) * RING_RADIUS,
+                        y: CENTER.y + Math.sin(a) * RING_RADIUS
+                    });
+                }
+            } else if (shape.includes('v') || shape.includes('V')) {
+                let steps = 15;
+                if (shape === 'v') {
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        pts.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                    }
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        pts.push({ x: CENTER.x + (eNode.x - CENTER.x) * t, y: CENTER.y + (eNode.y - CENTER.y) * t });
+                    }
+                } else {
+                    for (let i = 1; i <= steps; i++) {
+                        let t = i / steps;
+                        pts.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
+                    }
+                }
+            } else if (shape.includes('pp') || shape.includes('qq')) {
+                let isCW = shape.includes('qq');
+                let rLoop = RING_RADIUS * 0.5;
+
+                let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
+                let O_angle = isCW ? A_in + Math.PI/2 : A_in - Math.PI/2;
+                let O = { x: CENTER.x + Math.cos(O_angle) * rLoop, y: CENTER.y + Math.sin(O_angle) * rLoop };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                }
+
+                let arc_start = Math.atan2(CENTER.y - O.y, CENTER.x - O.x);
+                let phi = Math.atan2(eNode.y - O.y, eNode.x - O.x);
+                let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
+
+                let arc_end = phi;
+                if (D >= rLoop) {
+                    let theta = Math.acos(Math.max(-1, Math.min(1, rLoop / D)));
+                    arc_end = isCW ? phi - theta : phi + theta;
+                }
+
+                let aDiff = arc_end - arc_start;
+                if (isCW) {
+                    while (aDiff <= 0) aDiff += Math.PI * 2;
+                    while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                } else {
+                    while (aDiff >= 0) aDiff -= Math.PI * 2;
+                    while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                }
+
+                let steps = Math.max(20, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                for (let i = 1; i <= steps; i++) {
+                    let ang = arc_start + aDiff * (i / steps);
+                    pts.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
+                }
+
+                let T_end = pts[pts.length - 1];
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: T_end.x + (eNode.x - T_end.x) * t, y: T_end.y + (eNode.y - T_end.y) * t });
+                }
+            } else if (shape.includes('p') || shape.includes('q')) {
+                let rInner = RING_RADIUS * 0.5;
+                let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
+                let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
+                let R1 = Math.hypot(dx1, dy1) || 1;
+                let R2 = Math.hypot(dx2, dy2) || 1;
+
+                let As = Math.atan2(dy1, dx1);
+                let Ae = Math.atan2(dy2, dx2);
+
+                let r1_safe = Math.min(rInner, R1 * 0.99);
+                let r2_safe = Math.min(rInner, R2 * 0.99);
+
+                let alpha1 = Math.acos(r1_safe / R1);
+                let alpha2 = Math.acos(r2_safe / R2);
+
+                let isCW = shape.includes('q');
+
+                let t1_angle = isCW ? As + alpha1 : As - alpha1;
+                let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
+
+                let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
+                let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (T1.x - sNode.x) * t, y: sNode.y + (T1.y - sNode.y) * t });
+                }
+
+                let aDiff = t2_angle - t1_angle;
+                if (isCW) {
+                    while (aDiff <= 0) aDiff += Math.PI * 2;
+                    while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                } else {
+                    while (aDiff >= 0) aDiff -= Math.PI * 2;
+                    while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                }
+
+                let steps = Math.max(10, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                for (let i = 1; i <= steps; i++) {
+                    let ang = t1_angle + aDiff * (i / steps);
+                    pts.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
+                }
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
+                }
+            } else if (shape.includes('s') || shape.includes('z')) {
+                let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
+                let dist = Math.hypot(dx, dy) || 1;
+                let ux = dx / dist, uy = dy / dist;
+                let px = -uy, py = ux;
+
+                let offsetDist = RING_RADIUS * 0.35;
+                let side = shape.includes('s') ? 1 : -1;
+
+                let P1 = {
+                    x: sNode.x + ux * (dist * 0.3) + px * (offsetDist * side),
+                    y: sNode.y + uy * (dist * 0.3) + py * (offsetDist * side)
+                };
+                let P2 = {
+                    x: sNode.x + ux * (dist * 0.7) - px * (offsetDist * side),
+                    y: sNode.y + uy * (dist * 0.7) - py * (offsetDist * side)
+                };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
+                }
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: P1.x + (P2.x - P1.x) * t, y: P1.y + (P2.y - P1.y) * t });
+                }
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
+                }
+            } else {
+                let steps = 20;
+                for (let i = 1; i <= steps; i++) {
+                    let t = i / steps;
+                    pts.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
+                }
             }
-            return { points: detailedPoints, segments: finalSegments, totalLength: totalLen };
+
+            return pts;
         }
 
         function playClick(isHigh) {
@@ -794,7 +842,7 @@
             
             activeNotes = JSON.parse(JSON.stringify(notes));
             activeNotes.forEach(n => {
-                if (n.pathStr) n.slideData = calculateSlidePoints(n.pathStr, n.pos);
+                if (n.pathStr) n.slideData = calculateSlideData(n.pathStr, n.pos, n.bpm || 120);
             });
 
             combo = 0; 
@@ -928,7 +976,6 @@
             }
         }
 
-        // Firework Particle Generator
         function spawnFireworkEffect(x, y) {
             const count = 28;
             const colors = ['#ff0055', '#00ffff', '#ffcc00', '#ff3399', '#00ff66', '#ffffff', '#ff9900'];
@@ -976,10 +1023,16 @@
 
                 let timeUntilHit = note.time - elapsedTime;
 
+                // DRAW SLIDE PATH BACKGROUND
                 if (note.slideData && timeUntilHit <= APPROACH_TIME && note.type === 'slide_head') {
-                    let pData = note.slideData;
-                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
-                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
+                    ctx.beginPath();
+                    let first = true;
+                    for (let seg of note.slideData.segments) {
+                        for (let p = 0; p < seg.points.length; p++) {
+                            if (first) { ctx.moveTo(seg.points[p].x, seg.points[p].y); first = false; }
+                            else { ctx.lineTo(seg.points[p].x, seg.points[p].y); }
+                        }
+                    }
                     ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.45)' : 'rgba(0, 150, 255, 0.45)';
                     ctx.lineWidth = 22; ctx.stroke();
 
@@ -993,31 +1046,55 @@
                     note.type = 'slide_travel';
                     note.state = 'sliding';
                     
-                    let lastNode = note.slideData.points[note.slideData.points.length-1];
+                    let lastSeg = note.slideData.segments[note.slideData.segments.length-1];
+                    let lastNode = lastSeg.points[lastSeg.points.length-1];
                     note.finalX = lastNode.x; note.finalY = lastNode.y;
                     note.time = elapsedTime;
                 }
 
+                // SLIDE TRAVELING ANIMATION
                 if (note.type === 'slide_travel' && note.state === 'sliding') {
-                    let travelProgress = (elapsedTime - note.time) / note.duration;
-                    let pData = note.slideData;
+                    let tTravel = elapsedTime - note.time;
+                    let travelProgress = Math.min(1.0, Math.max(0, tTravel / note.slideData.totalDuration));
                     
-                    ctx.beginPath(); ctx.moveTo(pData.points[0].x, pData.points[0].y);
-                    for(let p=1; p<pData.points.length; p++) ctx.lineTo(pData.points[p].x, pData.points[p].y);
+                    ctx.beginPath();
+                    let first = true;
+                    for (let seg of note.slideData.segments) {
+                        for (let p = 0; p < seg.points.length; p++) {
+                            if (first) { ctx.moveTo(seg.points[p].x, seg.points[p].y); first = false; }
+                            else { ctx.lineTo(seg.points[p].x, seg.points[p].y); }
+                        }
+                    }
                     ctx.strokeStyle = note.isChord ? 'rgba(255, 255, 0, 0.8)' : 'rgba(0, 180, 255, 0.8)';
                     ctx.lineWidth = 24; ctx.stroke();
 
-                    let currentDist = travelProgress * pData.totalLength;
-                    let accum = 0, starX = pData.points[0].x, starY = pData.points[0].y;
-                    
-                    for(let s = 0; s < pData.segments.length; s++) {
-                        if (currentDist <= accum + pData.segments[s]) {
-                            let localP = (currentDist - accum) / pData.segments[s];
-                            starX = pData.points[s].x + (pData.points[s+1].x - pData.points[s].x) * localP;
-                            starY = pData.points[s].y + (pData.points[s+1].y - pData.points[s].y) * localP;
+                    let accumTime = 0;
+                    let currentSeg = note.slideData.segments[0];
+                    let segProgress = 0;
+
+                    for (let seg of note.slideData.segments) {
+                        if (tTravel <= accumTime + seg.duration) {
+                            currentSeg = seg;
+                            segProgress = (tTravel - accumTime) / seg.duration;
                             break;
                         }
-                        accum += pData.segments[s];
+                        accumTime += seg.duration;
+                        currentSeg = seg;
+                        segProgress = 1.0;
+                    }
+                    segProgress = Math.min(1.0, Math.max(0, segProgress));
+
+                    let currentDist = segProgress * currentSeg.totalLength;
+                    let accumLen = 0, starX = currentSeg.points[0].x, starY = currentSeg.points[0].y;
+
+                    for (let s = 0; s < currentSeg.subLengths.length; s++) {
+                        if (currentDist <= accumLen + currentSeg.subLengths[s]) {
+                            let localP = currentSeg.subLengths[s] > 0 ? (currentDist - accumLen) / currentSeg.subLengths[s] : 0;
+                            starX = currentSeg.points[s].x + (currentSeg.points[s+1].x - currentSeg.points[s].x) * localP;
+                            starY = currentSeg.points[s].y + (currentSeg.points[s+1].y - currentSeg.points[s].y) * localP;
+                            break;
+                        }
+                        accumLen += currentSeg.subLengths[s];
                     }
 
                     Object.keys(activeTouches).forEach(id => {
@@ -1134,7 +1211,7 @@
                         drawStar(cx, cy, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 4);
                     
                     } else if (note.type === 'tap') {
-                        if (note.isBonus) { // Bonus Note Visuals
+                        if (note.isBonus) {
                             ctx.save();
                             ctx.beginPath(); ctx.arc(cx, cy, BUTTON_RADIUS * 0.85, 0, Math.PI * 2);
                             ctx.fillStyle = '#ffe600';
@@ -1177,13 +1254,12 @@
             }
         }
 
-        // ================= INPUT HANDLING =================
+        // INPUT HANDLING
         let touchState = {}; 
         let activeTouches = {};
         let isMouseDown = false;
         let mouseTouchSet = new Set();
 
-        // 1. TOUCH CONTROLS
         function handleTouches(e) {
             if (isPaused) return;
             e.preventDefault(); 
@@ -1229,7 +1305,6 @@
         canvas.addEventListener('touchend', handleTouches, {passive: false});
         canvas.addEventListener('touchcancel', handleTouches, {passive: false});
 
-        // 2. MOUSE CONTROLS
         function handleMousePos(x, y) {
             if (isPaused) return;
             activeTouches['mouse'] = { x: x, y: y };
@@ -1276,7 +1351,6 @@
             delete activeTouches['mouse'];
         });
 
-        // 3. KEYBOARD CONTROLS
         const KEY_MAP = {
             'Digit1': 'A1', 'Digit2': 'A2', 'Digit3': 'A3', 'Digit4': 'A4',
             'Digit5': 'A5', 'Digit6': 'A6', 'Digit7': 'A7', 'Digit8': 'A8',
@@ -1311,7 +1385,6 @@
             }
         });
 
-        // HIT LOGIC
         function checkHit(posKey) {
             let elapsedTime = audio.currentTime;
             for (let i = 0; i < activeNotes.length; i++) {
@@ -1336,7 +1409,8 @@
                             note.type = 'slide_travel'; note.state = 'sliding';
                             note.time = elapsedTime; 
                             
-                            let lastNode = note.slideData.points[note.slideData.points.length-1];
+                            let lastSeg = note.slideData.segments[note.slideData.segments.length-1];
+                            let lastNode = lastSeg.points[lastSeg.points.length-1];
                             note.finalX = lastNode.x; note.finalY = lastNode.y;
                             
                             spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; return;
