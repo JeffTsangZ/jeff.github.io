@@ -653,49 +653,70 @@
                 }
             } else if (shape.includes('pp') || shape.includes('qq')) {
                 let isCW = shape.includes('qq');
-                let rLoop = RING_RADIUS * 0.5;
+                let rInner = RING_RADIUS * 0.5;
 
-                let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
-                let O_angle = isCW ? A_in + Math.PI/2 : A_in - Math.PI/2;
-                let O = { x: CENTER.x + Math.cos(O_angle) * rLoop, y: CENTER.y + Math.sin(O_angle) * rLoop };
+                let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
+                let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
+                let R1 = Math.hypot(dx1, dy1) || 1;
+                let R2 = Math.hypot(dx2, dy2) || 1;
 
-                for (let i = 1; i <= 10; i++) {
-                    let t = i / 10;
-                    pts.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                let As = Math.atan2(dy1, dx1);
+                let Ae = Math.atan2(dy2, dx2);
+
+                let r1_safe = Math.min(rInner, R1 * 0.99);
+                let r2_safe = Math.min(rInner, R2 * 0.99);
+
+                let alpha1 = Math.acos(r1_safe / R1);
+                let alpha2 = Math.acos(r2_safe / R2);
+
+                // Entry (T1) and Exit (T2) tangent angles
+                let t1_angle = isCW ? As + alpha1 : As - alpha1;
+                let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
+
+                let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
+                let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
+
+                // 1. Ingoing straight track (sNode -> T1, tangent to circle)
+                let inSteps = 10;
+                for (let i = 1; i <= inSteps; i++) {
+                    let t = i / inSteps;
+                    pts.push({ x: sNode.x + (T1.x - sNode.x) * t, y: sNode.y + (T1.y - sNode.y) * t });
                 }
 
-                let arc_start = Math.atan2(CENTER.y - O.y, CENTER.x - O.x);
-                let phi = Math.atan2(eNode.y - O.y, eNode.x - O.x);
-                let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
-
-                let arc_end = phi;
-                if (D >= rLoop) {
-                    let theta = Math.acos(Math.max(-1, Math.min(1, rLoop / D)));
-                    arc_end = isCW ? phi - theta : phi + theta;
-                }
-
-                let aDiff = arc_end - arc_start;
+                // 2. Circular arc around center (T1 -> T2)
+                let aDiff = t2_angle - t1_angle;
                 if (isCW) {
                     while (aDiff <= 0) aDiff += Math.PI * 2;
                     while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                    // Ensure arc is at least half circle (PI), adding full circle if natural tangent is < PI
+                    if (aDiff < Math.PI) aDiff += Math.PI * 2;
+                    // Cap at 1.5 circles (3*PI) max
+                    if (aDiff > Math.PI * 3) aDiff = Math.PI * 3;
                 } else {
                     while (aDiff >= 0) aDiff -= Math.PI * 2;
                     while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                    // Ensure arc magnitude is at least half circle (-PI)
+                    if (aDiff > -Math.PI) aDiff -= Math.PI * 2;
+                    // Cap at -1.5 circles (-3*PI) max
+                    if (aDiff < -Math.PI * 3) aDiff = -Math.PI * 3;
                 }
 
-                let steps = Math.max(20, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
-                for (let i = 1; i <= steps; i++) {
-                    let ang = arc_start + aDiff * (i / steps);
-                    pts.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
+                let arcSteps = Math.max(15, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                for (let i = 1; i <= arcSteps; i++) {
+                    let ang = t1_angle + aDiff * (i / arcSteps);
+                    pts.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
                 }
 
-                let T_end = pts[pts.length - 1];
-                for (let i = 1; i <= 10; i++) {
-                    let t = i / 10;
-                    pts.push({ x: T_end.x + (eNode.x - T_end.x) * t, y: T_end.y + (eNode.y - T_end.y) * t });
+                // 3. Outgoing straight track (T2 -> eNode, tangent to circle)
+                let outSteps = 10;
+                for (let i = 1; i <= outSteps; i++) {
+                    let t = i / outSteps;
+                    pts.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
                 }
             } else if (shape.includes('p') || shape.includes('q')) {
-                let rInner = RING_RADIUS * 0.5;
+                let vDist = Math.abs(NODE_POSITIONS['A3'].y - NODE_POSITIONS['A2'].y);
+                let rInner = vDist / 2;
+
                 let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
                 let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
                 let R1 = Math.hypot(dx1, dy1) || 1;
