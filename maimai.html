@@ -30,6 +30,7 @@
             max-height: 90vh; overflow-y: auto;
         }
 
+        /* Top Right Toolbar */
         #topBar {
             position: absolute;
             top: 15px; right: 15px; z-index: 100;
@@ -45,6 +46,7 @@
         }
         #topBar button:hover { background: rgba(0, 255, 255, 0.3); }
 
+        /* Pause Modal Overlay */
         #pauseOverlay {
             display: none;
             position: fixed;
@@ -128,6 +130,7 @@
         <button id="fullscreenBtn">⛶ Fullscreen</button>
     </div>
 
+    <!-- Pause Modal -->
     <div id="pauseOverlay">
         <div class="pause-box">
             <h2>GAME PAUSED</h2>
@@ -195,7 +198,6 @@
         let lastBeatIndex = -1;
         let audioStarted = false;
         let audioCtx = null;
-        let lastFrameElapsedTime = 0;
 
         let APPROACH_TIME = 1.0; 
         const speedSlider = document.getElementById('speedSlider');
@@ -205,6 +207,7 @@
             APPROACH_TIME = 5.0 / val;
         });
 
+        // Top Bar Controls
         document.getElementById('fullscreenBtn').addEventListener('click', () => {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(err => console.log(err));
@@ -213,16 +216,20 @@
             }
         });
 
+        // Double Click Pause Logic
         let lastPauseClick = 0;
         document.getElementById('pauseBtn').addEventListener('click', (e) => {
             e.preventDefault();
             const now = performance.now();
             if (now - lastPauseClick < 400) {
-                if (isPlaying && !isPaused) pauseGame();
+                if (isPlaying && !isPaused) {
+                    pauseGame();
+                }
             }
             lastPauseClick = now;
         });
 
+        // Pause Menu Actions
         document.getElementById('resumeBtn').addEventListener('click', resumeGame);
         document.getElementById('resetBtn').addEventListener('click', resetGame);
         document.getElementById('exitBtn').addEventListener('click', exitGame);
@@ -231,9 +238,11 @@
             if (!isPlaying || isPaused) return;
             isPaused = true;
             pauseStartTime = performance.now();
+            
             if (audioStarted) audio.pause();
             let bgVid = document.getElementById('bgVideo');
             if (bgVid && bgVid.src) bgVid.pause();
+
             document.getElementById('pauseOverlay').style.display = 'flex';
         }
 
@@ -241,9 +250,11 @@
             if (!isPaused) return;
             let pauseDuration = (performance.now() - pauseStartTime);
             gameStartTime += pauseDuration;
+
             if (audioStarted) audio.play().catch(e => console.log(e));
             let bgVid = document.getElementById('bgVideo');
             if (bgVid && bgVid.src) bgVid.play().catch(e => console.log(e));
+
             document.getElementById('pauseOverlay').style.display = 'none';
             isPaused = false;
             requestAnimationFrame(gameLoop);
@@ -252,27 +263,45 @@
         function resetGame() {
             document.getElementById('pauseOverlay').style.display = 'none';
             isPaused = false;
+            
             activeNotes = JSON.parse(JSON.stringify(notes));
             activeNotes.forEach(n => {
                 if (n.pathStr) n.slideData = calculateSlideData(n.pathStr, n.pos, n.bpm || 120);
-                n.heldDuration = 0;
             });
-            combo = 0; judgements = []; clickEffects = []; fireworks = [];
+
+            combo = 0;
+            judgements = [];
+            clickEffects = [];
+            fireworks = [];
             preRollTime = 240 / initialBPM;
             gameStartTime = performance.now();
-            lastBeatIndex = -1; audioStarted = false;
-            audio.pause(); audio.currentTime = 0;
+            lastBeatIndex = -1;
+            audioStarted = false;
+
+            audio.pause();
+            audio.currentTime = 0;
+
             let bgVid = document.getElementById('bgVideo');
-            if (bgVid && bgVid.src) bgVid.currentTime = 0;
-            if (!isPlaying) isPlaying = true;
+            if (bgVid && bgVid.src) {
+                bgVid.currentTime = 0;
+            }
+
+            if (!isPlaying) {
+                isPlaying = true;
+            }
             requestAnimationFrame(gameLoop);
         }
 
         function exitGame() {
-            isPaused = false; isPlaying = false;
-            audio.pause(); audio.currentTime = 0;
+            isPaused = false;
+            isPlaying = false;
+
+            audio.pause();
+            audio.currentTime = 0;
+
             let bgVid = document.getElementById('bgVideo');
             if (bgVid) bgVid.pause();
+
             document.getElementById('pauseOverlay').style.display = 'none';
             canvas.style.display = 'none';
             document.getElementById('ui').style.display = 'block';
@@ -333,6 +362,7 @@
                 if (maidataFile) {
                     let text = await maidataFile.async("string");
                     extractAvailableCharts(text);
+                    
                     if (Object.keys(availableCharts).length > 0) {
                         populateDifficultyUI();
                         document.getElementById('statusText').innerText = "File loaded! Ready to play.";
@@ -403,6 +433,7 @@
                     let isBonus = el.includes('x');
                     let isFirework = el.includes('f');
 
+                    // Touch Hold Note (e.g. Ch[1:2] or Cbxh[2:4])
                     let touchHoldMatch = el.match(/^([A-E][1-8]?|C)([bxf]*)h\[(.*?)\]/i);
                     if (touchHoldMatch) {
                         let mods = touchHoldMatch[2] || '';
@@ -410,11 +441,11 @@
                             type: 'hold_touch', time: currentTime, pos: touchHoldMatch[1], 
                             duration: parseDuration(touchHoldMatch[3], currentBPM), 
                             isChord: false, isBonus: mods.includes('x') || mods.includes('b'), 
-                            isBreak: mods.includes('b'), isFirework: mods.includes('f'), state: 'waiting',
-                            heldDuration: 0
+                            isBreak: mods.includes('b'), isFirework: mods.includes('f'), state: 'waiting' 
                         }); continue;
                     }
 
+                    // Standard Hold Note (e.g. 1h[1:2] or 5bxh[2:7])
                     let holdMatch = el.match(/^([1-8])([bxf]*)h\[(.*?)\]/i);
                     if (holdMatch) {
                         let mods = holdMatch[2] || '';
@@ -422,18 +453,20 @@
                             type: 'hold', time: currentTime, pos: `A${holdMatch[1]}`, 
                             duration: parseDuration(holdMatch[3], currentBPM), 
                             isChord: false, isBonus: mods.includes('x') || mods.includes('b'), 
-                            isBreak: mods.includes('b'), isFirework: mods.includes('f'), state: 'waiting',
-                            heldDuration: 0
+                            isBreak: mods.includes('b'), isFirework: mods.includes('f'), state: 'waiting' 
                         }); continue;
                     }
 
+                    // Slide Head / Track Note
                     let slideHeadMatch = el.match(/^([1-8])/);
                     if (slideHeadMatch && (el.includes('-') || el.includes('^') || el.includes('<') || el.includes('>') || el.includes('v') || el.includes('V') || /[pqszw]/.test(el))) {
                         let headPos = `A${slideHeadMatch[1]}`;
+                        
                         let bodyMatch = el.match(/^[1-8][xfb]*(.+)$/i);
                         if (bodyMatch) {
                             let slideBody = bodyMatch[1];
                             let slideParts = slideBody.split('*');
+                            
                             for (let part of slideParts) {
                                 if (!part) continue;
                                 let slideData = calculateSlideData(part, headPos, currentBPM);
@@ -450,6 +483,7 @@
                         continue;
                     }
 
+                    // Touch Note
                     let touchMatch = el.match(/^([A-E][1-8]?|C)([bxf]*)$/i);
                     if (touchMatch) {
                         let mods = touchMatch[2] || '';
@@ -460,6 +494,7 @@
                         }); continue;
                     }
 
+                    // Tap Note
                     let tapMatches = [...el.matchAll(/([1-8])([bxf]*)/gi)];
                     if (tapMatches.length > 0) {
                         for (let m of tapMatches) {
@@ -487,36 +522,55 @@
             return parsedNotes;
         }
 
+        // SLIDE PARSER & CALCULATOR
         function calculateSlideData(slideTrackStr, headPosKey, bpm) {
             const segmentRegex = /([a-zA-Z\-\^\<\>]+?)([1-8]+)[xbf]*(\[(.*?)\])?/g;
-            let match; let segments = []; let totalDuration = 0; let currentStartKey = headPosKey;
+            let match;
+            let segments = [];
+            let totalDuration = 0;
+            let currentStartKey = headPosKey;
 
             while ((match = segmentRegex.exec(slideTrackStr)) !== null) {
-                let shape = match[1]; let targetDigits = match[2]; let durStr = match[4];
+                let shape = match[1];
+                let targetDigits = match[2];
+                let durStr = match[4];
                 let duration = durStr ? parseDuration(durStr, bpm) : (240 / bpm) / 2;
 
                 let segResult = generatePointsForSegment(shape, targetDigits, currentStartKey);
                 let pts = segResult.points;
                 currentStartKey = segResult.finalKey;
 
-                let subLengths = []; let segTotalLen = 0;
+                let subLengths = [];
+                let segTotalLen = 0;
                 for (let i = 0; i < pts.length - 1; i++) {
                     let len = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
-                    subLengths.push(len); segTotalLen += len;
+                    subLengths.push(len);
+                    segTotalLen += len;
                 }
 
-                segments.push({ shape: shape, duration: duration, points: pts, subLengths: subLengths, totalLength: segTotalLen });
+                segments.push({
+                    shape: shape,
+                    duration: duration,
+                    points: pts,
+                    subLengths: subLengths,
+                    totalLength: segTotalLen
+                });
                 totalDuration += duration;
             }
 
             if (segments.length === 0) return null;
-            return { segments: segments, totalDuration: totalDuration };
+
+            return {
+                segments: segments,
+                totalDuration: totalDuration
+            };
         }
 
         function generatePointsForSegment(shape, targetDigitsStr, startKey) {
             let currentKey = startKey;
             let sNode = NODE_POSITIONS[currentKey] || CENTER;
             let points = [sNode];
+
             let isVShape = (shape === 'V' || shape === 'v') && targetDigitsStr.length > 1;
 
             if (isVShape || shape === '-') {
@@ -527,7 +581,10 @@
                     let steps = 15;
                     for (let i = 1; i <= steps; i++) {
                         let t = i / steps;
-                        points.push({ x: lastPt.x + (eNode.x - lastPt.x) * t, y: lastPt.y + (eNode.y - lastPt.y) * t });
+                        points.push({
+                            x: lastPt.x + (eNode.x - lastPt.x) * t,
+                            y: lastPt.y + (eNode.y - lastPt.y) * t
+                        });
                     }
                     currentKey = endKey;
                 }
@@ -535,10 +592,13 @@
                 for (let d of targetDigitsStr) {
                     let endKey = `A${d}`;
                     let segPts = buildSingleShapePoints(shape, currentKey, endKey);
-                    for (let i = 1; i < segPts.length; i++) points.push(segPts[i]);
+                    for (let i = 1; i < segPts.length; i++) {
+                        points.push(segPts[i]);
+                    }
                     currentKey = endKey;
                 }
             }
+
             return { points: points, finalKey: currentKey };
         }
 
@@ -554,6 +614,7 @@
             if (shape.includes('<') || shape.includes('>') || shape.includes('^')) {
                 let angle1 = -90 + idx1 * 45 + 22.5;
                 let angle2 = -90 + idx2 * 45 + 22.5;
+
                 let diff = angle2 - angle1;
                 while (diff <= -180) diff += 360;
                 while (diff > 180) diff -= 360;
@@ -574,7 +635,10 @@
                 let steps = Math.max(12, Math.floor(Math.abs(diff) / 10));
                 for (let s = 1; s <= steps; s++) {
                     let a = (angle1 + diff * (s / steps)) * (Math.PI / 180);
-                    pts.push({ x: CENTER.x + Math.cos(a) * RING_RADIUS, y: CENTER.y + Math.sin(a) * RING_RADIUS });
+                    pts.push({
+                        x: CENTER.x + Math.cos(a) * RING_RADIUS,
+                        y: CENTER.y + Math.sin(a) * RING_RADIUS
+                    });
                 }
             } else if (shape.includes('v') || shape.includes('V')) {
                 let steps = 15;
@@ -593,6 +657,134 @@
                         pts.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
                     }
                 }
+            } else if (shape.includes('pp') || shape.includes('qq')) {
+                let isCW = shape.includes('qq');
+                let rLoop = RING_RADIUS * 0.5;
+
+                let A_in = Math.atan2(CENTER.y - sNode.y, CENTER.x - sNode.x);
+                let theta_start = isCW ? A_in - Math.PI / 2 : A_in + Math.PI / 2;
+                let O = {
+                    x: CENTER.x - Math.cos(theta_start) * rLoop,
+                    y: CENTER.y - Math.sin(theta_start) * rLoop
+                };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (CENTER.x - sNode.x) * t, y: sNode.y + (CENTER.y - sNode.y) * t });
+                }
+
+                let D = Math.hypot(eNode.x - O.x, eNode.y - O.y);
+                let phi_e = Math.atan2(eNode.y - O.y, eNode.x - O.x);
+                let alpha = Math.acos(Math.max(-1, Math.min(1, rLoop / D)));
+
+                let theta_exit = isCW ? phi_e - alpha : phi_e + alpha;
+
+                let aDiff = theta_exit - theta_start;
+                if (isCW) {
+                    while (aDiff <= 0) aDiff += Math.PI * 2;
+                    while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                    if (aDiff + Math.PI * 2 <= Math.PI * 3 + 1e-5) {
+                        aDiff += Math.PI * 2;
+                    }
+                } else {
+                    while (aDiff >= 0) aDiff -= Math.PI * 2;
+                    while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                    if (aDiff - Math.PI * 2 >= -Math.PI * 3 - 1e-5) {
+                        aDiff -= Math.PI * 2;
+                    }
+                }
+
+                let steps = Math.max(20, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                for (let i = 1; i <= steps; i++) {
+                    let ang = theta_start + aDiff * (i / steps);
+                    pts.push({ x: O.x + Math.cos(ang) * rLoop, y: O.y + Math.sin(ang) * rLoop });
+                }
+
+                let T_exit = pts[pts.length - 1];
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: T_exit.x + (eNode.x - T_exit.x) * t, y: T_exit.y + (eNode.y - T_exit.y) * t });
+                }
+            } else if (shape.includes('p') || shape.includes('q')) {
+                let vDist = Math.abs(NODE_POSITIONS['A3'].y - NODE_POSITIONS['A2'].y);
+                let rInner = vDist / 2;
+
+                let dx1 = sNode.x - CENTER.x, dy1 = sNode.y - CENTER.y;
+                let dx2 = eNode.x - CENTER.x, dy2 = eNode.y - CENTER.y;
+                let R1 = Math.hypot(dx1, dy1) || 1;
+                let R2 = Math.hypot(dx2, dy2) || 1;
+
+                let As = Math.atan2(dy1, dx1);
+                let Ae = Math.atan2(dy2, dx2);
+
+                let r1_safe = Math.min(rInner, R1 * 0.99);
+                let r2_safe = Math.min(rInner, R2 * 0.99);
+
+                let alpha1 = Math.acos(r1_safe / R1);
+                let alpha2 = Math.acos(r2_safe / R2);
+
+                let isCW = shape.includes('q');
+
+                let t1_angle = isCW ? As + alpha1 : As - alpha1;
+                let t2_angle = isCW ? Ae - alpha2 : Ae + alpha2;
+
+                let T1 = { x: CENTER.x + Math.cos(t1_angle) * r1_safe, y: CENTER.y + Math.sin(t1_angle) * r1_safe };
+                let T2 = { x: CENTER.x + Math.cos(t2_angle) * r2_safe, y: CENTER.y + Math.sin(t2_angle) * r2_safe };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (T1.x - sNode.x) * t, y: sNode.y + (T1.y - sNode.y) * t });
+                }
+
+                let aDiff = t2_angle - t1_angle;
+                if (isCW) {
+                    while (aDiff <= 0) aDiff += Math.PI * 2;
+                    while (aDiff > Math.PI * 2) aDiff -= Math.PI * 2;
+                } else {
+                    while (aDiff >= 0) aDiff -= Math.PI * 2;
+                    while (aDiff < -Math.PI * 2) aDiff += Math.PI * 2;
+                }
+
+                let steps = Math.max(10, Math.floor(Math.abs(aDiff) * (180 / Math.PI) / 10));
+                for (let i = 1; i <= steps; i++) {
+                    let ang = t1_angle + aDiff * (i / steps);
+                    pts.push({ x: CENTER.x + Math.cos(ang) * rInner, y: CENTER.y + Math.sin(ang) * rInner });
+                }
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: T2.x + (eNode.x - T2.x) * t, y: T2.y + (eNode.y - T2.y) * t });
+                }
+            } else if (shape.includes('s') || shape.includes('z')) {
+                let dx = eNode.x - sNode.x, dy = eNode.y - sNode.y;
+                let dist = Math.hypot(dx, dy) || 1;
+                let ux = dx / dist, uy = dy / dist;
+                let px = -uy, py = ux;
+
+                let offsetDist = RING_RADIUS * 0.35;
+                let side = shape.includes('s') ? 1 : -1;
+
+                let P1 = {
+                    x: sNode.x + ux * (dist * 0.3) + px * (offsetDist * side),
+                    y: sNode.y + uy * (dist * 0.3) + py * (offsetDist * side)
+                };
+                let P2 = {
+                    x: sNode.x + ux * (dist * 0.7) - px * (offsetDist * side),
+                    y: sNode.y + uy * (dist * 0.7) - py * (offsetDist * side)
+                };
+
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: sNode.x + (P1.x - sNode.x) * t, y: sNode.y + (P1.y - sNode.y) * t });
+                }
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: P1.x + (P2.x - P1.x) * t, y: P1.y + (P2.y - P1.y) * t });
+                }
+                for (let i = 1; i <= 10; i++) {
+                    let t = i / 10;
+                    pts.push({ x: P2.x + (eNode.x - P2.x) * t, y: P2.y + (eNode.y - P2.y) * t });
+                }
             } else {
                 let steps = 20;
                 for (let i = 1; i <= steps; i++) {
@@ -600,6 +792,7 @@
                     pts.push({ x: sNode.x + (eNode.x - sNode.x) * t, y: sNode.y + (eNode.y - sNode.y) * t });
                 }
             }
+
             return pts;
         }
 
@@ -609,16 +802,20 @@
                 if (audioCtx.state === 'suspended') audioCtx.resume();
                 let osc = audioCtx.createOscillator();
                 let gain = audioCtx.createGain();
-                osc.type = 'sine'; osc.frequency.value = isHigh ? 880 : 440;
+                osc.type = 'sine';
+                osc.frequency.value = isHigh ? 880 : 440;
                 gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
             } catch(e) {}
         }
 
         function playHitSFX(judgement) {
             if (judgement === 'MISS') return;
+
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -630,18 +827,22 @@
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(1056, audioCtx.currentTime); 
                     osc.frequency.exponentialRampToValueAtTime(1584, audioCtx.currentTime + 0.06);
+
                     gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
                 } else {
                     osc.type = 'triangle';
                     osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
                     osc.frequency.exponentialRampToValueAtTime(392, audioCtx.currentTime + 0.07);
+
                     gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.07);
                 }
 
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.07);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.07);
             } catch(e) {}
         }
 
@@ -655,7 +856,6 @@
             activeNotes = JSON.parse(JSON.stringify(notes));
             activeNotes.forEach(n => {
                 if (n.pathStr) n.slideData = calculateSlideData(n.pathStr, n.pos, n.bpm || 120);
-                n.heldDuration = 0;
             });
 
             combo = 0; 
@@ -664,7 +864,6 @@
             lastBeatIndex = -1;
             audioStarted = false;
             isPaused = false;
-            lastFrameElapsedTime = 0;
 
             if (document.getElementById('bgVideo').src) document.getElementById('bgVideo').currentTime = 0;
             isPlaying = true; 
@@ -692,13 +891,10 @@
                 }
                 elapsedTime = audio.currentTime;
             }
-
-            let dt = Math.max(0, elapsedTime - lastFrameElapsedTime);
-            lastFrameElapsedTime = elapsedTime;
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawUI(); drawCombo(); 
-            updateAndDrawNotes(elapsedTime, dt);
+            updateAndDrawNotes(elapsedTime);
             drawClickEffects(); drawFireworks(); drawJudgements(elapsedTime);
             requestAnimationFrame(gameLoop);
         }
@@ -832,28 +1028,16 @@
             }
         }
 
-        function isNodeCurrentlyHeld(posKey) {
-            return Object.keys(NODE_POSITIONS).some(k => k === posKey && NODE_POSITIONS[k].active);
-        }
-
-        function updateAndDrawNotes(elapsedTime, dt) {
+        function updateAndDrawNotes(elapsedTime) {
             for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
                 let target = NODE_POSITIONS[note.pos];
                 if (!target && note.type !== 'slide_travel') continue;
 
                 let timeUntilHit = note.time - elapsedTime;
-                let tailTime = note.time + (note.duration || 0);
                 let oneBeat = 60 / (note.bpm || 120);
 
-                // Accumulate hold duration if being held
-                if ((note.type === 'hold' || note.type === 'hold_touch') && note.state === 'holding') {
-                    if (elapsedTime >= note.time && elapsedTime <= tailTime) {
-                        note.heldDuration = (note.heldDuration || 0) + dt;
-                    }
-                }
-
-                // DRAW SLIDE PATH GUIDELINE
+                // ALWAYS DRAW SLIDE PATH GUIDELINE
                 if (note.slideData && (timeUntilHit <= APPROACH_TIME || note.state === 'waiting_slide' || note.state === 'sliding')) {
                     ctx.beginPath();
                     let first = true;
@@ -870,7 +1054,7 @@
                     ctx.stroke(); ctx.setLineDash([]);
                 }
 
-                // SLIDE HEAD MISSED
+                // STAR HEAD MISSED -> SET TO WAITING SLIDE
                 if (note.type === 'slide_head' && note.state === 'waiting' && elapsedTime > note.time + 0.16) {
                     spawnJudgement("MISS", "#888", target.x, target.y);
                     combo = 0;
@@ -878,19 +1062,24 @@
                     note.state = 'waiting_slide';
                 }
 
-                // STAR RE-APPEAR IN-PLACE DELAY (0.4 / 0.6 BEAT TIMING)
+                // STAR DISAPPEAR & RE-APPEAR IN-PLACE DELAY (0.4 / 0.6 BEAT TIMING)
                 if (note.type === 'slide_head' && note.state === 'waiting_slide') {
                     let timeSinceHit = elapsedTime - note.time;
+
+                    // 0.4 beat to 1.0 beat: Re-appear at sNode, self-rotating in place
                     if (timeSinceHit >= 0.4 * oneBeat && timeSinceHit < 1.0 * oneBeat) {
                         let sNode = note.slideData.segments[0].points[0];
                         ctx.fillStyle = note.isChord ? '#ffff00' : '#00aaff'; 
                         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
                         drawStar(sNode.x, sNode.y, 5, BUTTON_RADIUS * 0.8, BUTTON_RADIUS * 0.4, elapsedTime * 6);
                     }
+
+                    // 1.0 beat reached: Start travel animation
                     if (timeSinceHit >= 1.0 * oneBeat) {
                         note.type = 'slide_travel';
                         note.state = 'sliding';
                         note.slideActualStartTime = note.time + oneBeat;
+                        
                         let lastSeg = note.slideData.segments[note.slideData.segments.length-1];
                         let lastNode = lastSeg.points[lastSeg.points.length-1];
                         note.finalX = lastNode.x; note.finalY = lastNode.y;
@@ -943,19 +1132,28 @@
                     }
 
                     Object.keys(activeTouches).forEach(id => {
-                        let tx = activeTouches[id].x, ty = activeTouches[id].y;
-                        if (Math.hypot(tx - note.finalX, ty - note.finalY) < BUTTON_RADIUS * 2.5) note.reachedEnd = true;
-                        if (Math.hypot(tx - starX, ty - starY) < BUTTON_RADIUS * 2.5) note.traced = true;
+                        let tx = activeTouches[id].x;
+                        let ty = activeTouches[id].y;
+                        
+                        if (Math.hypot(tx - note.finalX, ty - note.finalY) < BUTTON_RADIUS * 2.5) {
+                            note.reachedEnd = true;
+                        }
+                        if (Math.hypot(tx - starX, ty - starY) < BUTTON_RADIUS * 2.5) {
+                            note.traced = true;
+                        }
                     });
 
                     if (travelProgress >= 1.0) {
                         if (note.isFirework) spawnFireworkEffect(note.finalX, note.finalY);
                         if (note.reachedEnd || note.isBonus) {
-                            spawnJudgement("CRITICAL", "#ffd700", note.finalX, note.finalY); combo++;
+                            spawnJudgement("CRITICAL", "#ffd700", note.finalX, note.finalY);
+                            combo++;
                         } else if (note.traced) {
-                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY); combo++;
+                            spawnJudgement("GREAT", "#ff8c00", note.finalX, note.finalY);
+                            combo++;
                         } else {
-                            spawnJudgement("MISS", "#888", note.finalX, note.finalY); combo = 0;
+                            spawnJudgement("MISS", "#888", note.finalX, note.finalY);
+                            combo = 0;
                         }
                         activeNotes.splice(i, 1);
                         continue;
@@ -967,58 +1165,27 @@
                 }
 
                 let missWindow = 0.16;
+                let isHolding = (note.state === 'holding');
 
-                // TAP / TOUCH MISS EVALUATION
-                if (note.type !== 'hold' && note.type !== 'hold_touch' && note.type !== 'slide_head' && timeUntilHit < -missWindow) {
+                if (!isHolding && note.type !== 'slide_head' && timeUntilHit < -missWindow) {
                     spawnJudgement("MISS", "#888", target.x, target.y);
                     combo = 0; activeNotes.splice(i, 1); continue;
                 }
 
-                // HOLD NOTE TAIL EVALUATION AT TAIL EXPIRATION
-                if ((note.type === 'hold' || note.type === 'hold_touch') && elapsedTime >= tailTime && !note.judged) {
-                    note.judged = true;
-                    if (note.isBonus) {
-                        // EX HOLD JUDGEMENT
-                        let isCurrentlyHolding = isNodeCurrentlyHeld(note.pos) || note.state === 'holding';
-                        if (note.pressedBeforeTail && isCurrentlyHolding) {
-                            if (note.isFirework) spawnFireworkEffect(target.x, target.y);
-                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
-                            combo++;
-                        } else {
-                            spawnJudgement("MISS", "#888", target.x, target.y);
-                            combo = 0;
-                        }
-                    } else {
-                        // STANDARD HOLD JUDGEMENT: COMPUTE OFFSET OF REALITY HOLD TIME & EXPECTED HOLD TIME
-                        let heldRatio = (note.heldDuration || 0) / note.duration;
-                        if (heldRatio >= 0.85) {
-                            if (note.isFirework) spawnFireworkEffect(target.x, target.y);
-                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
-                            combo++;
-                        } else if (heldRatio >= 0.65) {
-                            spawnJudgement("GREAT", "#ff8c00", target.x, target.y);
-                            combo++;
-                        } else if (heldRatio >= 0.35) {
-                            spawnJudgement("GOOD", "#00ff00", target.x, target.y);
-                            combo++;
-                        } else {
-                            spawnJudgement("MISS", "#888", target.x, target.y);
-                            combo = 0;
-                        }
-                    }
-                    activeNotes.splice(i, 1);
-                    continue;
+                if (isHolding && elapsedTime >= note.time + note.duration) {
+                    if (note.isFirework) spawnFireworkEffect(target.x, target.y);
+                    spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
+                    combo++; activeNotes.splice(i, 1); continue;
                 }
 
-                // KEEP HOLD VISIBLE FOR ITS ENTIRE LIFETIME (note.time - APPROACH_TIME to note.time + note.duration)
-                if (timeUntilHit <= APPROACH_TIME && elapsedTime <= tailTime + 0.1) {
-                    let progress = Math.max(0, 1 - (timeUntilHit / APPROACH_TIME));
-                    let cx = target ? CENTER.x + (target.x - CENTER.x) * Math.min(1.0, progress) : note.finalX;
-                    let cy = target ? CENTER.y + (target.y - CENTER.y) * Math.min(1.0, progress) : note.finalY;
+                if (timeUntilHit <= APPROACH_TIME || isHolding) {
+                    let progress = isHolding ? 1.0 : Math.max(0, 1 - (timeUntilHit / APPROACH_TIME));
+                    let cx = target ? CENTER.x + (target.x - CENTER.x) * progress : note.finalX;
+                    let cy = target ? CENTER.y + (target.y - CENTER.y) * progress : note.finalY;
                     let cYellow = '#ffff00';
 
                     if (note.type === 'touch' || note.type === 'hold_touch') {
-                        let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - Math.min(1.0, progress)) * 4);
+                        let size = BUTTON_RADIUS * 2 + (BUTTON_RADIUS * (1 - progress) * 4);
                         let tOutline = note.isBonus ? '#ffd700' : (note.isChord ? '#ffff00' : '#00ffff');
                         let tFill = note.isChord ? 'rgba(255, 255, 0, 0.4)' : 'rgba(0, 255, 255, 0.4)';
                         
@@ -1032,7 +1199,7 @@
                         }
                         
                         if (note.type === 'hold_touch') {
-                            let holdProgress = Math.min(1.0, Math.max(0, (elapsedTime - note.time) / note.duration));
+                            let holdProgress = isHolding ? Math.min(1.0, (elapsedTime - note.time) / note.duration) : 0;
                             let baseSquareSize = BUTTON_RADIUS * 1.5;
                             let currentRadius = (baseSquareSize / Math.SQRT2) * (1 - holdProgress) + (baseSquareSize / 2) * holdProgress;
 
@@ -1060,11 +1227,9 @@
                         ctx.restore();
 
                     } else if (note.type === 'hold') {
-                        let headTimeUntil = note.time - elapsedTime;
-                        let tailTimeUntil = tailTime - elapsedTime;
-
-                        let headP = Math.min(1.0, Math.max(0, 1 - (headTimeUntil / APPROACH_TIME)));
-                        let tailP = Math.min(1.0, Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME)));
+                        let tailTimeUntil = (note.time + note.duration) - elapsedTime;
+                        let tailProgress = Math.max(0, 1 - (tailTimeUntil / APPROACH_TIME));
+                        let headP = Math.min(1, progress); let tailP = Math.min(1, tailProgress);
                         
                         let headX = CENTER.x + (target.x - CENTER.x) * headP;
                         let headY = CENTER.y + (target.y - CENTER.y) * headP;
@@ -1123,6 +1288,7 @@
             }
         }
 
+        // INPUT HANDLING
         let touchState = {}; 
         let activeTouches = {};
         let isMouseDown = false;
@@ -1140,6 +1306,7 @@
                 if (e.type === 'touchend' || e.type === 'touchcancel') {
                     let releasedNodes = touchState[touch.identifier] || new Set();
                     releasedNodes.forEach(nodeKey => checkHoldRelease(nodeKey));
+                    
                     delete activeTouches[touch.identifier];
                     delete touchState[touch.identifier]; 
                     continue;
@@ -1150,7 +1317,7 @@
                 let currentlyTouched = new Set();
                 Object.keys(NODE_POSITIONS).forEach(key => {
                     let node = NODE_POSITIONS[key];
-                    let radius = BUTTON_RADIUS * 1.5;
+                    let radius = (node.type === 'C') ? BUTTON_RADIUS * 1.5 : BUTTON_RADIUS * 1.5;
                     if (Math.hypot(tx - node.x, ty - node.y) < radius) currentlyTouched.add(key);
                 });
 
@@ -1179,7 +1346,7 @@
 
             Object.keys(NODE_POSITIONS).forEach(key => {
                 let node = NODE_POSITIONS[key];
-                let radius = BUTTON_RADIUS * 1.5;
+                let radius = (node.type === 'C') ? BUTTON_RADIUS * 1.5 : BUTTON_RADIUS * 1.5;
                 if (Math.hypot(x - node.x, y - node.y) < radius) {
                     currentlyTouched.add(key);
                 }
@@ -1233,9 +1400,11 @@
             let posKey = KEY_MAP[e.code];
             if (posKey && NODE_POSITIONS[posKey]) {
                 activeKeys[e.code] = posKey;
+                
                 NODE_POSITIONS[posKey].active = true;
                 spawnClickEffect(NODE_POSITIONS[posKey].x, NODE_POSITIONS[posKey].y, '#0ff');
                 checkHit(posKey);
+
                 activeTouches[`key_${e.code}`] = { x: NODE_POSITIONS[posKey].x, y: NODE_POSITIONS[posKey].y };
             }
         });
@@ -1255,53 +1424,33 @@
             for (let i = 0; i < activeNotes.length; i++) {
                 let note = activeNotes[i];
                 if (note.pos === posKey) {
+                    let diff = Math.abs(note.time - elapsedTime);
+                    let hitWindow = 0.16;
                     let target = NODE_POSITIONS[note.pos];
-                    let tailTime = note.time + (note.duration || 0);
 
-                    if (note.type === 'hold' || note.type === 'hold_touch') {
-                        if (note.isBonus) {
-                            // EX HOLD HIT LOGIC
-                            if (elapsedTime <= tailTime) {
-                                note.state = 'holding';
-                                note.pressedBeforeTail = true;
-                            } else {
-                                // Pressed AFTER critical timing at tail -> standard tap judgement relative to tailTime
-                                let diff = Math.abs(elapsedTime - tailTime);
-                                if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
-                                else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
-                                else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
-                                else if (diff <= 0.16) { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
-                                else { spawnJudgement("MISS", "#888", target.x, target.y); combo = 0; }
-                                activeNotes.splice(i, 1);
-                            }
-                            return;
-                        } else {
-                            // STANDARD HOLD HIT LOGIC
-                            if (elapsedTime >= note.time - 0.16 && elapsedTime <= tailTime) {
-                                note.state = 'holding';
-                                return;
-                            }
+                    if (diff <= hitWindow) {
+                        if (note.isFirework) {
+                            spawnFireworkEffect(target.x, target.y);
                         }
-                    } else {
-                        let diff = Math.abs(note.time - elapsedTime);
-                        let hitWindow = 0.16;
 
-                        if (diff <= hitWindow) {
-                            if (note.isFirework) spawnFireworkEffect(target.x, target.y);
-
-                            if (note.type === 'slide_head' && note.state === 'waiting') {
-                                note.headHit = true;
-                                note.state = 'waiting_slide';
-                                spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); 
-                                combo++; 
-                                return;
-                            } else if (note.type === 'tap' || note.type === 'touch') {
-                                if (note.isBonus || diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
-                                else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
-                                else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
-                                else { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
-                                activeNotes.splice(i, 1); break;
-                            }
+                        if (note.isBonus) {
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y);
+                            combo++; activeNotes.splice(i, 1); break;
+                        } else if (note.type === 'hold' || note.type === 'hold_touch') {
+                            note.state = 'holding'; spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y);
+                            combo++; return; 
+                        } else if (note.type === 'slide_head' && note.state === 'waiting') {
+                            note.headHit = true;
+                            note.state = 'waiting_slide';
+                            spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); 
+                            combo++; 
+                            return;
+                        } else if (note.type === 'tap' || note.type === 'touch') {
+                            if (diff <= 0.03) { spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++; }
+                            else if (diff <= 0.06) { spawnJudgement("PERFECT", "#ffeb3b", target.x, target.y); combo++; }
+                            else if (diff <= 0.10) { spawnJudgement("GREAT", "#ff8c00", target.x, target.y); combo++; }
+                            else { spawnJudgement("GOOD", "#00ff00", target.x, target.y); combo++; }
+                            activeNotes.splice(i, 1); break;
                         }
                     }
                 }
@@ -1309,10 +1458,18 @@
         }
 
         function checkHoldRelease(posKey) {
-            for (let i = 0; i < activeNotes.length; i++) {
+            let elapsedTime = audio.currentTime;
+            for (let i = activeNotes.length - 1; i >= 0; i--) {
                 let note = activeNotes[i];
                 if ((note.type === 'hold' || note.type === 'hold_touch') && note.pos === posKey && note.state === 'holding') {
-                    note.state = 'released';
+                    let target = NODE_POSITIONS[note.pos];
+                    if (elapsedTime < note.time + note.duration - 0.15) {
+                        spawnJudgement("MISS", "#888", target.x, target.y); combo = 0;
+                    } else {
+                        if (note.isFirework) spawnFireworkEffect(target.x, target.y);
+                        spawnJudgement("CRITICAL", "#ffd700", target.x, target.y); combo++;
+                    }
+                    activeNotes.splice(i, 1); break;
                 }
             }
         }
