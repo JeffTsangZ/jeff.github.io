@@ -2160,7 +2160,7 @@
             },
             insect: {
                 id: 'insect', name: '操蟲棍',
-                dmgMul: 1.05, heavyMul: 1.25, speedMul: 1.12, rangeMul: 1.15, postureMul: 1.1,
+                dmgMul: 0.945, heavyMul: 1.125, speedMul: 1.12, rangeMul: 1.15, postureMul: 0.99,
                 defense: 0.22, rollMul: 1.12, recoveryMul: 0.9,
                 hasShield: false, shiftMode: 'whirl', skillStyle: 'insect',
                 skillCd: 2, shiftCd: 6,
@@ -2329,7 +2329,7 @@
 
         WEAPONS.voidinsect = {
             id: 'voidinsect', name: '虛空操蟲棍', series: 'abyss',
-            dmgMul: 1.38, heavyMul: 1.55, speedMul: 1.18, rangeMul: 1.2, postureMul: 0.85,
+            dmgMul: 1.242, heavyMul: 1.395, speedMul: 1.18, rangeMul: 1.2, postureMul: 0.765,
             defense: 0.28, rollMul: 1.15, recoveryMul: 0.88,
             hasShield: false, shiftMode: 'whirl', skillStyle: 'insect', skillCd: 2, shiftCd: 5,
             crafted: true, glow: 0x8844ff,
@@ -2337,7 +2337,7 @@
         };
         WEAPONS.emberinsect = {
             id: 'emberinsect', name: '炎獄操蟲棍', series: 'fire',
-            dmgMul: 1.42, heavyMul: 1.6, speedMul: 1.15, rangeMul: 1.18, postureMul: 0.9,
+            dmgMul: 1.278, heavyMul: 1.44, speedMul: 1.15, rangeMul: 1.18, postureMul: 0.81,
             defense: 0.26, rollMul: 1.12, recoveryMul: 0.9,
             hasShield: false, shiftMode: 'whirl', skillStyle: 'insect', skillCd: 2, shiftCd: 5,
             crafted: true, glow: 0xff6622,
@@ -2345,7 +2345,7 @@
         };
         WEAPONS.storminsect = {
             id: 'storminsect', name: '雷霆操蟲棍', series: 'storm',
-            dmgMul: 1.4, heavyMul: 1.58, speedMul: 1.22, rangeMul: 1.22, postureMul: 0.88,
+            dmgMul: 1.26, heavyMul: 1.422, speedMul: 1.22, rangeMul: 1.22, postureMul: 0.792,
             defense: 0.25, rollMul: 1.18, recoveryMul: 0.85,
             hasShield: false, shiftMode: 'whirl', skillStyle: 'insect', skillCd: 2, shiftCd: 5,
             crafted: true, glow: 0x66aaff,
@@ -4225,6 +4225,7 @@ if (mode === 'trap') {
             player.attackDuration = player.attackTimer;
             player.attackType = 'LIGHT';
             player.attackHitDone = false;
+            player._igAirWave = 0;
             player._igSpin = (player._igSpin || 0) + (step % 2 === 0 ? 1 : -1);
             player.vertVel = Math.max(player.vertVel || 0, 3.5 + step * 0.6);
             const fwd = player._igDiveDir || new THREE.Vector3(Math.sin(playerGroup.rotation.y), 0, Math.cos(playerGroup.rotation.y));
@@ -4436,6 +4437,17 @@ if (mode === 'trap') {
             }
         }
         function updateIgAura(dt) {
+            // 精華倒數：30 秒後清空，需重新點三燈
+            if (player.igExtract && (player.igExtract.r || player.igExtract.w || player.igExtract.o)) {
+                if (player.igExtractTimer == null) player.igExtractTimer = 30;
+                player.igExtractTimer -= dt;
+                if (player.igExtractTimer <= 0) {
+                    player.igExtract = { r: false, w: false, o: false };
+                    player.igExtractTimer = 0;
+                    player._igAuraT = 0;
+                    createDamageNumber('精華消散', player.pos.clone().add(new THREE.Vector3(0, 2.6, 0)), 'SKILL');
+                }
+            }
             if (!player._igAuraT || player._igAuraT <= 0) return;
             if ((selectedWeapon && selectedWeapon.skillStyle) !== 'insect') { player._igAuraT = 0; return; }
             player._igAuraT -= dt;
@@ -4903,9 +4915,13 @@ if (mode === 'trap') {
                         gained = '橙精華・鐵壁強化';
                     }
                     createDamageNumber(gained, player.pos.clone().add(new THREE.Vector3(0, 2.6, 0)), 'SKILL');
-                    if (kind && typeof igExtractVfx === 'function') igExtractVfx(kind);
+                    if (kind) {
+                        player.igExtractTimer = 30; // 每次強化持續 30 秒
+                        if (typeof igExtractVfx === 'function') igExtractVfx(kind);
+                    }
                     if (player.igExtract.r && player.igExtract.w && player.igExtract.o) {
-                        createDamageNumber('三色覺醒!', player.pos.clone().add(new THREE.Vector3(0, 3.2, 0)), 'CRIT');
+                        player.igExtractTimer = 30;
+                        createDamageNumber('三色覺醒! 30秒', player.pos.clone().add(new THREE.Vector3(0, 3.2, 0)), 'CRIT');
                         createDamageNumber('攻速防全強化', player.pos.clone().add(new THREE.Vector3(0, 3.7, 0)), 'SKILL');
                         if (typeof igExtractVfx === 'function') igExtractVfx('all');
                     }
@@ -5480,7 +5496,11 @@ if (mode === 'trap') {
                         knightMesh.body.rotation.x = -0.15 * Math.sin(curve * Math.PI);
                         slashArc.rotation.set(0, Math.PI/2, Math.PI * curve);
                         slashArc2.rotation.set(0.1, Math.PI/2, Math.PI * curve * 0.9);
-                        if (!player.attackHitDone && progress > 0.36) checkPlayerHitbox();
+                        if (!player.attackHitDone) {
+                            if (progress > 0.32) checkPlayerHitbox();
+                            // 三色第二下
+                            if (!player.attackHitDone && progress > 0.55) checkPlayerHitbox();
+                        }
                     }
                 }
 
@@ -5576,14 +5596,25 @@ if (mode === 'trap') {
                 if (player.attackTimer > 0 && !player._igDiving) {
                     player.attackTimer -= dt;
                     const ap = 1 - (player.attackTimer / Math.max(0.01, player.attackDuration || 0.4));
-                    if (!player.attackHitDone && ap >= 0.28 && ap <= 0.78) {
-                        player.attackHitDone = true;
+                    if (!player.attackHitDone) {
                         const dmgMul = (typeof igDmgMul === 'function') ? igDmgMul() : 1;
-                        const dmg = Math.round((62 + (player.igAirCombo || 1) * 32) * dmgMul * ((selectedWeapon && selectedWeapon.dmgMul) || 1));
-                        if (player.pos.distanceTo(boss.pos) < 12) {
-                            applyBossDamage(dmg, Math.round(20 * dmgMul), 'SKILL', boss.pos.clone().add(new THREE.Vector3(0, 3.5, 0)));
-                            createDirectionalSparks(boss.pos.clone().add(new THREE.Vector3(0, 3.2, 0)), 28, 0x88ffcc, null, 14);
-                            if (typeof createImpactFlash === 'function') createImpactFlash(boss.pos.clone().add(new THREE.Vector3(0, 3, 0)), 0x88ffaa, 1.6);
+                        const base = Math.round((62 + (player.igAirCombo || 1) * 32) * dmgMul * ((selectedWeapon && selectedWeapon.dmgMul) || 1));
+                        const triple = typeof igAllThree === 'function' && igAllThree();
+                        const doHit = (wave) => {
+                            const dmg = triple ? Math.max(1, Math.round(base * 0.56)) : base;
+                            const post = triple ? Math.max(1, Math.round(18 * dmgMul * 0.56)) : Math.round(20 * dmgMul);
+                            if (player.pos.distanceTo(boss.pos) < 12) {
+                                applyBossDamage(dmg, post, 'SKILL', boss.pos.clone().add(new THREE.Vector3(0, 3.5, 0)));
+                                createDirectionalSparks(boss.pos.clone().add(new THREE.Vector3(0, 3.2, 0)), 22, 0x88ffcc, null, 12);
+                                if (typeof createImpactFlash === 'function') createImpactFlash(boss.pos.clone().add(new THREE.Vector3(0, 3, 0)), 0x88ffaa, 1.4);
+                            }
+                        };
+                        if (triple) {
+                            if (!(player._igAirWave) && ap >= 0.25) { player._igAirWave = 1; doHit(1); }
+                            if (player._igAirWave === 1 && ap >= 0.55) { player._igAirWave = 2; doHit(2); player.attackHitDone = true; }
+                        } else if (ap >= 0.28 && ap <= 0.78) {
+                            player.attackHitDone = true;
+                            doHit(1);
                         }
                     }
                     if (slashArc) {
@@ -5998,7 +6029,7 @@ if (mode === 'trap') {
                 if (!player.attackHitDone && progress > hitGate && progress < 0.78) {
                     if ((selectedWeapon && selectedWeapon.skillStyle) === 'bow') {
                         // 弓已在專用模組放箭，此處略過
-                    } else {
+                    } else if (!player.attackHitDone) {
                         checkPlayerHitbox();
                     }
                 }
@@ -6111,11 +6142,12 @@ if (mode === 'trap') {
             if (player.attackType === 'HEAVY') { hitRange = 11.4 * rangeMul; angleReq = 0.08; }
 
             if (dist < hitRange && lookDir.dot(dirToBoss) > angleReq) {
-                player.attackHitDone = true;
-                if (boss.state === 'STAGGERED' && !boss.isBeingCrit) { executeCriticalHit(); return; }
+                if (boss.state === 'STAGGERED' && !boss.isBeingCrit) { player.attackHitDone = true; executeCriticalHit(); return; }
 
                 let dmg = 0, postureDmg = 0, hitType = 'NORMAL';
                 const wpn = selectedWeapon || WEAPONS.longsword;
+                const igTriple = (wpn.skillStyle === 'insect' && typeof igAllThree === 'function' && igAllThree()
+                    && (player.state === 'ATTACK') && (player.attackType === 'LIGHT' || player.attackType === 'HEAVY'));
                 if (player.state === 'SKILL_Q') { dmg = Math.round(200 * wpn.dmgMul); postureDmg = Math.round(36 * wpn.postureMul); hitType = 'SKILL'; } 
                 else if (player.state === 'SKILL_E') { dmg = Math.round(280 * wpn.dmgMul); postureDmg = Math.round(70 * wpn.postureMul); hitType = 'SKILL'; } 
                 else if (player.attackType === 'HEAVY') {
@@ -6130,6 +6162,21 @@ if (mode === 'trap') {
                     if (wpn.skillStyle === 'insect' && typeof igDmgMul === 'function') em = igDmgMul();
                     dmg = Math.round((48 + player.comboStep * 22) * wpn.dmgMul * em);
                     postureDmg = Math.round((14 + player.comboStep * 9) * wpn.postureMul * em);
+                }
+                // 三色精華：每段按鍵拆成兩下，單下約 56%，合計約 +12%
+                if (igTriple) {
+                    dmg = Math.max(1, Math.round(dmg * 0.56));
+                    postureDmg = Math.max(1, Math.round(postureDmg * 0.56));
+                    player._igHitWave = (player._igHitWave || 0) + 1;
+                    if (player._igHitWave >= 2) {
+                        player.attackHitDone = true;
+                        player._igHitWave = 0;
+                    } else {
+                        player.attackHitDone = false;
+                    }
+                } else {
+                    player.attackHitDone = true;
+                    player._igHitWave = 0;
                 }
 
                 boss.hp = Math.max(0, boss.hp - dmg);
