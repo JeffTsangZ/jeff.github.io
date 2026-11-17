@@ -3,92 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time P2P UNO</title>
+    <title>UNO! - AI or Multiplayer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body class="bg-slate-900 text-white font-sans min-h-screen flex flex-col items-center justify-between p-4 md:p-6">
 
-    <!-- Connection Lobby Modal -->
-    <div id="lobby-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6">
-            <div class="text-center">
-                <h1 class="text-3xl font-black text-yellow-400 tracking-wider">UNO! P2P LIVE</h1>
-                <p class="text-slate-400 text-sm mt-1">Real-time browser multiplayer (No server required)</p>
+    <!-- MAIN MENU MODAL -->
+    <div id="menu-modal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center space-y-6">
+            <div>
+                <h1 class="text-4xl font-black text-yellow-400 tracking-wider">UNO!</h1>
+                <p class="text-slate-400 text-sm mt-2">Choose how you want to play</p>
             </div>
 
-            <!-- Host Section -->
-            <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700 space-y-3">
-                <h2 class="font-bold text-emerald-400 text-sm uppercase tracking-wider">1. Create a Room (Host)</h2>
-                <button id="btn-host" onclick="hostGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold text-sm transition cursor-pointer">
-                    Host New Game
+            <div class="space-y-3">
+                <button onclick="startAiMode()" class="w-full bg-emerald-600 hover:bg-emerald-500 p-4 rounded-xl font-bold text-base shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-3">
+                    <span>🤖</span> Play vs AI (Solo vs 3 Bots)
                 </button>
-                <div id="host-info" class="hidden space-y-2 pt-2 border-t border-slate-800">
-                    <p class="text-xs text-slate-400">Share this Room ID with your friend:</p>
-                    <div class="flex gap-2">
-                        <input id="my-peer-id" readonly class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm font-mono text-yellow-300 select-all" />
-                        <button onclick="copyRoomId()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold cursor-pointer">Copy</button>
+                <button onclick="openP2PLobby()" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold text-base shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-3">
+                    <span>🌐</span> Play vs Real Human (P2P Live)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- P2P LOBBY MODAL -->
+    <div id="p2p-modal" class="hidden fixed inset-0 bg-slate-950/95 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-5 my-auto">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-black text-blue-400 tracking-wider">Multiplayer P2P</h2>
+                <button onclick="backToMenu()" class="text-xs text-slate-400 hover:text-white bg-slate-700 px-3 py-1 rounded cursor-pointer">Back to Menu</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-700">
+                <button id="tab-host" onclick="switchP2PTab('host')" class="py-2 rounded-lg text-xs font-bold bg-blue-600 text-white cursor-pointer">1. Host Room</button>
+                <button id="tab-join" onclick="switchP2PTab('join')" class="py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white cursor-pointer">2. Join Friend</button>
+            </div>
+
+            <!-- HOST PANEL -->
+            <div id="panel-host" class="space-y-4">
+                <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-emerald-400 uppercase">Step 1: Send Invite Code to Friend</span>
+                        <button onclick="copyText('host-offer')" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded text-xs font-bold cursor-pointer">Copy</button>
                     </div>
-                    <p id="host-wait-msg" class="text-xs text-amber-400 animate-pulse">Waiting for friend to connect...</p>
+                    <textarea id="host-offer" readonly rows="3" placeholder="Generating invite code..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-[11px] font-mono text-yellow-300 focus:outline-none"></textarea>
+                </div>
+                <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-2">
+                    <span class="text-xs font-bold text-emerald-400 uppercase block">Step 2: Paste Friend's Reply Code</span>
+                    <textarea id="host-answer-input" rows="3" placeholder="Paste reply code here..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-[11px] font-mono text-white focus:outline-none"></textarea>
+                    <button onclick="hostAcceptAnswer()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold text-sm transition cursor-pointer">Connect & Start</button>
                 </div>
             </div>
 
-            <!-- Join Section -->
-            <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700 space-y-3">
-                <h2 class="font-bold text-blue-400 text-sm uppercase tracking-wider">2. Join a Friend's Room</h2>
-                <div class="flex gap-2">
-                    <input id="join-peer-id" placeholder="Paste Friend's Room ID..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-blue-500" />
-                    <button id="btn-join" onclick="joinGame()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg font-bold text-sm transition cursor-pointer">
-                        Join
-                    </button>
+            <!-- JOIN PANEL -->
+            <div id="panel-join" class="hidden space-y-4">
+                <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-2">
+                    <span class="text-xs font-bold text-blue-400 uppercase block">Step 1: Paste Host Invite Code</span>
+                    <textarea id="guest-offer-input" rows="3" placeholder="Paste host code here..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-[11px] font-mono text-white focus:outline-none"></textarea>
+                    <button onclick="guestCreateAnswer()" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg font-bold text-xs transition cursor-pointer">Generate Reply Code</button>
                 </div>
-                <p id="join-status" class="text-xs text-slate-400"></p>
+                <div id="guest-reply-box" class="hidden bg-slate-900/90 p-4 rounded-xl border border-slate-700 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-blue-400 uppercase">Step 2: Send Reply Code Back to Host</span>
+                        <button onclick="copyText('guest-answer')" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded text-xs font-bold cursor-pointer">Copy Reply</button>
+                    </div>
+                    <textarea id="guest-answer" readonly rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-[11px] font-mono text-emerald-300 focus:outline-none"></textarea>
+                </div>
             </div>
+
+            <div id="conn-error" class="hidden text-xs text-rose-400 bg-rose-950/50 border border-rose-800 p-2.5 rounded-lg text-center"></div>
         </div>
     </div>
 
     <!-- Top Header / Status -->
     <div class="w-full max-w-4xl flex flex-wrap justify-between items-center gap-3 bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
         <div class="flex items-center gap-3">
-            <h1 class="text-xl font-bold tracking-wider text-yellow-400">UNO! LIVE</h1>
-            <span id="role-badge" class="text-xs bg-slate-700 px-2.5 py-1 rounded-full font-semibold text-emerald-300">Offline</span>
+            <h1 class="text-xl font-bold tracking-wider text-yellow-400">UNO!</h1>
+            <span id="role-badge" class="text-xs bg-slate-700 px-2.5 py-1 rounded-full font-semibold text-emerald-300">Menu</span>
         </div>
-        <div id="game-status" class="text-sm font-bold text-amber-300">Waiting to connect...</div>
-        <div class="flex items-center gap-3">
+        <div id="game-status" class="text-sm font-bold text-amber-300">Select game mode</div>
+        <div class="flex items-center gap-2">
             <div id="deck-info" class="text-sm bg-slate-700 px-3 py-1.5 rounded-lg">Deck: 108</div>
-            <button id="btn-reset" onclick="requestReset()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow transition cursor-pointer">
-                Reset Match
-            </button>
+            <button onclick="returnToMainMenu()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow transition cursor-pointer">Menu</button>
+            <button onclick="resetCurrentGame()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow transition cursor-pointer">Reset</button>
         </div>
     </div>
 
-    <!-- Opponent Area (Face-down cards) -->
-    <div class="w-full max-w-4xl bg-slate-800/80 p-4 rounded-2xl border border-slate-700 my-3 flex flex-col items-center">
-        <div class="flex items-center gap-3 mb-3">
-            <span id="opponent-label" class="font-bold text-sm text-rose-400">Friend's Hand</span>
-            <span id="opponent-count" class="text-xs bg-slate-900 px-2.5 py-0.5 rounded-full text-slate-300">7 cards</span>
-            <span id="opponent-uno-badge" class="hidden text-xs bg-red-600 text-white font-black px-2 py-0.5 rounded animate-bounce">UNO!</span>
+    <!-- Opponent Area (Dynamic: 3 CPUs in AI mode, 1 Friend in P2P mode) -->
+    <div id="opponents-container" class="w-full max-w-4xl my-3">
+        <!-- AI Mode Grid -->
+        <div id="ai-opponents" class="grid grid-cols-3 gap-3">
+            <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+                <p class="font-bold text-xs text-red-400">CPU 1 (Left)</p>
+                <p id="cpu-1-count" class="text-xs text-slate-300 mt-1">7 cards</p>
+            </div>
+            <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+                <p class="font-bold text-xs text-yellow-400">CPU 2 (Top)</p>
+                <p id="cpu-2-count" class="text-xs text-slate-300 mt-1">7 cards</p>
+            </div>
+            <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+                <p class="font-bold text-xs text-blue-400">CPU 3 (Right)</p>
+                <p id="cpu-3-count" class="text-xs text-slate-300 mt-1">7 cards</p>
+            </div>
         </div>
-        <div id="opponent-hand" class="flex flex-wrap justify-center gap-2 min-h-[64px]">
-            <!-- Face down cards -->
+
+        <!-- P2P Mode Bar -->
+        <div id="p2p-opponent" class="hidden bg-slate-800/80 p-4 rounded-2xl border border-slate-700 flex flex-col items-center">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="font-bold text-sm text-rose-400">Friend's Hand</span>
+                <span id="opponent-count" class="text-xs bg-slate-900 px-2.5 py-0.5 rounded-full text-slate-300">7 cards</span>
+                <span id="opponent-uno-badge" class="hidden text-xs bg-red-600 text-white font-black px-2 py-0.5 rounded animate-bounce">UNO!</span>
+            </div>
+            <div id="opponent-hand" class="flex flex-wrap justify-center gap-1.5 min-h-[55px]"></div>
         </div>
     </div>
 
-    <!-- Center Table (Draw Pile, Discard Pile & Event Log) -->
-    <div class="w-full max-w-4xl bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50 flex flex-col items-center gap-4">
+    <!-- Center Table -->
+    <div class="w-full max-w-4xl bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50 flex flex-col items-center gap-3">
         <div class="flex items-center justify-center gap-10">
-            <!-- Draw Pile -->
             <div onclick="handleDrawClick()" class="w-24 h-36 bg-blue-600 rounded-xl border-4 border-white shadow-xl flex flex-col items-center justify-center cursor-pointer hover:bg-blue-500 transition transform hover:-translate-y-1 select-none">
                 <span class="text-2xl font-black">UNO</span>
                 <span class="text-xs mt-2 font-semibold">DRAW</span>
             </div>
-
-            <!-- Discard Pile -->
-            <div id="discard-pile" class="w-24 h-36 rounded-xl border-4 border-white shadow-xl flex flex-col items-center justify-center font-bold text-lg select-none">
-                <!-- Dynamic -->
-            </div>
+            <div id="discard-pile" class="w-24 h-36 rounded-xl border-4 border-white shadow-xl flex flex-col items-center justify-center font-bold text-lg select-none"></div>
         </div>
-        <div id="last-action" class="text-xs text-slate-400 italic">Connect with a friend to start playing!</div>
+        <div id="last-action" class="text-xs text-slate-400 italic">Select a mode from the menu to start playing!</div>
     </div>
 
     <!-- Player Hand Area -->
@@ -98,13 +138,9 @@
                 <h2 class="font-bold text-lg text-emerald-400">Your Hand</h2>
                 <span id="my-uno-badge" class="hidden text-xs bg-red-600 text-white font-black px-2 py-0.5 rounded">UNO CALLED</span>
             </div>
-            <button onclick="handleUnoClick()" class="bg-red-600 hover:bg-red-500 px-4 py-1.5 rounded-lg font-bold text-xs shadow transition cursor-pointer">
-                CALL UNO!
-            </button>
+            <button onclick="handleUnoClick()" class="bg-red-600 hover:bg-red-500 px-4 py-1.5 rounded-lg font-bold text-xs shadow transition cursor-pointer">CALL UNO!</button>
         </div>
-        <div id="player-hand" class="flex flex-wrap gap-3 min-h-[135px] items-center">
-            <!-- Dynamic Cards -->
-        </div>
+        <div id="player-hand" class="flex flex-wrap gap-3 min-h-[135px] items-center"></div>
     </div>
 
     <!-- Wild Color Picker Modal -->
@@ -122,145 +158,57 @@
 
     <script>
         const COLORS = ['Red', 'Yellow', 'Green', 'Blue'];
-        
-        // Networking State
-        let peer = null;
-        let conn = null;
-        let isHost = false;
-        let myPlayerIdx = 0; // 0 = Host, 1 = Guest
+        const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        // Authoritative Game State (Managed by Host, Synced to Guest)
+        let mode = 'menu'; // 'menu', 'ai', 'p2p'
+        let pc = null, dataChannel = null, isHost = true, myPlayerIdx = 0;
+        let pendingWildCardIdx = null;
+        let aiTimer = null;
+
+        // Shared / AI Game State
         let state = {
             deck: [],
             discardPile: [],
-            hands: [[], []],
+            hands: [[], [], [], []], // 0: Player, 1-3: CPUs in AI mode
             currentTurn: 0,
+            playDirection: 1,
             currentColor: '',
             currentVal: '',
-            unoCalled: [false, false],
-            lastAction: 'Game started!',
+            unoCalled: [false, false, false, false],
+            lastAction: 'Welcome to UNO!',
             winner: null
         };
 
-        let pendingWildCardIdx = null;
-
-        // ==========================================
-        // 1. PEER-TO-PEER CONNECTION SETUP
-        // ==========================================
-        function generateShortId() {
-            return 'uno-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        function copyText(id) {
+            const el = document.getElementById(id);
+            el.select();
+            navigator.clipboard.writeText(el.value);
         }
 
-        function hostGame() {
-            isHost = true;
+        function returnToMainMenu() {
+            if (aiTimer) clearTimeout(aiTimer);
+            if (pc) { pc.close(); pc = null; }
+            mode = 'menu';
+            document.getElementById('menu-modal').classList.remove('hidden');
+            document.getElementById('p2p-modal').classList.add('hidden');
+            document.getElementById('role-badge').innerText = 'Menu';
+            document.getElementById('game-status').innerText = 'Select game mode';
+        }
+
+        // ==========================================
+        // AI MODE INITIALIZATION & LOGIC
+        // ==========================================
+        function startAiMode() {
+            mode = 'ai';
             myPlayerIdx = 0;
-            const roomId = generateShortId();
-            document.getElementById('btn-host').disabled = true;
-            document.getElementById('btn-host').innerText = 'Creating Room...';
-
-            peer = new Peer(roomId);
-            peer.on('open', (id) => {
-                document.getElementById('host-info').classList.remove('hidden');
-                document.getElementById('my-peer-id').value = id;
-                document.getElementById('btn-host').innerText = 'Room Created';
-            });
-
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnectionHandlers();
-                conn.on('open', () => {
-                    document.getElementById('lobby-modal').classList.add('hidden');
-                    document.getElementById('role-badge').innerText = 'Host (Player 1)';
-                    initAuthoritativeGame();
-                });
-            });
-
-            peer.on('error', (err) => {
-                alert('Connection error: ' + err.message);
-            });
+            document.getElementById('menu-modal').classList.add('hidden');
+            document.getElementById('ai-opponents').classList.remove('hidden');
+            document.getElementById('p2p-opponent').classList.add('hidden');
+            document.getElementById('role-badge').innerText = 'Solo vs AI (4 Players)';
+            initAiGame();
         }
 
-        function joinGame() {
-            const targetId = document.getElementById('join-peer-id').value.trim();
-            if (!targetId) return alert('Please enter a Room ID.');
-
-            isHost = false;
-            myPlayerIdx = 1;
-            document.getElementById('join-status').innerText = 'Connecting to host...';
-
-            peer = new Peer();
-            peer.on('open', () => {
-                conn = peer.connect(targetId, { reliable: true });
-                setupConnectionHandlers();
-                conn.on('open', () => {
-                    document.getElementById('lobby-modal').classList.add('hidden');
-                    document.getElementById('role-badge').innerText = 'Guest (Player 2)';
-                });
-            });
-
-            peer.on('error', (err) => {
-                document.getElementById('join-status').innerText = 'Failed to connect: ' + err.message;
-            });
-        }
-
-        function copyRoomId() {
-            const input = document.getElementById('my-peer-id');
-            input.select();
-            navigator.clipboard.writeText(input.value);
-            alert('Room ID copied! Send it to your friend.');
-        }
-
-        function setupConnectionHandlers() {
-            conn.on('data', (msg) => {
-                if (isHost) {
-                    // Host receives action requests from Guest (Player 1)
-                    if (msg.type === 'PLAY_CARD') {
-                        processPlayCard(1, msg.cardIdx, msg.chosenColor);
-                    } else if (msg.type === 'DRAW_CARD') {
-                        processDrawCard(1);
-                    } else if (msg.type === 'CALL_UNO') {
-                        processCallUno(1);
-                    } else if (msg.type === 'RESET_GAME') {
-                        initAuthoritativeGame();
-                    }
-                } else {
-                    // Guest receives updated game state from Host
-                    if (msg.type === 'SYNC_STATE') {
-                        state = msg.state;
-                        render();
-                        if (state.winner !== null) {
-                            setTimeout(() => {
-                                alert(state.winner === myPlayerIdx ? '🎉 YOU WIN THE MATCH!' : '😢 Your friend won the match!');
-                            }, 100);
-                        }
-                    }
-                }
-            });
-
-            conn.on('close', () => {
-                alert('Friend disconnected from the session.');
-                location.reload();
-            });
-        }
-
-        function broadcastState() {
-            if (isHost && conn && conn.open) {
-                conn.send({ type: 'SYNC_STATE', state: state });
-            }
-            render();
-            if (state.winner !== null) {
-                setTimeout(() => {
-                    alert(state.winner === myPlayerIdx ? '🎉 YOU WIN THE MATCH!' : '😢 Your friend won the match!');
-                }, 100);
-            }
-        }
-
-        // ==========================================
-        // 2. HOST GAME ENGINE & RULES
-        // ==========================================
-        function initAuthoritativeGame() {
-            if (!isHost) return;
-
+        function initAiGame() {
             let deck = [];
             COLORS.forEach(color => {
                 deck.push({ color, value: '0' });
@@ -280,10 +228,9 @@
 
             deck.sort(() => Math.random() - 0.5);
 
-            let hands = [[], []];
+            let hands = [[], [], [], []];
             for (let i = 0; i < 7; i++) {
-                hands[0].push(deck.pop());
-                hands[1].push(deck.pop());
+                for (let p = 0; p < 4; p++) hands[p].push(deck.pop());
             }
 
             let firstCard = deck.pop();
@@ -294,21 +241,21 @@
             }
 
             state = {
-                deck: deck,
+                deck,
                 discardPile: [firstCard],
-                hands: hands,
+                hands,
                 currentTurn: 0,
+                playDirection: 1,
                 currentColor: firstCard.color,
                 currentVal: firstCard.value,
-                unoCalled: [false, false],
-                lastAction: 'New match started! Host goes first.',
+                unoCalled: [false, false, false, false],
+                lastAction: 'AI Match started! Your turn.',
                 winner: null
             };
-
-            broadcastState();
+            render();
         }
 
-        function drawFromDeckSafe() {
+        function drawAiCardSafe() {
             if (state.deck.length === 0) {
                 if (state.discardPile.length <= 1) return null;
                 const top = state.discardPile.pop();
@@ -318,177 +265,360 @@
             return state.deck.pop();
         }
 
-        function processPlayCard(playerIdx, cardIdx, chosenColor) {
-            if (!isHost || state.winner !== null) return;
-            if (state.currentTurn !== playerIdx) return;
+        function runAiTurn() {
+            if (mode !== 'ai' || state.currentTurn === 0 || state.winner !== null) return;
+            let cpuIdx = state.currentTurn;
+            let hand = state.hands[cpuIdx];
+            let playableIdx = hand.findIndex(c => isPlayable(c));
 
-            const hand = state.hands[playerIdx];
-            const card = hand[cardIdx];
-            if (!card || !isPlayable(card)) return;
+            if (playableIdx !== -1) {
+                let card = hand.splice(playableIdx, 1)[0];
+                state.discardPile.push(card);
+                state.currentVal = card.value;
 
-            const pName = playerIdx === 0 ? 'Host' : 'Guest';
-            const oppIdx = 1 - playerIdx;
-            let actionNotes = [];
+                if (card.color === 'Wild') {
+                    // Pick color with highest count in CPU hand
+                    let counts = { Red: 0, Yellow: 0, Green: 0, Blue: 0 };
+                    hand.forEach(c => { if (COLORS.includes(c.color)) counts[c.color]++; });
+                    state.currentColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+                } else {
+                    state.currentColor = card.color;
+                }
 
-            // Check UNO penalty before playing down to 1 card
-            if (hand.length === 2 && !state.unoCalled[playerIdx]) {
-                const p1 = drawFromDeckSafe();
-                const p2 = drawFromDeckSafe();
-                if (p1) hand.push(p1);
-                if (p2) hand.push(p2);
-                actionNotes.push(`${pName} forgot to call UNO (+2 penalty)!`);
+                if (hand.length === 1) state.lastAction = `⚠️ CPU ${cpuIdx} shouted UNO!`;
+                if (hand.length === 0) {
+                    state.winner = cpuIdx;
+                    state.lastAction = `🏆 CPU ${cpuIdx} won the match!`;
+                    render();
+                    return;
+                }
+
+                let step = 1;
+                let opp = (cpuIdx + state.playDirection + 4) % 4;
+                if (card.value === 'Skip' || card.value === 'Reverse') {
+                    if (card.value === 'Reverse') state.playDirection *= -1;
+                    step = 2;
+                } else if (card.value === '+2') {
+                    for(let k=0; k<2; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); }
+                    step = 2;
+                } else if (card.value === '+4') {
+                    for(let k=0; k<4; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); }
+                    step = 2;
+                }
+                state.currentTurn = (cpuIdx + (step * state.playDirection) + 4) % 4;
+            } else {
+                let drawn = drawAiCardSafe();
+                if (drawn) hand.push(drawn);
+                state.currentTurn = (cpuIdx + state.playDirection + 4) % 4;
             }
 
-            // Remove played card & place on discard
+            render();
+            if (state.currentTurn !== 0 && state.winner === null) {
+                aiTimer = setTimeout(runAiTurn, 1000);
+            }
+        }
+
+        // ==========================================
+        // P2P MULTIPLAYER MODE INITIALIZATION
+        // ==========================================
+        function openP2PLobby() {
+            document.getElementById('menu-modal').classList.add('hidden');
+            document.getElementById('p2p-modal').classList.remove('hidden');
+            initHostOffer();
+        }
+
+        function switchP2PTab(tab) {
+            const isH = tab === 'host';
+            document.getElementById('panel-host').classList.toggle('hidden', !isH);
+            document.getElementById('panel-join').classList.toggle('hidden', !isH);
+            document.getElementById('tab-host').className = isH ? 'py-2 rounded-lg text-xs font-bold bg-blue-600 text-white cursor-pointer' : 'py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white cursor-pointer';
+            document.getElementById('tab-join').className = !isH ? 'py-2 rounded-lg text-xs font-bold bg-blue-600 text-white cursor-pointer' : 'py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white cursor-pointer';
+        }
+
+        function gatherIceComplete(peerConn) {
+            return new Promise((resolve) => {
+                if (peerConn.iceGatheringState === 'complete') resolve();
+                else {
+                    const check = () => { if (peerConn.iceGatheringState === 'complete') { peerConn.removeEventListener('icegatheringstatechange', check); resolve(); } };
+                    peerConn.addEventListener('icegatheringstatechange', check);
+                    setTimeout(resolve, 2500);
+                }
+            });
+        }
+
+        async function initHostOffer() {
+            try {
+                mode = 'p2p';
+                isHost = true;
+                myPlayerIdx = 0;
+                pc = new RTCPeerConnection(RTC_CONFIG);
+                dataChannel = pc.createDataChannel('uno-game', { ordered: true });
+                setupDataChannel(dataChannel);
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await gatherIceComplete(pc);
+                document.getElementById('host-offer').value = btoa(JSON.stringify(pc.localDescription));
+            } catch (err) {
+                document.getElementById('conn-error').innerText = err.message;
+                document.getElementById('conn-error').classList.remove('hidden');
+            }
+        }
+
+        async function hostAcceptAnswer() {
+            try {
+                const raw = document.getElementById('host-answer-input').value.trim();
+                await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(raw))));
+            } catch (err) {
+                alert('Invalid code.');
+            }
+        }
+
+        async function guestCreateAnswer() {
+            try {
+                mode = 'p2p';
+                isHost = false;
+                myPlayerIdx = 1;
+                const raw = document.getElementById('guest-offer-input').value.trim();
+                pc = new RTCPeerConnection(RTC_CONFIG);
+                pc.ondatachannel = (e) => { dataChannel = e.channel; setupDataChannel(dataChannel); };
+
+                await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(atob(raw))));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await gatherIceComplete(pc);
+
+                document.getElementById('guest-reply-box').classList.remove('hidden');
+                document.getElementById('guest-answer').value = btoa(JSON.stringify(pc.localDescription));
+            } catch (err) {
+                alert('Invalid invite code.');
+            }
+        }
+
+        function setupDataChannel(ch) {
+            ch.onopen = () => {
+                document.getElementById('p2p-modal').classList.add('hidden');
+                document.getElementById('ai-opponents').classList.add('hidden');
+                document.getElementById('p2p-opponent').classList.remove('hidden');
+                document.getElementById('role-badge').innerText = isHost ? 'Host (P2P)' : 'Guest (P2P)';
+                if (isHost) initP2PGame();
+            };
+            ch.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                if (isHost) {
+                    if (msg.type === 'PLAY_CARD') processP2PPlay(1, msg.cardIdx, msg.chosenColor);
+                    else if (msg.type === 'DRAW_CARD') processP2PDraw(1);
+                    else if (msg.type === 'CALL_UNO') processP2PCallUno(1);
+                    else if (msg.type === 'RESET_GAME') initP2PGame();
+                } else {
+                    if (msg.type === 'SYNC_STATE') { state = msg.state; render(); }
+                }
+            };
+        }
+
+        function sendNet(payload) {
+            if (dataChannel && dataChannel.readyState === 'open') dataChannel.send(JSON.stringify(payload));
+        }
+
+        function broadcastP2PState() {
+            sendNet({ type: 'SYNC_STATE', state });
+            render();
+        }
+
+        function initP2PGame() {
+            if (!isHost) return;
+            let deck = [];
+            COLORS.forEach(color => {
+                deck.push({ color, value: '0' });
+                for (let i = 1; i <= 9; i++) { deck.push({ color, value: i.toString() }); deck.push({ color, value: i.toString() }); }
+                ['Skip', 'Reverse', '+2'].forEach(action => { deck.push({ color, value: action }); deck.push({ color, value: action }); });
+            });
+            for (let i = 0; i < 4; i++) { deck.push({ color: 'Wild', value: 'Wild' }); deck.push({ color: 'Wild', value: '+4' }); }
+            deck.sort(() => Math.random() - 0.5);
+
+            let hands = [[], []];
+            for (let i = 0; i < 7; i++) { hands[0].push(deck.pop()); hands[1].push(deck.pop()); }
+
+            let firstCard = deck.pop();
+            while (firstCard.color === 'Wild' || isNaN(firstCard.value)) {
+                deck.unshift(firstCard); deck.sort(() => Math.random() - 0.5); firstCard = deck.pop();
+            }
+
+            state = {
+                deck,
+                discardPile: [firstCard],
+                hands,
+                currentTurn: 0,
+                playDirection: 1,
+                currentColor: firstCard.color,
+                currentVal: firstCard.value,
+                unoCalled: [false, false],
+                lastAction: 'P2P Game Started!',
+                winner: null
+            };
+            broadcastP2PState();
+        }
+
+        function processP2PPlay(playerIdx, cardIdx, chosenColor) {
+            if (!isHost || state.winner !== null || state.currentTurn !== playerIdx) return;
+            let hand = state.hands[playerIdx];
+            let card = hand[cardIdx];
+            if (!card || !isPlayable(card)) return;
+
+            let opp = 1 - playerIdx;
+            if (hand.length === 2 && !state.unoCalled[playerIdx]) {
+                let c1 = drawAiCardSafe(), c2 = drawAiCardSafe();
+                if(c1) hand.push(c1); if(c2) hand.push(c2);
+            }
+
             hand.splice(cardIdx, 1);
             state.discardPile.push(card);
             state.currentVal = card.value;
             state.currentColor = (card.color === 'Wild') ? (chosenColor || 'Red') : card.color;
-
             if (hand.length > 1) state.unoCalled[playerIdx] = false;
 
-            // Check Win
             if (hand.length === 0) {
                 state.winner = playerIdx;
-                state.lastAction = `${pName} played ${state.currentColor} ${card.value} and WON!`;
-                broadcastState();
+                state.lastAction = `${playerIdx === 0 ? 'Host' : 'Guest'} won!`;
+                broadcastP2PState();
                 return;
             }
 
-            // Apply 2-Player Action Card Effects
-            // Note: In 2-player UNO, Skip and Reverse both skip the opponent's turn!
             let keepTurn = false;
-            if (card.value === 'Skip' || card.value === 'Reverse') {
-                keepTurn = true;
-                actionNotes.push(`Opponent skipped!`);
-            } else if (card.value === '+2') {
-                for (let i = 0; i < 2; i++) {
-                    const c = drawFromDeckSafe();
-                    if (c) state.hands[oppIdx].push(c);
-                }
-                keepTurn = true;
-                actionNotes.push(`Opponent draws 2 & loses turn!`);
-            } else if (card.value === '+4') {
-                for (let i = 0; i < 4; i++) {
-                    const c = drawFromDeckSafe();
-                    if (c) state.hands[oppIdx].push(c);
-                }
-                keepTurn = true;
-                actionNotes.push(`Opponent draws 4 & loses turn!`);
-            }
+            if (card.value === 'Skip' || card.value === 'Reverse') keepTurn = true;
+            else if (card.value === '+2') { for(let k=0; k<2; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); } keepTurn = true; }
+            else if (card.value === '+4') { for(let k=0; k<4; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); } keepTurn = true; }
 
-            if (!keepTurn) {
-                state.currentTurn = oppIdx;
-            }
-
-            state.lastAction = `${pName} played [${state.currentColor} ${card.value}]. ${actionNotes.join(' ')}`;
-            broadcastState();
+            if (!keepTurn) state.currentTurn = opp;
+            state.lastAction = `${playerIdx === 0 ? 'Host' : 'Guest'} played ${state.currentColor} ${card.value}`;
+            broadcastP2PState();
         }
 
-        function processDrawCard(playerIdx) {
-            if (!isHost || state.winner !== null) return;
-            if (state.currentTurn !== playerIdx) return;
-
-            const drawn = drawFromDeckSafe();
-            const pName = playerIdx === 0 ? 'Host' : 'Guest';
-
-            if (drawn) {
-                state.hands[playerIdx].push(drawn);
-                state.unoCalled[playerIdx] = false;
-            }
-
-            // Pass turn after drawing
+        function processP2PDraw(playerIdx) {
+            if (!isHost || state.winner !== null || state.currentTurn !== playerIdx) return;
+            let drawn = drawAiCardSafe();
+            if (drawn) state.hands[playerIdx].push(drawn);
             state.currentTurn = 1 - playerIdx;
-            state.lastAction = `${pName} drew a card and passed turn.`;
-            broadcastState();
+            broadcastP2PState();
         }
 
-        function processCallUno(playerIdx) {
+        function processP2PCallUno(playerIdx) {
             if (!isHost) return;
             if (state.hands[playerIdx].length <= 2) {
                 state.unoCalled[playerIdx] = true;
-                const pName = playerIdx === 0 ? 'Host' : 'Guest';
-                state.lastAction = `🔥 ${pName} shouted UNO!`;
-                broadcastState();
+                broadcastP2PState();
             }
         }
 
         // ==========================================
-        // 3. LOCAL UI INTERACTION HANDLERS
+        // COMMON ACTIONS & RENDERING
         // ==========================================
         function isPlayable(card) {
-            if (card.color === 'Wild') return true;
-            return (card.color === state.currentColor || card.value === state.currentVal);
+            return card.color === 'Wild' || card.color === state.currentColor || card.value === state.currentVal;
         }
 
-        function handleCardClick(cardIdx) {
+        function handleCardClick(idx) {
             if (state.winner !== null) return;
-            if (state.currentTurn !== myPlayerIdx) {
-                return;
-            }
-            const card = state.hands[myPlayerIdx][cardIdx];
-            if (!isPlayable(card)) {
-                alert(`Cannot play ${card.color} ${card.value}. Match ${state.currentColor} or ${state.currentVal}!`);
-                return;
-            }
+            if (mode === 'ai' && state.currentTurn !== 0) return;
+            if (mode === 'p2p' && state.currentTurn !== myPlayerIdx) return;
+
+            let card = state.hands[myPlayerIdx][idx];
+            if (!isPlayable(card)) return;
 
             if (card.color === 'Wild') {
-                pendingWildCardIdx = cardIdx;
+                pendingWildCardIdx = idx;
                 document.getElementById('color-modal').classList.remove('hidden');
             } else {
-                sendPlayAction(cardIdx, null);
+                executePlay(idx, null);
             }
         }
 
         function selectWildColor(color) {
             document.getElementById('color-modal').classList.add('hidden');
             if (pendingWildCardIdx !== null) {
-                sendPlayAction(pendingWildCardIdx, color);
+                let idx = pendingWildCardIdx;
                 pendingWildCardIdx = null;
+                executePlay(idx, color);
             }
         }
 
-        function sendPlayAction(cardIdx, chosenColor) {
-            if (isHost) {
-                processPlayCard(0, cardIdx, chosenColor);
-            } else {
-                conn.send({ type: 'PLAY_CARD', cardIdx, chosenColor });
+        function executePlay(cardIdx, chosenColor) {
+            if (mode === 'ai') {
+                let hand = state.hands[0];
+                let card = hand[cardIdx];
+                if (hand.length === 2 && !state.unoCalled[0]) {
+                    let c1 = drawAiCardSafe(), c2 = drawAiCardSafe();
+                    if(c1) hand.push(c1); if(c2) hand.push(c2);
+                    alert('Forgot UNO! +2 penalty cards drawn.');
+                }
+                hand.splice(cardIdx, 1);
+                state.discardPile.push(card);
+                state.currentVal = card.value;
+                state.currentColor = (card.color === 'Wild') ? (chosenColor || 'Red') : card.color;
+                if (hand.length > 1) state.unoCalled[0] = false;
+
+                if (hand.length === 0) {
+                    state.winner = 0;
+                    state.lastAction = '🏆 YOU WON THE MATCH!';
+                    render();
+                    return;
+                }
+
+                let step = 1;
+                let opp = (0 + state.playDirection + 4) % 4;
+                if (card.value === 'Skip' || card.value === 'Reverse') {
+                    if (card.value === 'Reverse') state.playDirection *= -1;
+                    step = 2;
+                } else if (card.value === '+2') {
+                    for(let k=0; k<2; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); }
+                    step = 2;
+                } else if (card.value === '+4') {
+                    for(let k=0; k<4; k++) { let c = drawAiCardSafe(); if(c) state.hands[opp].push(c); }
+                    step = 2;
+                }
+                state.currentTurn = (0 + (step * state.playDirection) + 4) % 4;
+                render();
+                if (state.currentTurn !== 0) aiTimer = setTimeout(runAiTurn, 1000);
+            } else if (mode === 'p2p') {
+                if (isHost) processP2PPlay(0, cardIdx, chosenColor);
+                else sendNet({ type: 'PLAY_CARD', cardIdx, chosenColor });
             }
         }
 
         function handleDrawClick() {
-            if (state.winner !== null || state.currentTurn !== myPlayerIdx) return;
-            if (isHost) {
-                processDrawCard(0);
-            } else {
-                conn.send({ type: 'DRAW_CARD' });
+            if (state.winner !== null) return;
+            if (mode === 'ai') {
+                if (state.currentTurn !== 0) return;
+                let drawn = drawAiCardSafe();
+                if (drawn) state.hands[0].push(drawn);
+                state.currentTurn = (0 + state.playDirection + 4) % 4;
+                render();
+                if (state.currentTurn !== 0) aiTimer = setTimeout(runAiTurn, 1000);
+            } else if (mode === 'p2p') {
+                if (state.currentTurn !== myPlayerIdx) return;
+                if (isHost) processP2PDraw(0);
+                else sendNet({ type: 'DRAW_CARD' });
             }
         }
 
         function handleUnoClick() {
-            if (state.hands[myPlayerIdx].length > 2) {
-                alert('You can only call UNO when you have 1 or 2 cards left!');
-                return;
-            }
-            if (isHost) {
-                processCallUno(0);
-            } else {
-                conn.send({ type: 'CALL_UNO' });
+            if (mode === 'ai') {
+                if (state.hands[0].length <= 2) { state.unoCalled[0] = true; alert('UNO Called!'); }
+            } else if (mode === 'p2p') {
+                if (isHost) processP2PCallUno(0);
+                else sendNet({ type: 'CALL_UNO' });
             }
         }
 
-        function requestReset() {
-            if (!conn || !conn.open) return;
-            if (isHost) {
-                initAuthoritativeGame();
-            } else {
-                conn.send({ type: 'RESET_GAME' });
+        function resetCurrentGame() {
+            if (aiTimer) clearTimeout(aiTimer);
+            if (mode === 'ai') initAiGame();
+            else if (mode === 'p2p') {
+                if (isHost) initP2PGame();
+                else sendNet({ type: 'RESET_GAME' });
             }
         }
 
-        // ==========================================
-        // 4. UI RENDERING
-        // ==========================================
         function getColorClass(color) {
             switch(color) {
                 case 'Red': return 'bg-red-600 text-white';
@@ -500,76 +630,59 @@
         }
 
         function render() {
-            const oppIdx = 1 - myPlayerIdx;
-            const myHand = state.hands[myPlayerIdx];
-            const oppHand = state.hands[oppIdx];
-            const isMyTurn = (state.currentTurn === myPlayerIdx) && (state.winner === null);
-
             document.getElementById('deck-info').innerText = `Deck: ${state.deck.length}`;
             document.getElementById('last-action').innerText = state.lastAction;
 
-            // Turn Indicator
             const statusEl = document.getElementById('game-status');
             if (state.winner !== null) {
-                statusEl.innerText = state.winner === myPlayerIdx ? '🏆 YOU WON!' : '🏆 FRIEND WON!';
-                statusEl.className = 'text-sm font-black text-emerald-400';
-            } else if (isMyTurn) {
-                statusEl.innerText = '🟢 YOUR TURN — Play a card or Draw';
-                statusEl.className = 'text-sm font-black text-emerald-400 animate-pulse';
-            } else {
-                statusEl.innerText = "⏳ Friend's Turn...";
-                statusEl.className = 'text-sm font-semibold text-amber-300';
+                statusEl.innerText = (mode === 'ai' && state.winner === 0) || (mode === 'p2p' && state.winner === myPlayerIdx) ? '🏆 YOU WON!' : '🏆 GAME OVER!';
+            } else if (mode === 'ai') {
+                statusEl.innerText = state.currentTurn === 0 ? '🟢 YOUR TURN' : `⏳ CPU ${state.currentTurn} thinking...`;
+            } else if (mode === 'p2p') {
+                statusEl.innerText = state.currentTurn === myPlayerIdx ? '🟢 YOUR TURN' : "⏳ Friend's turn...";
             }
 
-            // Render Opponent Face-Down Hand
-            document.getElementById('opponent-count').innerText = `${oppHand.length} card${oppHand.length === 1 ? '' : 's'}`;
-            const oppUnoEl = document.getElementById('opponent-uno-badge');
-            if (state.unoCalled[oppIdx] && oppHand.length === 1) {
-                oppUnoEl.classList.remove('hidden');
-            } else {
-                oppUnoEl.classList.add('hidden');
+            if (mode === 'ai') {
+                document.getElementById('cpu-1-count').innerText = `${state.hands[1].length} cards`;
+                document.getElementById('cpu-2-count').innerText = `${state.hands[2].length} cards`;
+                document.getElementById('cpu-3-count').innerText = `${state.hands[3].length} cards`;
+            } else if (mode === 'p2p') {
+                let opp = 1 - myPlayerIdx;
+                let oppHand = state.hands[opp] || [];
+                document.getElementById('opponent-count').innerText = `${oppHand.length} cards`;
+                document.getElementById('opponent-uno-badge').classList.toggle('hidden', !(state.unoCalled[opp] && oppHand.length === 1));
+                
+                let oppEl = document.getElementById('opponent-hand');
+                oppEl.innerHTML = '';
+                oppHand.forEach(() => {
+                    let b = document.createElement('div');
+                    b.className = 'w-8 h-12 bg-rose-600 rounded border border-white/20 flex items-center justify-center text-[8px] font-bold text-yellow-300';
+                    b.innerText = 'UNO';
+                    oppEl.appendChild(b);
+                });
             }
 
-            const oppHandEl = document.getElementById('opponent-hand');
-            oppHandEl.innerHTML = '';
-            for (let i = 0; i < oppHand.length; i++) {
-                const back = document.createElement('div');
-                back.className = 'w-10 h-16 bg-gradient-to-br from-rose-600 to-slate-900 rounded-md border-2 border-slate-300 shadow flex items-center justify-center';
-                back.innerHTML = '<span class="text-[9px] font-black text-yellow-400 -rotate-12">UNO</span>';
-                oppHandEl.appendChild(back);
-            }
-
-            // Render Discard Pile
-            const topCard = state.discardPile[state.discardPile.length - 1];
+            let topCard = state.discardPile[state.discardPile.length - 1];
             if (topCard) {
-                const discardEl = document.getElementById('discard-pile');
-                discardEl.className = `w-24 h-36 rounded-xl border-4 border-white shadow-xl flex flex-col items-center justify-center font-bold text-lg ${getColorClass(state.currentColor)}`;
-                discardEl.innerHTML = `<span class="text-xs uppercase">${state.currentColor}</span><span class="text-2xl font-black">${topCard.value}</span>`;
+                let disc = document.getElementById('discard-pile');
+                disc.className = `w-24 h-36 rounded-xl border-4 border-white shadow-xl flex flex-col items-center justify-center font-bold text-lg ${getColorClass(state.currentColor)}`;
+                disc.innerHTML = `<span class="text-xs uppercase">${state.currentColor}</span><span class="text-2xl font-black">${topCard.value}</span>`;
             }
 
-            // Render My Hand
-            const myUnoEl = document.getElementById('my-uno-badge');
-            if (state.unoCalled[myPlayerIdx]) {
-                myUnoEl.classList.remove('hidden');
-            } else {
-                myUnoEl.classList.add('hidden');
-            }
+            document.getElementById('my-uno-badge').classList.toggle('hidden', !state.unoCalled[myPlayerIdx]);
 
-            const handEl = document.getElementById('player-hand');
+            let handEl = document.getElementById('player-hand');
             handEl.innerHTML = '';
+            let myHand = state.hands[myPlayerIdx] || [];
+            let isMyTurn = (state.winner === null) && ((mode === 'ai' && state.currentTurn === 0) || (mode === 'p2p' && state.currentTurn === myPlayerIdx));
+
             myHand.forEach((card, idx) => {
-                const playable = isMyTurn && isPlayable(card);
-                const cardDiv = document.createElement('div');
-                cardDiv.className = `w-20 h-32 rounded-lg border-2 shadow-md flex flex-col justify-between p-2 select-none transition transform ${getColorClass(card.color)} ${playable ? 'border-white ring-2 ring-emerald-400 cursor-pointer hover:-translate-y-2' : 'border-transparent opacity-65 cursor-not-allowed'}`;
-                cardDiv.innerHTML = `
-                    <span class="text-xs font-bold">${card.value}</span>
-                    <span class="text-sm font-black text-center">${card.value}</span>
-                    <span class="text-xs font-bold self-end">${card.value}</span>
-                `;
-                if (playable) {
-                    cardDiv.onclick = () => handleCardClick(idx);
-                }
-                handEl.appendChild(cardDiv);
+                let playable = isMyTurn && isPlayable(card);
+                let div = document.createElement('div');
+                div.className = `w-20 h-32 rounded-lg border-2 shadow-md flex flex-col justify-between p-2 select-none transition transform ${getColorClass(card.color)} ${playable ? 'border-white ring-2 ring-emerald-400 cursor-pointer hover:-translate-y-2' : 'border-transparent opacity-65 cursor-not-allowed'}`;
+                div.innerHTML = `<span class="text-xs font-bold">${card.value}</span><span class="text-sm font-black text-center">${card.value}</span><span class="text-xs font-bold self-end">${card.value}</span>`;
+                if (playable) div.onclick = () => handleCardClick(idx);
+                handEl.appendChild(div);
             });
         }
     </script>
